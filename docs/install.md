@@ -1,4 +1,4 @@
-# TyloPlanner — Build & install guide
+# Install guide
 
 ## One-command install (Ubuntu server, Docker)
 

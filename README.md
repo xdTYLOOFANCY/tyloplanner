@@ -1,133 +1,94 @@
-# TyloPlanner — self-hosted personal dashboard
+<p align="center">
+  <img src="static/logo.svg" width="90" alt="TyloPlanner logo">
+</p>
 
-A small, hackable web app for students: week planner, exam countdowns & grades,
-habit tracker, workout tracker (with Strava sync), to-dos, notes, and an
-analytics dashboard with your historical data. With a built-in login screen,
-optional 2FA, push notifications, and PWA mobile support.
-All data stays on your machine in a single SQLite file.
+<h1 align="center">TyloPlanner</h1>
 
-> **Installing on a server?** See [INSTALL.md](INSTALL.md) for a one-command
-> Ubuntu/Docker install, HTTPS setup, and update commands.
+<p align="center">
+  A self-hosted personal dashboard for students.<br>
+  Week planner · exams & grades · habits · workouts · analytics — on your own server, with your own data.
+</p>
 
-## Quick start (Docker)
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <img alt="Docker ready" src="https://img.shields.io/badge/docker-ready-2496ED">
+  <img alt="PWA" src="https://img.shields.io/badge/mobile-PWA-7c5cff">
+</p>
 
-```bash
-cp .env.example .env        # set AUTH_PASSWORD! (and Strava keys if wanted)
-docker compose up -d --build
-```
+---
 
-Open http://localhost:8000 and sign in. Data is stored in `./data/tyloplanner.db`.
+## Why TyloPlanner?
 
-Update after editing code: `docker compose up -d --build`
-Logs: `docker compose logs -f` · Stop: `docker compose down` (data is kept).
-
-## Run without Docker
-
-```bash
-pip install -r requirements.txt
-AUTH_PASSWORD=yourpassword python app.py    # http://localhost:8000
-```
-
-## Phone app (PWA)
-
-TyloPlanner is installable: open it in Chrome/Safari on your phone and choose
-**Add to Home Screen**. It launches fullscreen with its own icon like a native
-app. Static assets are cached by a service worker; your data always comes
-fresh from the server.
-
-## Notifications & reminders (ntfy)
-
-Get free push notifications on your phone without any accounts:
-
-1. Install the **ntfy** app (Android/iOS) or use https://ntfy.sh in a browser.
-2. In the app, subscribe to a topic with a long random name
-   (e.g. `tylo-jkx29vqp-reminders` — anyone who knows the name can read it).
-3. In TyloPlanner **Settings → Notifications**, enter that topic, save,
-   and hit *Send test notification*.
-
-You'll then get a **morning agenda** (today's events + exam alerts at your
-chosen days-before thresholds) and an **evening habit nudge** for unchecked
-habits. Times are configurable; notifications are skipped when there's
-nothing to say.
-
-## Calendar auto-sync
-
-Besides manual `.ics` import, **Settings → Calendar auto-sync** accepts iCal
-URLs (university timetable, Google Calendar secret address). A background
-worker re-imports them on your chosen interval, deduplicated.
-
-## Automatic backups
-
-A JSON snapshot of all data is written to `data/backups/` every night
-(newest 14 kept). Trigger one manually with *Backup now* in
-Settings → Security. Restoring works via the header Restore button.
-
-## Authentication
-
-- Username/password come from `.env` (`AUTH_USERNAME`, default `admin`, and
-  `AUTH_PASSWORD`). Change the password by editing `.env` and restarting.
-- If `AUTH_PASSWORD` is empty, the app runs **without** a login (handy for a
-  laptop, dangerous on a public server).
-- The calendar feed can't use cookies, so it's protected by a secret key in
-  the feed URL instead (shown in Settings). Treat that URL like a password;
-  delete the `feed_key` row from the `kv` table to rotate it.
-- Sessions are signed with a key generated on first run (or set `SECRET_KEY`).
-- **Two-factor authentication (TOTP):** enable in Settings → Security — scan
-  the QR with Google Authenticator/Aegis/1Password and confirm with a code.
-  Login then asks for a 6-digit code after the password. Lost your device?
-  Delete the `totp_secret` row from the `kv` table in the database.
+Most planner apps want a subscription, your data, or both. TyloPlanner is a
+single lightweight container you run yourself: no accounts, no tracking, no
+cloud. Everything lives in one SQLite file on your machine, and the whole
+codebase is small enough to read in an afternoon and make your own.
 
 ## Features
 
-- **Dashboard** — today's plan, habits, deadlines, weekly training, open to-dos.
-- **Analytics** — all-time totals and 12-month history: workout sessions,
-  km run/cycled, study hours (from planner "Study" blocks with start/end times),
-  habit check-ins, and a grade list with ECTS-weighted average.
-- **Planner** — weekly agenda; blocks typed as Study / Workout / Other.
-- **Exams & grades** — countdowns, ECTS, enter grades when you get them.
-- **Habits** — daily checkboxes + streaks.
-- **Workouts** — log run/bike/gym manually or sync from Strava.
-- **Backup/Restore** — JSON snapshot buttons in the header. The SQLite file
-  `data/tyloplanner.db` can also be copied/backed up directly.
+- **Dashboard** — today's plan, habits, upcoming deadlines, weekly training and open to-dos at a glance.
+- **Week planner** — plan study blocks and appointments; subscribe to the built-in calendar feed from Google/Apple/Outlook.
+- **Exams & grades** — countdowns to every exam, enter grades as they come in, ECTS-weighted average.
+- **Habits** — daily check-offs with streaks and an evening reminder for whatever's still open.
+- **Workouts** — log runs, rides and gym sessions by hand or sync them automatically from **Strava**.
+- **Analytics** — 12-month history of workouts, distance, study hours and habit consistency, plus all-time totals.
+- **Notifications** — morning agenda and exam alerts pushed to your phone via [ntfy](https://ntfy.sh) (free, no account).
+- **Calendar auto-sync** — point it at your university timetable's iCal URL and it stays up to date.
+- **Mobile app (PWA)** — *Add to Home Screen* on your phone and it runs fullscreen with its own icon.
+- **Secure** — login screen, optional TOTP two-factor authentication, secret-key-protected calendar feed, automatic nightly backups.
 
-## Calendar integration
+## Quick start
 
-**Export (subscribe):** your planner + exams are published as an iCal feed —
-copy the secret feed URL from **Settings**.
-- Google Calendar: *Other calendars → + → From URL* (server must be reachable
-  from the internet for Google to fetch it).
-- Apple Calendar: *File → New Calendar Subscription*.
-- Or just download the `.ics` from Settings and import it anywhere.
+Requires [Docker](https://docs.docker.com/engine/install/) with the compose plugin.
 
-**Import:** Settings → Calendar import. Upload an `.ics` file, or paste a
-calendar URL (e.g. Google Calendar's "secret address in iCal format" from its
-settings page). Recurring events are imported as their first occurrence only;
-times are taken as-is (timezones are not converted).
+```bash
+git clone https://github.com/xdTYLOOFANCY/tyloplanner.git
+cd tyloplanner
+cp .env.example .env        # set AUTH_PASSWORD inside!
+docker compose up -d --build
+```
 
-## Strava integration
+Open **http://localhost:8000** and sign in. That's it.
 
-1. Create a free API application at <https://www.strava.com/settings/api>.
-   Set **Authorization Callback Domain** to `localhost` (or your domain).
-2. Put `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env`,
-   then `docker compose up -d --build`.
-3. Open **Settings → Strava → Connect Strava**, approve, done.
-   Runs/rides/weight training sync into Workouts (deduplicated, up to your
-   last 1000 activities). Re-sync any time with the ⟳ button.
+Installing on a real server? The **[install guide](docs/install.md)** has a
+one-command setup for Ubuntu, plus HTTPS and VPN options.
 
-## Hacking on it
+## Documentation
 
-- `app.py` — Flask backend: auth, REST API (`/api/...`), ICS import/export,
-  Strava OAuth.
-- `static/` — the whole frontend, plain HTML/CSS/JS, no build step.
-  `index.html` + `app.js` + `style.css`, plus `login.html` and `logo.svg`.
-- Database schema is created automatically on first run (see `SCHEMA` in app.py).
+| Guide | What's inside |
+|---|---|
+| **[Install guide](docs/install.md)** | One-command Ubuntu install, updating, running without Docker, exposing to the internet safely |
+| **[Configuration](docs/configuration.md)** | Every `.env` option, authentication & 2FA, backups and restore |
+| **[Integrations](docs/integrations.md)** | Calendar import/export/auto-sync, ntfy notifications, Strava sync |
+| **[Development](docs/development.md)** | Architecture, project layout, API reference, adding your own features |
 
-Ideas: add a Pomodoro timer, flashcards, weight/sleep tracking (new table +
-two render functions), multi-user support, or HTTPS via a reverse proxy.
+## Project structure
 
-## Security notes
+```
+tyloplanner/
+├── app.py              # entire backend: Flask + SQLite, ~700 lines
+├── static/             # entire frontend: vanilla HTML/CSS/JS, no build step
+│   ├── index.html      #   app shell
+│   ├── app.js          #   all UI logic
+│   ├── style.css       #   theming (dark/light)
+│   ├── login.html      #   sign-in + 2FA page
+│   └── sw.js           #   PWA service worker
+├── docs/               # user & developer guides
+├── docker-compose.yml
+├── Dockerfile
+└── .env.example        # copy to .env and edit
+```
 
-- Single-user login with credentials from `.env`; sessions via signed cookies.
-- For internet exposure, still put it behind HTTPS (Caddy/Traefik/nginx) —
-  the built-in server speaks plain HTTP, so the password would otherwise
-  travel unencrypted. A VPN like Tailscale is the easy safe option.
+Tech stack: **Flask · SQLite · vanilla JavaScript · Docker**. No frontend
+framework, no build step, no external database — clone, edit, refresh.
+
+## Contributing & security
+
+Bug reports and pull requests are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md). For security issues, please read
+[SECURITY.md](SECURITY.md) before opening a public issue.
+
+## License
+
+[MIT](LICENSE) — do whatever you want with it, no warranty.
