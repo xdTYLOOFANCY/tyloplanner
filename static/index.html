@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TyloPlanner</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <img src="logo.svg" alt="" class="headlogo">
+  <h1>TyloPlanner</h1>
+  <span class="date" id="headerDate"></span>
+  <span class="spacer"></span>
+  <button class="btn ghost small" onclick="toggleTheme()">☀/☾</button>
+  <button class="btn ghost small" onclick="exportData()">Backup</button>
+  <button class="btn ghost small" onclick="document.getElementById('importFile').click()">Restore</button>
+  <a class="btn ghost small" id="logoutBtn" href="/logout" style="display:none;text-decoration:none">Log out</a>
+  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+</header>
+<nav id="tabs">
+  <button data-tab="dashboard" class="active">Dashboard</button>
+  <button data-tab="analytics">Analytics</button>
+  <button data-tab="planner">Planner</button>
+  <button data-tab="exams">Exams &amp; grades</button>
+  <button data-tab="habits">Habits</button>
+  <button data-tab="workouts">Workouts</button>
+  <button data-tab="tasks">To-do</button>
+  <button data-tab="notes">Notes</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+<main>
+  <section id="tab-dashboard" class="active">
+    <h2 class="pagetitle" id="greeting"></h2>
+    <div class="cards" id="dashCards"></div>
+  </section>
+
+  <section id="tab-analytics">
+    <h2 class="pagetitle">Analytics — your life over time</h2>
+    <div class="card"><h3>All-time totals</h3><div class="wstats" id="aTotals"></div></div>
+    <div class="card">
+      <h3>Workout sessions per month (last 12 months)</h3>
+      <div class="chart" id="aWorkouts"></div><div class="chartlabels" id="aWorkoutsL"></div>
+    </div>
+    <div class="card">
+      <h3>Distance per month — km, run + bike</h3>
+      <div class="chart" id="aKm"></div><div class="chartlabels" id="aKmL"></div>
+    </div>
+    <div class="card">
+      <h3>Study hours per month (from planner study blocks)</h3>
+      <div class="chart" id="aStudy"></div><div class="chartlabels" id="aStudyL"></div>
+    </div>
+    <div class="card">
+      <h3>Habit check-ins per month</h3>
+      <div class="chart" id="aHabits"></div><div class="chartlabels" id="aHabitsL"></div>
+    </div>
+    <div class="card"><h3>Grades</h3><div id="aGrades"></div></div>
+  </section>
+
+  <section id="tab-planner">
+    <h2 class="pagetitle">Week planner</h2>
+    <div class="weeknav">
+      <button class="btn ghost small" onclick="moveWeek(-1)">‹</button>
+      <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
+      <button class="btn ghost small" onclick="moveWeek(1)">›</button>
+      <span class="label" id="weekLabel"></span>
+    </div>
+    <div class="weekgrid" id="weekGrid"></div>
+  </section>
+
+  <section id="tab-exams">
+    <h2 class="pagetitle">Exams, deadlines &amp; grades</h2>
+    <div class="card">
+      <div class="formrow">
+        <input id="examName" placeholder="Exam or deadline name" style="flex:1;min-width:180px">
+        <input id="examDate" type="date">
+        <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS (opt.)" style="width:100px">
+        <button class="btn" onclick="addExam()">Add</button>
+      </div>
+      <div style="overflow-x:auto"><table class="grades" id="examTable"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-habits">
+    <h2 class="pagetitle">Habits</h2>
+    <div class="card">
+      <div class="formrow">
+        <input id="habitName" placeholder="New habit (e.g. 8h sleep, study 2h, no snooze)" style="flex:1;min-width:200px">
+        <button class="btn" onclick="addHabit()">Add habit</button>
+      </div>
+      <div style="overflow-x:auto"><table class="habits" id="habitTable"></table></div>
+    </div>
+  </section>
+
+  <section id="tab-workouts">
+    <h2 class="pagetitle">Workouts</h2>
+    <div class="card">
+      <h3>Log workout</h3>
+      <div class="formrow">
+        <select id="wType">
+          <option value="run">🏃 Run</option>
+          <option value="bike">🚴 Bike</option>
+          <option value="gym">🏋️ Gym</option>
+        </select>
+        <input id="wDate" type="date">
+        <input id="wDur" type="number" min="0" placeholder="Minutes" style="width:90px">
+        <input id="wDist" type="number" min="0" step="0.1" placeholder="km (optional)" style="width:110px">
+        <input id="wNote" placeholder="Notes (optional)" style="flex:1;min-width:140px">
+        <button class="btn" onclick="addWorkout()">Log</button>
+        <button class="btn ghost" id="stravaSyncBtn" onclick="stravaSync()" style="display:none">⟳ Sync Strava</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>This week</h3>
+      <div class="wstats" id="wStats"></div>
+    </div>
+    <div class="card"><h3>History</h3><div id="wList"></div></div>
+  </section>
+
+  <section id="tab-tasks">
+    <h2 class="pagetitle">To-do</h2>
+    <div class="card">
+      <div class="formrow">
+        <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
+        <button class="btn" onclick="addTask()">Add</button>
+      </div>
+      <div id="taskList"></div>
+    </div>
+  </section>
+
+  <section id="tab-notes">
+    <h2 class="pagetitle">Notes</h2>
+    <div class="noteslayout">
+      <div class="card notelist">
+        <button class="btn" style="width:100%;margin-bottom:10px" onclick="newNote()">+ New note</button>
+        <div id="noteList"></div>
+      </div>
+      <div class="card" id="noteEditor" style="display:none">
+        <input id="noteTitle" placeholder="Title" oninput="noteChanged()">
+        <textarea id="noteBody" placeholder="Write anything…" oninput="noteChanged()"></textarea>
+        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+          <span class="muted" id="noteMeta"></span>
+          <button class="btn danger small" onclick="deleteNote()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-settings">
+    <h2 class="pagetitle">Settings &amp; integrations</h2>
+    <div class="card">
+      <h3>📅 Calendar — export</h3>
+      <p style="font-size:14px;margin-bottom:8px">Subscribe to your TyloPlanner agenda + exams from Google/Apple/Outlook Calendar with this feed URL (it contains a secret key — treat it like a password):</p>
+      <p><code class="url" id="icsUrl"></code> <button class="btn ghost small" onclick="copyIcs()">Copy</button>
+      <a class="btn ghost small" id="icsDownload" href="/calendar.ics" download style="text-decoration:none">Download .ics</a></p>
+      <p class="muted" style="margin-top:8px">Note: external calendar apps can only reach this URL if your server is reachable from the internet.</p>
+    </div>
+    <div class="card">
+      <h3>📅 Calendar — import</h3>
+      <div class="formrow">
+        <input type="file" id="icsFile" accept=".ics">
+        <button class="btn" onclick="importIcsFile()">Import file</button>
+      </div>
+      <div class="formrow">
+        <input id="icsImportUrl" placeholder="https://… secret iCal address (Google Calendar → Settings)" style="flex:1;min-width:240px">
+        <button class="btn" onclick="importIcsUrl()">Import from URL</button>
+      </div>
+      <button class="btn danger small" onclick="clearIcs()">Remove all imported events</button>
+    </div>
+    <div class="card">
+      <h3>🏃 Strava</h3>
+      <div id="stravaBox"></div>
+    </div>
+    <div class="card">
+      <h3>💾 Data</h3>
+      <p style="font-size:14px;margin-bottom:8px">Your data lives in <b>data/tyloplanner.db</b> (SQLite) on your server. Use Backup/Restore in the header for JSON snapshots, or copy the .db file directly. Login credentials are set in <b>.env</b> (AUTH_USERNAME / AUTH_PASSWORD).</p>
+    </div>
+  </section>
+</main>
+<footer>TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</footer>
+<script src="app.js"></script>
+</body>
+</html>

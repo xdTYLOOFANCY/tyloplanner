@@ -1,0 +1,11 @@
+services:
+  tyloplanner:
+    build: .
+    container_name: tyloplanner
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
+    restart: unless-stopped

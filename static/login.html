@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — TyloPlanner</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="loginwrap">
+  <form class="card loginbox" method="POST" action="/login">
+    <img src="logo.svg" alt="TyloPlanner" class="loginlogo">
+    <h1 class="logintitle">TyloPlanner</h1>
+    <p class="muted" style="margin-bottom:18px">Sign in to your planner</p>
+    <div id="loginError" class="loginerror" style="display:none">Wrong username or password.</div>
+    <input name="username" placeholder="Username" autocomplete="username" autofocus>
+    <input name="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+</div>
+<script>
+if (new URLSearchParams(location.search).get("error")) {
+  document.getElementById("loginError").style.display = "block";
+}
+</script>
+</body>
+</html>
