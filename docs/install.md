@@ -32,6 +32,24 @@ echo "========================================="
 That's it. Sign in, set up 2FA in **Settings → Security**, and install it on
 your phone via *Add to Home Screen*.
 
+## Where are my username and password?
+
+Your credentials live in the `.env` file in the project folder. The
+one-command block above generates a random password and **prints it at the
+end** of the install (the "TyloPlanner is up!" box). To see them again at
+any time:
+
+```bash
+cd tyloplanner && grep AUTH_ .env
+```
+
+- `AUTH_USERNAME` is your username — `admin` unless you changed it.
+- `AUTH_PASSWORD` is your password.
+
+To change either, edit `.env` (`nano .env`) and apply with
+`sudo docker compose up -d --build`. Note: if `AUTH_PASSWORD` is left empty,
+the app runs **without** a login screen.
+
 ## Useful commands afterwards
 
 ```bash
