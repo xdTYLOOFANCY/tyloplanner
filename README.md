@@ -2,7 +2,8 @@
 
 A small, hackable web app for students: week planner, exam countdowns & grades,
 habit tracker, workout tracker (with Strava sync), to-dos, notes, and an
-analytics dashboard with your historical data. With a built-in login screen.
+analytics dashboard with your historical data. With a built-in login screen,
+optional 2FA, push notifications, and PWA mobile support.
 All data stays on your machine in a single SQLite file.
 
 ## Quick start (Docker)
@@ -24,6 +25,40 @@ pip install -r requirements.txt
 AUTH_PASSWORD=yourpassword python app.py    # http://localhost:8000
 ```
 
+## Phone app (PWA)
+
+TyloPlanner is installable: open it in Chrome/Safari on your phone and choose
+**Add to Home Screen**. It launches fullscreen with its own icon like a native
+app. Static assets are cached by a service worker; your data always comes
+fresh from the server.
+
+## Notifications & reminders (ntfy)
+
+Get free push notifications on your phone without any accounts:
+
+1. Install the **ntfy** app (Android/iOS) or use https://ntfy.sh in a browser.
+2. In the app, subscribe to a topic with a long random name
+   (e.g. `tylo-jkx29vqp-reminders` — anyone who knows the name can read it).
+3. In TyloPlanner **Settings → Notifications**, enter that topic, save,
+   and hit *Send test notification*.
+
+You'll then get a **morning agenda** (today's events + exam alerts at your
+chosen days-before thresholds) and an **evening habit nudge** for unchecked
+habits. Times are configurable; notifications are skipped when there's
+nothing to say.
+
+## Calendar auto-sync
+
+Besides manual `.ics` import, **Settings → Calendar auto-sync** accepts iCal
+URLs (university timetable, Google Calendar secret address). A background
+worker re-imports them on your chosen interval, deduplicated.
+
+## Automatic backups
+
+A JSON snapshot of all data is written to `data/backups/` every night
+(newest 14 kept). Trigger one manually with *Backup now* in
+Settings → Security. Restoring works via the header Restore button.
+
 ## Authentication
 
 - Username/password come from `.env` (`AUTH_USERNAME`, default `admin`, and
@@ -34,6 +69,10 @@ AUTH_PASSWORD=yourpassword python app.py    # http://localhost:8000
   the feed URL instead (shown in Settings). Treat that URL like a password;
   delete the `feed_key` row from the `kv` table to rotate it.
 - Sessions are signed with a key generated on first run (or set `SECRET_KEY`).
+- **Two-factor authentication (TOTP):** enable in Settings → Security — scan
+  the QR with Google Authenticator/Aegis/1Password and confirm with a code.
+  Login then asks for a 6-digit code after the password. Lost your device?
+  Delete the `totp_secret` row from the `kv` table in the database.
 
 ## Features
 

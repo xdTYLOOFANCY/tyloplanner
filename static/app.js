@@ -33,8 +33,10 @@ async function api(method, path, body){
   if(!r.ok){ var e=await r.json().catch(function(){return{error:r.statusText};}); throw new Error(e.error||"request failed"); }
   return r.json();
 }
+var SET=null;   // user settings from /api/settings
 async function refresh(){
   S = await api("GET","/api/state");
+  SET = await api("GET","/api/settings");
   habitSet={};
   S.habit_log.forEach(function(l){ habitSet[l.habit_id+"|"+l.date]=true; });
   renderAll();
@@ -462,6 +464,106 @@ function renderSettings(){
       '<button class="btn danger small" onclick="stravaDisconnect()">Disconnect</button>';
   }
   box.innerHTML=html;
+  renderNotifySettings();
+  renderSecurity();
+}
+// fill an input only when the user isn't typing in it
+function setVal(id,v){
+  var el=document.getElementById(id);
+  if(el&&document.activeElement!==el) el.value=v==null?"":v;
+}
+function renderNotifySettings(){
+  if(!SET) return;
+  setVal("ntfyServer",SET.ntfy_server);
+  setVal("ntfyTopic",SET.ntfy_topic);
+  setVal("agendaTime",SET.notify_agenda_time);
+  setVal("habitTime",SET.notify_habit_time);
+  setVal("examDays",SET.notify_exam_days);
+  setVal("calSyncUrls",SET.cal_sync_urls);
+  setVal("calSyncHours",SET.cal_sync_hours);
+  document.getElementById("calSyncMeta").textContent=SET.cal_last_sync?("Last sync: "+SET.cal_last_sync):"";
+}
+async function saveNotifySettings(){
+  await api("POST","/api/settings",{
+    ntfy_server:document.getElementById("ntfyServer").value.trim()||"https://ntfy.sh",
+    ntfy_topic:document.getElementById("ntfyTopic").value.trim(),
+    notify_agenda_time:document.getElementById("agendaTime").value||"07:30",
+    notify_habit_time:document.getElementById("habitTime").value||"20:00",
+    notify_exam_days:document.getElementById("examDays").value.trim()||"7,3,1"});
+  toast("Notification settings saved");
+  await refresh();
+}
+async function testNotify(){
+  try{ await api("POST","/api/notify/test"); toast("Test sent — check your phone!"); }
+  catch(e){ alert(e.message); }
+}
+async function saveCalSync(){
+  await api("POST","/api/settings",{
+    cal_sync_urls:document.getElementById("calSyncUrls").value,
+    cal_sync_hours:document.getElementById("calSyncHours").value||"6"});
+  toast("Calendar sync settings saved");
+  await refresh();
+}
+async function calSyncNow(){
+  try{
+    toast("Syncing calendars…");
+    var j=await api("POST","/api/ics/sync-now");
+    toast("Calendar sync done — "+j.added+" new events");
+    await refresh();
+  }catch(e){ alert(e.message); }
+}
+// ---------- security (2FA + backups) ----------
+var tfaPending=false;
+function renderSecurity(){
+  var box=document.getElementById("securityBox");
+  if(!box||!SET) return;
+  var html="";
+  if(!S.auth.enabled){
+    html='<p style="font-size:14px">Login is disabled — set <b>AUTH_PASSWORD</b> in <b>.env</b> to enable it (required before 2FA makes sense).</p>';
+  } else if(SET.totp_enabled){
+    html='<p style="font-size:14px;margin-bottom:10px">✅ Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>'+
+      '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center">'+
+      '<button class="btn danger" onclick="tfaDisable()">Disable 2FA</button></div>';
+  } else if(tfaPending){
+    html='<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>'+
+      '<img src="/api/2fa/qr?t='+Date.now()+'" alt="2FA QR" style="width:180px;border-radius:10px;background:#fff;padding:8px">'+
+      '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center">'+
+      '<button class="btn" onclick="tfaConfirm()">Confirm &amp; enable</button>'+
+      '<button class="btn ghost" onclick="tfaPending=false;renderSecurity()">Cancel</button></div>';
+  } else {
+    html='<p style="font-size:14px;margin-bottom:10px">Add a second login step with an authenticator app (TOTP):</p>'+
+      '<button class="btn" onclick="tfaStart()">Enable 2FA</button>';
+  }
+  html+='<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">'+
+    '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot is written to <b>data/backups/</b> every night (newest 14 kept).'+
+    (SET.last_backup?' Last backup: <b>'+esc(SET.last_backup)+'</b>.':' No backup made yet.')+'</p>'+
+    '<button class="btn ghost small" onclick="backupNow()">Backup now</button>';
+  box.innerHTML=html;
+}
+async function tfaStart(){
+  await api("POST","/api/2fa/setup");
+  tfaPending=true;
+  renderSecurity();
+}
+async function tfaConfirm(){
+  try{
+    await api("POST","/api/2fa/enable",{code:document.getElementById("tfaCode").value.trim()});
+    tfaPending=false;
+    toast("2FA enabled — you'll be asked for a code at login");
+    await refresh();
+  }catch(e){ alert(e.message); }
+}
+async function tfaDisable(){
+  try{
+    await api("POST","/api/2fa/disable",{code:document.getElementById("tfaCode").value.trim()});
+    toast("2FA disabled");
+    await refresh();
+  }catch(e){ alert(e.message); }
+}
+async function backupNow(){
+  var j=await api("POST","/api/backup/now");
+  toast("Backup written: "+j.file);
+  await refresh();
 }
 function copyIcs(){
   navigator.clipboard.writeText(document.getElementById("icsUrl").textContent)
@@ -511,6 +613,7 @@ function renderAll(){
 }
 document.getElementById("wDate").value=todayStr();
 applyTheme();
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("/sw.js").catch(function(){}); }
 refresh().then(function(){
   if(new URLSearchParams(location.search).get("strava")==="connected"){
     toast("Strava connected! Syncing…"); stravaSync();

@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign in — TyloPlanner</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1115">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="loginwrap">
-  <form class="card loginbox" method="POST" action="/login">
+  <form class="card loginbox" id="formPw" method="POST" action="/login">
     <img src="logo.svg" alt="TyloPlanner" class="loginlogo">
     <h1 class="logintitle">TyloPlanner</h1>
     <p class="muted" style="margin-bottom:18px">Sign in to your planner</p>
@@ -18,9 +20,23 @@
     <input name="password" type="password" placeholder="Password" autocomplete="current-password">
     <button class="btn" type="submit">Sign in</button>
   </form>
+  <form class="card loginbox" id="form2fa" method="POST" action="/login/2fa" style="display:none">
+    <img src="logo.svg" alt="TyloPlanner" class="loginlogo">
+    <h1 class="logintitle">Two-factor</h1>
+    <p class="muted" style="margin-bottom:18px">Enter the 6-digit code from your authenticator app</p>
+    <div id="tfaError" class="loginerror" style="display:none">Wrong code, try again.</div>
+    <input name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="123456" autocomplete="one-time-code" style="text-align:center;font-size:20px;letter-spacing:6px">
+    <button class="btn" type="submit">Verify</button>
+  </form>
 </div>
 <script>
-if (new URLSearchParams(location.search).get("error")) {
+var p = new URLSearchParams(location.search);
+if (p.get("step") === "2fa") {
+  document.getElementById("formPw").style.display = "none";
+  document.getElementById("form2fa").style.display = "flex";
+  document.querySelector("#form2fa input[name=code]").focus();
+  if (p.get("error")) document.getElementById("tfaError").style.display = "block";
+} else if (p.get("error")) {
   document.getElementById("loginError").style.display = "block";
 }
 </script>
