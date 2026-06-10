@@ -2,13 +2,15 @@
 
 ## One-command install (Ubuntu server, Docker)
 
-Paste this whole block on a fresh Ubuntu server (20.04/22.04/24.04). It
-installs Docker, clones the repo, generates a random login password, and
-starts TyloPlanner:
+**Prerequisites:** make sure `docker` (with the compose plugin) and `git` are
+installed and working first — check with `docker compose version` and
+`git --version`. See https://docs.docker.com/engine/install/ubuntu/ if you
+still need Docker.
+
+Then paste this whole block. It clones the repo, generates a random login
+password, and starts TyloPlanner:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y git curl && \
-curl -fsSL https://get.docker.com | sudo sh && \
 git clone https://github.com/xdTYLOOFANCY/tyloplanner.git && \
 cd tyloplanner && cp .env.example .env && \
 PW=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16) && \
