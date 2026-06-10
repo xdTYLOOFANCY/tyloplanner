@@ -15,7 +15,7 @@ the app under **Settings** and stored in the database.
 | `PORT` | `8000` | Port the server listens on. |
 | `DB_PATH` | `data/tyloplanner.db` (`/data/tyloplanner.db` in Docker) | SQLite database location. |
 | `BACKUP_DIR` | `<db dir>/backups` | Where nightly JSON backups are written. |
-| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | *(empty)* | Strava API credentials — see [Integrations](integrations.md#strava). |
+| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | *(empty)* | Optional — Strava keys are normally entered in the web UI (Settings → Strava). Env values override the UI. See [Integrations](integrations.md#strava). |
 
 Apply changes with `docker compose up -d --build`.
 

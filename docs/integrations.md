@@ -54,13 +54,18 @@ Self-hosting ntfy? Set your own server URL in the same settings card.
 
 Sync your runs, rides and gym sessions automatically:
 
+Everything happens in the web UI — no server access needed:
+
 1. Create a (free) API application at <https://www.strava.com/settings/api>.
-   Set **Authorization Callback Domain** to the host of your `APP_URL` —
-   `localhost` for local use, or your domain.
-2. Put `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` in `.env` and run
-   `docker compose up -d --build`.
-3. **Settings → Strava → Connect Strava**, approve access, done. The first
-   sync runs automatically.
+   Set **Authorization Callback Domain** to the value shown in
+   **Settings → Strava** (the host of your instance).
+2. In **Settings → Strava**, paste the **Client ID** and **Client Secret**
+   and hit *Save keys*.
+3. Click **Connect Strava**, approve access, done. The first sync runs
+   automatically.
+
+(Alternatively, keys can still be set via `STRAVA_CLIENT_ID` /
+`STRAVA_CLIENT_SECRET` in `.env`; env values override keys saved in the UI.)
 
 Details: activities map to TyloPlanner types (Run/TrailRun → run,
 Ride/VirtualRide/Gravel/MTB → bike, WeightTraining/Workout/Crossfit → gym;

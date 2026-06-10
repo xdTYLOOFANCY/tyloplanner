@@ -47,8 +47,12 @@
       <div class="chart" id="aWorkouts"></div><div class="chartlabels" id="aWorkoutsL"></div>
     </div>
     <div class="card">
-      <h3>Distance per month — km, run + bike</h3>
-      <div class="chart" id="aKm"></div><div class="chartlabels" id="aKmL"></div>
+      <h3>Running — km per month</h3>
+      <div class="chart" id="aKmRun"></div><div class="chartlabels" id="aKmRunL"></div>
+    </div>
+    <div class="card">
+      <h3>Cycling — km per month</h3>
+      <div class="chart" id="aKmBike"></div><div class="chartlabels" id="aKmBikeL"></div>
     </div>
     <div class="card">
       <h3>Study hours per month (from planner study blocks)</h3>
@@ -76,9 +80,9 @@
     <h2 class="pagetitle">Exams, deadlines &amp; grades</h2>
     <div class="card">
       <div class="formrow">
-        <input id="examName" placeholder="Exam or deadline name" style="flex:1;min-width:180px">
-        <input id="examDate" type="date">
-        <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS (opt.)" style="width:100px">
+        <input id="examName" placeholder="Exam or deadline name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
+        <input id="examDate" type="date" onkeydown="if(event.key==='Enter')addExam()">
+        <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS (opt.)" style="width:100px" onkeydown="if(event.key==='Enter')addExam()">
         <button class="btn" onclick="addExam()">Add</button>
       </div>
       <div style="overflow-x:auto"><table class="grades" id="examTable"></table></div>
@@ -89,7 +93,7 @@
     <h2 class="pagetitle">Habits</h2>
     <div class="card">
       <div class="formrow">
-        <input id="habitName" placeholder="New habit (e.g. 8h sleep, study 2h, no snooze)" style="flex:1;min-width:200px">
+        <input id="habitName" placeholder="New habit (e.g. 8h sleep, study 2h, no snooze)" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addHabit()">
         <button class="btn" onclick="addHabit()">Add habit</button>
       </div>
       <div style="overflow-x:auto"><table class="habits" id="habitTable"></table></div>
@@ -106,10 +110,10 @@
           <option value="bike">🚴 Bike</option>
           <option value="gym">🏋️ Gym</option>
         </select>
-        <input id="wDate" type="date">
-        <input id="wDur" type="number" min="0" placeholder="Minutes" style="width:90px">
-        <input id="wDist" type="number" min="0" step="0.1" placeholder="km (optional)" style="width:110px">
-        <input id="wNote" placeholder="Notes (optional)" style="flex:1;min-width:140px">
+        <input id="wDate" type="date" onkeydown="if(event.key==='Enter')addWorkout()">
+        <input id="wDur" type="number" min="0" placeholder="Minutes" style="width:90px" onkeydown="if(event.key==='Enter')addWorkout()">
+        <input id="wDist" type="number" min="0" step="0.1" placeholder="km (optional)" style="width:110px" onkeydown="if(event.key==='Enter')addWorkout()">
+        <input id="wNote" placeholder="Notes (optional)" style="flex:1;min-width:140px" onkeydown="if(event.key==='Enter')addWorkout()">
         <button class="btn" onclick="addWorkout()">Log</button>
         <button class="btn ghost" id="stravaSyncBtn" onclick="stravaSync()" style="display:none">⟳ Sync Strava</button>
       </div>
@@ -166,7 +170,7 @@
         <button class="btn" onclick="importIcsFile()">Import file</button>
       </div>
       <div class="formrow">
-        <input id="icsImportUrl" placeholder="https://… secret iCal address (Google Calendar → Settings)" style="flex:1;min-width:240px">
+        <input id="icsImportUrl" placeholder="https://… secret iCal address (Google Calendar → Settings)" style="flex:1;min-width:240px" onkeydown="if(event.key==='Enter')importIcsUrl()">
         <button class="btn" onclick="importIcsUrl()">Import from URL</button>
       </div>
       <button class="btn danger small" onclick="clearIcs()">Remove all imported events</button>

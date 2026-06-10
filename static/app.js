@@ -133,6 +133,13 @@ function renderPlanner(){
     html+='</div>';
   }
   document.getElementById("weekGrid").innerHTML=html;
+  // Enter saves, Escape cancels, in the add-event mini form
+  document.querySelectorAll(".miniform input, .miniform select").forEach(function(el){
+    el.addEventListener("keydown",function(ev){
+      if(ev.key==="Enter"){ ev.preventDefault(); saveEvent(addingDay); }
+      if(ev.key==="Escape") cancelAdd();
+    });
+  });
   var t=document.getElementById("evTitle"); if(t)t.focus();
 }
 function openAdd(iso){ addingDay=iso; renderPlanner(); }
@@ -236,11 +243,13 @@ async function addWorkout(){
 }
 function weekTotals(off){
   var ds=weekDates(off),a=toISO(ds[0]),b=toISO(ds[6]);
-  var t={count:0,km:0,min:0,gym:0};
+  var t={count:0,runKm:0,bikeKm:0,min:0,gym:0};
   S.workouts.forEach(function(w){
     if(w.date<a||w.date>b) return;
     t.count++; t.min+=w.dur||0;
-    if(w.type==="gym") t.gym++; else t.km+=w.dist||0;
+    if(w.type==="gym") t.gym++;
+    else if(w.type==="run") t.runKm+=w.dist||0;
+    else if(w.type==="bike") t.bikeKm+=w.dist||0;
   });
   return t;
 }
@@ -248,7 +257,8 @@ function renderWorkouts(){
   var t=weekTotals(0);
   document.getElementById("wStats").innerHTML=
     '<div class="stat"><div class="v">'+t.count+'</div><div class="l">sessions</div></div>'+
-    '<div class="stat"><div class="v">'+(Math.round(t.km*10)/10)+'</div><div class="l">km</div></div>'+
+    '<div class="stat"><div class="v">'+(Math.round(t.runKm*10)/10)+'</div><div class="l">run km</div></div>'+
+    '<div class="stat"><div class="v">'+(Math.round(t.bikeKm*10)/10)+'</div><div class="l">bike km</div></div>'+
     '<div class="stat"><div class="v">'+Math.round(t.min)+'</div><div class="l">minutes</div></div>'+
     '<div class="stat"><div class="v">'+t.gym+'</div><div class="l">gym sessions</div></div>';
   var list=S.workouts.slice().sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,50);
@@ -337,14 +347,20 @@ function renderNotes(){
 // ---------- analytics ----------
 function renderAnalytics(){
   var months=last12Months();
-  var sessions={},km={},study={},habits={};
-  months.forEach(function(m){ sessions[m.key]=0;km[m.key]=0;study[m.key]=0;habits[m.key]=0; });
+  var sessions={},kmRun={},kmBike={},study={},habits={};
+  months.forEach(function(m){ sessions[m.key]=0;kmRun[m.key]=0;kmBike[m.key]=0;study[m.key]=0;habits[m.key]=0; });
 
-  var totKm=0,totMin=0,totSessions=0,totStudyH=0,totChecks=0;
+  var totRunKm=0,totBikeKm=0,totMin=0,totSessions=0,totStudyH=0,totChecks=0;
   S.workouts.forEach(function(w){
     var k=(w.date||"").slice(0,7);
-    totSessions++; totMin+=w.dur||0; if(w.type!=="gym") totKm+=w.dist||0;
-    if(k in sessions){ sessions[k]++; if(w.type!=="gym") km[k]+=w.dist||0; }
+    totSessions++; totMin+=w.dur||0;
+    if(w.type==="run") totRunKm+=w.dist||0;
+    if(w.type==="bike") totBikeKm+=w.dist||0;
+    if(k in sessions){
+      sessions[k]++;
+      if(w.type==="run") kmRun[k]+=w.dist||0;
+      if(w.type==="bike") kmBike[k]+=w.dist||0;
+    }
   });
   S.events.forEach(function(e){
     if(e.type!=="study"||!e.start||!e.end) return;
@@ -372,7 +388,8 @@ function renderAnalytics(){
 
   document.getElementById("aTotals").innerHTML=
     '<div class="stat"><div class="v">'+totSessions+'</div><div class="l">workouts</div></div>'+
-    '<div class="stat"><div class="v">'+Math.round(totKm)+'</div><div class="l">total km</div></div>'+
+    '<div class="stat"><div class="v">'+Math.round(totRunKm)+'</div><div class="l">run km</div></div>'+
+    '<div class="stat"><div class="v">'+Math.round(totBikeKm)+'</div><div class="l">bike km</div></div>'+
     '<div class="stat"><div class="v">'+Math.round(totMin/60)+'</div><div class="l">training hrs</div></div>'+
     '<div class="stat"><div class="v">'+Math.round(totStudyH)+'</div><div class="l">study hrs planned</div></div>'+
     '<div class="stat"><div class="v">'+totChecks+'</div><div class="l">habit check-ins</div></div>'+
@@ -380,7 +397,8 @@ function renderAnalytics(){
 
   var labels=months.map(function(m){return m.label;});
   barChart("aWorkouts","aWorkoutsL",months.map(function(m){return sessions[m.key];}),labels,"",0);
-  barChart("aKm","aKmL",months.map(function(m){return km[m.key];}),labels,"green",1);
+  barChart("aKmRun","aKmRunL",months.map(function(m){return kmRun[m.key];}),labels,"green",1);
+  barChart("aKmBike","aKmBikeL",months.map(function(m){return kmBike[m.key];}),labels,"green",1);
   barChart("aStudy","aStudyL",months.map(function(m){return study[m.key];}),labels,"orange",1);
   barChart("aHabits","aHabitsL",months.map(function(m){return habits[m.key];}),labels,"",0);
 
@@ -432,7 +450,8 @@ function renderDashboard(){
   var t=weekTotals(0);
   html+='<div class="card"><h3>Training this week</h3><div class="wstats">'+
     '<div class="stat"><div class="v">'+t.count+'</div><div class="l">sessions</div></div>'+
-    '<div class="stat"><div class="v">'+(Math.round(t.km*10)/10)+'</div><div class="l">km</div></div>'+
+    '<div class="stat"><div class="v">'+(Math.round(t.runKm*10)/10)+'</div><div class="l">run km</div></div>'+
+    '<div class="stat"><div class="v">'+(Math.round(t.bikeKm*10)/10)+'</div><div class="l">bike km</div></div>'+
     '<div class="stat"><div class="v">'+Math.round(t.min)+'</div><div class="l">min</div></div></div></div>';
 
   var open=S.tasks.filter(function(x){return !x.done;}).slice(0,5);
@@ -451,12 +470,25 @@ function renderSettings(){
   document.getElementById("icsDownload").href=S.feed_url;
   document.getElementById("logoutBtn").style.display=S.auth.enabled?"inline-block":"none";
   var box=document.getElementById("stravaBox"),html="";
-  if(!S.strava.configured){
-    html='<p style="font-size:14px">Not configured yet. Create a free API app at '+
-      '<b>strava.com/settings/api</b>, then put <b>STRAVA_CLIENT_ID</b> and <b>STRAVA_CLIENT_SECRET</b> in your <b>.env</b> file and restart the container (see README).</p>';
+  var host=(S.app_url||location.origin).replace(/^https?:\/\//,"").replace(/:\d+$/,"").replace(/\/.*$/,"");
+  if(!S.strava.configured||stravaEditing){
+    html='<p style="font-size:14px;margin-bottom:10px">Connect Strava in three steps — no server access needed:</p>'+
+      '<ol style="font-size:14px;margin:0 0 12px 18px;line-height:1.7">'+
+      '<li>Create a free API app at <a href="https://www.strava.com/settings/api" target="_blank" style="color:var(--accent)">strava.com/settings/api</a></li>'+
+      '<li>Set <b>Authorization Callback Domain</b> to: <code class="url">'+esc(host)+'</code></li>'+
+      '<li>Copy the <b>Client ID</b> and <b>Client Secret</b> below and save:</li></ol>'+
+      '<div class="formrow">'+
+      '<input id="stravaCid" placeholder="Client ID" style="width:130px" onkeydown="if(event.keyCode===13)stravaSaveConfig()">'+
+      '<input id="stravaSecret" type="password" placeholder="Client Secret" style="flex:1;min-width:200px" onkeydown="if(event.keyCode===13)stravaSaveConfig()">'+
+      '<button class="btn" onclick="stravaSaveConfig()">Save keys</button>'+
+      (stravaEditing?'<button class="btn ghost" onclick="stravaEditing=false;renderSettings()">Cancel</button>':'')+
+      '</div>'+
+      (S.strava.from_env?'<p class="muted">Note: keys are currently set via .env, which overrides keys saved here.</p>':'');
   } else if(!S.strava.connected){
-    html='<p style="font-size:14px;margin-bottom:10px">API keys found. Connect your Strava account:</p>'+
-      '<a class="btn" href="/strava/connect" style="text-decoration:none">Connect Strava</a>';
+    html='<p style="font-size:14px;margin-bottom:10px">✅ API keys saved. Now connect your Strava account:</p>'+
+      '<a class="btn" href="/strava/connect" style="text-decoration:none">Connect Strava</a> '+
+      '<button class="btn ghost small" onclick="stravaEditing=true;renderSettings()">Edit keys</button> '+
+      '<button class="btn danger small" onclick="stravaForget()">Remove keys</button>';
   } else {
     html='<p style="font-size:14px;margin-bottom:10px">✅ Connected.'+
       (S.strava.last_sync?' Last sync: '+esc(S.strava.last_sync):'')+'</p>'+
@@ -522,12 +554,12 @@ function renderSecurity(){
     html='<p style="font-size:14px">Login is disabled — set <b>AUTH_PASSWORD</b> in <b>.env</b> to enable it (required before 2FA makes sense).</p>';
   } else if(SET.totp_enabled){
     html='<p style="font-size:14px;margin-bottom:10px">✅ Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>'+
-      '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center">'+
+      '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaDisable()">'+
       '<button class="btn danger" onclick="tfaDisable()">Disable 2FA</button></div>';
   } else if(tfaPending){
     html='<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>'+
       '<img src="/api/2fa/qr?t='+Date.now()+'" alt="2FA QR" style="width:180px;border-radius:10px;background:#fff;padding:8px">'+
-      '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center">'+
+      '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaConfirm()">'+
       '<button class="btn" onclick="tfaConfirm()">Confirm &amp; enable</button>'+
       '<button class="btn ghost" onclick="tfaPending=false;renderSecurity()">Cancel</button></div>';
   } else {
@@ -591,6 +623,22 @@ async function clearIcs(){
   if(!confirm("Remove all events imported from calendars?")) return;
   var j=await api("DELETE","/api/ics");
   toast("Removed "+j.deleted+" imported events");
+  await refresh();
+}
+var stravaEditing=false;
+async function stravaSaveConfig(){
+  try{
+    await api("POST","/api/strava/config",{
+      client_id:document.getElementById("stravaCid").value.trim(),
+      client_secret:document.getElementById("stravaSecret").value.trim()});
+    stravaEditing=false;
+    toast("Strava keys saved — now click Connect Strava");
+    await refresh();
+  }catch(e){ alert(e.message); }
+}
+async function stravaForget(){
+  if(!confirm("Remove the saved Strava API keys and connection?")) return;
+  await api("DELETE","/api/strava/config");
   await refresh();
 }
 async function stravaSync(){

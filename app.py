@@ -271,7 +271,8 @@ def get_state():
             out[t] = [dict(r) for r in con.execute("SELECT * FROM %s" % t)]
         out["habit_log"] = [dict(r) for r in con.execute("SELECT * FROM habit_log")]
     out["strava"] = {
-        "configured": bool(STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET),
+        "configured": bool(strava_client_id() and strava_client_secret()),
+        "from_env": bool(STRAVA_CLIENT_ID),
         "connected": kv_get("strava_refresh") is not None,
         "last_sync": kv_get("strava_last_sync"),
     }
@@ -654,6 +655,35 @@ STRAVA_AUTH = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN = "https://www.strava.com/oauth/token"
 STRAVA_API = "https://www.strava.com/api/v3"
 
+
+def strava_client_id():
+    """Env var wins; otherwise keys saved via the Settings UI (kv table)."""
+    return STRAVA_CLIENT_ID or kv_get("strava_client_id", "")
+
+
+def strava_client_secret():
+    return STRAVA_CLIENT_SECRET or kv_get("strava_client_secret", "")
+
+
+@app.post("/api/strava/config")
+def strava_config():
+    d = request.get_json(force=True) or {}
+    cid = str(d.get("client_id", "")).strip()
+    cs = str(d.get("client_secret", "")).strip()
+    if not cid or not cs:
+        return jsonify({"error": "both Client ID and Client Secret are required"}), 400
+    kv_set("strava_client_id", cid)
+    kv_set("strava_client_secret", cs)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/strava/config")
+def strava_config_delete():
+    for k in ("strava_client_id", "strava_client_secret",
+              "strava_access", "strava_refresh", "strava_expires", "strava_last_sync"):
+        kv_del(k)
+    return jsonify({"ok": True})
+
 TYPE_MAP = {
     "Run": "run", "TrailRun": "run", "VirtualRun": "run",
     "Ride": "bike", "VirtualRide": "bike", "GravelRide": "bike",
@@ -664,11 +694,11 @@ TYPE_MAP = {
 
 @app.get("/strava/connect")
 def strava_connect():
-    if not STRAVA_CLIENT_ID:
-        return "Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in your .env first (see README).", 400
+    if not (strava_client_id() and strava_client_secret()):
+        return "Add your Strava API keys in Settings first.", 400
     from urllib.parse import urlencode
     params = urlencode({
-        "client_id": STRAVA_CLIENT_ID,
+        "client_id": strava_client_id(),
         "redirect_uri": APP_URL + "/strava/callback",
         "response_type": "code",
         "scope": "activity:read_all",
@@ -683,8 +713,8 @@ def strava_callback():
     if not code:
         return redirect("/?strava=denied")
     r = requests.post(STRAVA_TOKEN, data={
-        "client_id": STRAVA_CLIENT_ID,
-        "client_secret": STRAVA_CLIENT_SECRET,
+        "client_id": strava_client_id(),
+        "client_secret": strava_client_secret(),
         "code": code,
         "grant_type": "authorization_code",
     }, timeout=20)
@@ -704,8 +734,8 @@ def strava_access_token():
     if not refresh:
         return None
     r = requests.post(STRAVA_TOKEN, data={
-        "client_id": STRAVA_CLIENT_ID,
-        "client_secret": STRAVA_CLIENT_SECRET,
+        "client_id": strava_client_id(),
+        "client_secret": strava_client_secret(),
         "grant_type": "refresh_token",
         "refresh_token": refresh,
     }, timeout=20)
@@ -759,8 +789,9 @@ def strava_sync():
 
 @app.post("/api/strava/disconnect")
 def strava_disconnect():
-    with db() as con:
-        con.execute("DELETE FROM kv WHERE key LIKE 'strava_%'")
+    # removes the account connection but keeps the API keys
+    for k in ("strava_access", "strava_refresh", "strava_expires", "strava_last_sync"):
+        kv_del(k)
     return jsonify({"ok": True})
 
 
