@@ -6,6 +6,9 @@ analytics dashboard with your historical data. With a built-in login screen,
 optional 2FA, push notifications, and PWA mobile support.
 All data stays on your machine in a single SQLite file.
 
+> **Installing on a server?** See [INSTALL.md](INSTALL.md) for a one-command
+> Ubuntu/Docker install, HTTPS setup, and update commands.
+
 ## Quick start (Docker)
 
 ```bash
