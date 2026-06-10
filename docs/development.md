@@ -36,6 +36,25 @@ after backend changes. Frontend changes only need a browser refresh (force
 refresh if the service worker cached an old asset, or bump `CACHE` in
 `static/sw.js`).
 
+## Tests
+
+`test_app.py` drives Flask's built-in test client through the stdlib
+`unittest` runner (no extra dependencies). It covers the generic CRUD API
+(create/update/delete, the `TABLES` column whitelist, habit toggle + cascade)
+and the `before_request` routing guard in both auth-disabled and auth-enabled
+modes (401 on the API, redirect to `/login` for pages, the key-protected
+`/calendar.ics` feed, and the full login/logout session flow).
+
+```bash
+python -m unittest test_app          # run all tests
+python -m unittest test_app -v       # verbose, one line per test
+python -m unittest test_app.GuardAuthEnabledTests   # one class
+```
+
+The tests point `DB_PATH`/`BACKUP_DIR` at a temp directory before importing
+`app`, so running them never touches your real `data/tyloplanner.db`. When you
+add an endpoint or table, add a case here.
+
 ## API reference
 
 All endpoints return JSON and require a session cookie when auth is enabled

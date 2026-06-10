@@ -2,6 +2,12 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## Unreleased
+
+- **Test suite:** added `test_app.py` (stdlib `unittest` + Flask test client,
+  no new dependencies) covering the generic CRUD API and the auth/routing
+  guard. Run with `python -m unittest test_app`. See `docs/development.md`.
+
 ## 1.2.0 — 2026-06-10
 
 - Restructured documentation for public release: new README, `docs/` folder

@@ -20,9 +20,12 @@ node --check static/app.js             # syntax-check frontend
 docker compose up -d --build           # production build/run
 ```
 
-There is no test suite yet; verify changes by running the server and
-exercising the affected endpoints with curl (examples in docs/development.md).
-Test both with and without AUTH_PASSWORD set when touching auth or routing.
+Run the test suite with `python -m unittest test_app` (stdlib unittest +
+Flask test client; it covers the generic CRUD API and the auth/routing
+guard and points DB_PATH at a temp dir, so it won't touch real data). For
+behavior the suite doesn't cover, also exercise the affected endpoints with
+curl (examples in docs/development.md). Test both with and without
+AUTH_PASSWORD set when touching auth or routing.
 
 ## Architecture in one paragraph
 
