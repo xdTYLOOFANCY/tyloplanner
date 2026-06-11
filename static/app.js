@@ -298,13 +298,121 @@ function renderTasks(){
 }
 
 // ---------- notes ----------
-var currentNote=null, noteTimer=null;
+function mdToHtml(text){
+  var lines=(text||"").split("\n");
+  var html="",inUl=false,inOl=false,inBq=false;
+  function closeLists(){ if(inUl){html+="</ul>";inUl=false;} if(inOl){html+="</ol>";inOl=false;} }
+  function closeBq(){ if(inBq){html+="</blockquote>";inBq=false;} }
+  function inline(s){
+    s=esc(s);
+    s=s.replace(/\[\[(.+?)\]\]/g,function(match,title){
+      var t=title.trim();
+      var note=S&&S.notes&&S.notes.find(function(n){
+        return esc(n.title||"").toLowerCase()===t.toLowerCase();
+      });
+      if(note) return '<a href="#" class="note-link" onclick="openNote(\''+note.id+'\');return false;">'+t+'</a>';
+      return '<span class="note-link-missing">'+match+'</span>';
+    });
+    s=s.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+    s=s.replace(/\*(.+?)\*/g,"<em>$1</em>");
+    s=s.replace(/__(.+?)__/g,"<u>$1</u>");
+    s=s.replace(/~~(.+?)~~/g,"<s>$1</s>");
+    return s;
+  }
+  lines.forEach(function(line){
+    var m;
+    if((m=line.match(/^(#{1,3})\s+(.*)/))!==null){
+      closeLists(); closeBq();
+      html+="<h"+m[1].length+">"+inline(m[2])+"</h"+m[1].length+">";
+    } else if(/^-{3,}$/.test(line.trim())){
+      closeLists(); closeBq(); html+="<hr>";
+    } else if((m=line.match(/^>\s?(.*)/))!==null){
+      closeLists();
+      if(!inBq){html+="<blockquote>";inBq=true;}
+      html+=inline(m[1])+"<br>";
+    } else if((m=line.match(/^[-*]\s+(.*)/))!==null){
+      closeBq(); if(inOl){html+="</ol>";inOl=false;}
+      if(!inUl){html+="<ul>";inUl=true;}
+      html+="<li>"+inline(m[1])+"</li>";
+    } else if((m=line.match(/^\d+\.\s+(.*)/))!==null){
+      closeBq(); if(inUl){html+="</ul>";inUl=false;}
+      if(!inOl){html+="<ol>";inOl=true;}
+      html+="<li>"+inline(m[1])+"</li>";
+    } else if(line.trim()===""){
+      closeLists(); closeBq(); html+="<br>";
+    } else {
+      closeLists(); closeBq(); html+="<p>"+inline(line)+"</p>";
+    }
+  });
+  closeLists(); closeBq();
+  return html;
+}
+
+var currentNote=null, noteTimer=null, noteMode="edit";
+function toggleNoteMode(){
+  noteMode=(noteMode==="edit")?"view":"edit";
+  applyNoteMode();
+}
+function applyNoteMode(){
+  var ta=document.getElementById("noteBody");
+  var view=document.getElementById("noteView");
+  var btn=document.getElementById("noteModeBtn");
+  var tb=document.getElementById("noteToolbar");
+  if(noteMode==="view"){
+    view.innerHTML=mdToHtml(ta.value);
+    ta.style.display="none"; view.style.display="block"; btn.textContent="Edit";
+    if(tb) tb.style.display="none";
+  } else {
+    ta.style.display=""; view.style.display="none"; btn.textContent="View";
+    if(tb) tb.style.display="";
+  }
+}
+function noteInsert(type){
+  var ta=document.getElementById("noteBody");
+  if(!ta||ta.style.display==="none") return;
+  var s=ta.selectionStart, e=ta.selectionEnd, val=ta.value, sel=val.slice(s,e);
+  var newVal, pos, ls;
+  if(type==="bold"){
+    newVal=val.slice(0,s)+"**"+sel+"**"+val.slice(e);
+    pos=sel?(s+2+sel.length+2):(s+2);
+  } else if(type==="italic"){
+    newVal=val.slice(0,s)+"*"+sel+"*"+val.slice(e);
+    pos=sel?(s+1+sel.length+1):(s+1);
+  } else if(type==="heading"){
+    ls=val.lastIndexOf("\n",s-1)+1;
+    newVal=val.slice(0,ls)+"# "+val.slice(ls);
+    pos=s+2;
+  } else if(type==="list"){
+    ls=val.lastIndexOf("\n",s-1)+1;
+    newVal=val.slice(0,ls)+"- "+val.slice(ls);
+    pos=s+2;
+  } else if(type==="numlist"){
+    ls=val.lastIndexOf("\n",s-1)+1;
+    newVal=val.slice(0,ls)+"1. "+val.slice(ls);
+    pos=s+3;
+  } else {
+    var pre=(s>0&&val[s-1]!=="\n")?"\n":"";
+    var ins=pre+"---\n";
+    newVal=val.slice(0,s)+ins+val.slice(s);
+    pos=s+ins.length;
+  }
+  ta.value=newVal;
+  ta.selectionStart=ta.selectionEnd=pos;
+  ta.focus();
+  noteChanged();
+}
 async function newNote(){
+  noteMode="edit";
   var r=await api("POST","/api/notes",{title:"",body:"",updated:Date.now()});
   currentNote=r.id; await refresh();
   document.getElementById("noteTitle").focus();
 }
-function selectNote(id){ currentNote=id; renderNotes(); }
+function openNote(id){
+  var btn=document.querySelector("#tabs button[data-tab='notes']");
+  if(btn) btn.click();
+  selectNote(id);
+}
+function selectNote(id){ noteMode="view"; currentNote=id; renderNotes(); }
 function noteChanged(){
   clearTimeout(noteTimer);
   noteTimer=setTimeout(async function(){
@@ -342,6 +450,7 @@ function renderNotes(){
   document.getElementById("noteTitle").value=n.title||"";
   document.getElementById("noteBody").value=n.body||"";
   document.getElementById("noteMeta").textContent="Last edited "+new Date(n.updated||0).toLocaleString();
+  applyNoteMode();
 }
 
 // ---------- analytics ----------

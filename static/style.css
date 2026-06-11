@@ -89,6 +89,12 @@ table.grades input{width:70px;padding:5px 7px}
 .notelist .list-item.sel{outline:1px solid var(--accent)}
 #noteBody{width:100%;min-height:320px;resize:vertical;line-height:1.5}
 #noteTitle{width:100%;margin-bottom:8px;font-weight:700}
+.note-toolbar{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap}
+.note-toolbar button{background:var(--panel2);border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:6px;cursor:pointer;font-size:12px;line-height:1.6;font-family:inherit}
+.note-toolbar button:hover{color:var(--text);border-color:var(--accent)}
+.note-link{color:var(--accent);text-decoration:none}
+.note-link:hover{text-decoration:underline}
+.note-link-missing{color:var(--muted);text-decoration:underline dashed;cursor:default}
 .checkbox-task{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px}
 .checkbox-task input{accent-color:var(--green)}
 .done{text-decoration:line-through;color:var(--muted)}

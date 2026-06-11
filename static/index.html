@@ -145,10 +145,22 @@
       </div>
       <div class="card" id="noteEditor" style="display:none">
         <input id="noteTitle" placeholder="Title" oninput="noteChanged()">
+        <div class="note-toolbar" id="noteToolbar" onmousedown="event.preventDefault()">
+          <button onclick="noteInsert('bold')" title="Bold"><b>B</b></button>
+          <button onclick="noteInsert('italic')" title="Italic"><i>I</i></button>
+          <button onclick="noteInsert('heading')" title="Heading">H1</button>
+          <button onclick="noteInsert('list')" title="Bulleted list">&#8226; List</button>
+          <button onclick="noteInsert('numlist')" title="Numbered list">1. List</button>
+          <button onclick="noteInsert('divider')" title="Divider">&#8212;</button>
+        </div>
         <textarea id="noteBody" placeholder="Write anything…" oninput="noteChanged()"></textarea>
+        <div id="noteView" style="display:none;min-height:120px;line-height:1.6;padding:4px 0"></div>
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
           <span class="muted" id="noteMeta"></span>
-          <button class="btn danger small" onclick="deleteNote()">Delete</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn small" id="noteModeBtn" onclick="toggleNoteMode()">View</button>
+            <button class="btn danger small" onclick="deleteNote()">Delete</button>
+          </div>
         </div>
       </div>
     </div>
