@@ -34,6 +34,8 @@ codebase is small enough to read in an afternoon and make your own.
 - **Habits** — daily check-offs with streaks and an evening reminder for whatever's still open.
 - **Workouts** — log runs, rides and gym sessions by hand or sync them automatically from **Strava** (requires subscription).
 - **Analytics** — 12-month history of workouts, distance, study hours and habit consistency, plus all-time totals.
+- **Notes** — write and organize markdown notes with full-text search, rich formatting, and linked cross-references.
+- **File storage** — upload and store documents, images and other files on your own server with no size limits.
 - **Notifications** — morning agenda and exam alerts pushed to your phone via [ntfy](https://ntfy.sh) (free, no account).
 - **Mobile app (PWA)** — *Add to Home Screen* on your phone and it runs fullscreen with its own icon.
 - **Secure** — login screen, optional TOTP two-factor authentication, secret-key-protected calendar feed, automatic nightly backups.
