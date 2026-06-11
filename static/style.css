@@ -95,6 +95,13 @@ table.grades input{width:70px;padding:5px 7px}
 .note-link{color:var(--accent);text-decoration:none}
 .note-link:hover{text-decoration:underline}
 .note-link-missing{color:var(--muted);text-decoration:underline dashed;cursor:default}
+mark{background:#ffe066;color:#1c2230;border-radius:2px;padding:0 1px}
+mark.cur{background:#f5a623;color:#1c2230}
+.note-search-bar{display:flex;align-items:center;gap:4px;margin-bottom:6px}
+.note-search-bar input{flex:1;font-size:12px;padding:4px 8px}
+.note-search-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit}
+.note-search-btn:hover{color:var(--text);border-color:var(--accent)}
+#noteBodySearchCount{min-width:54px;text-align:right}
 .checkbox-task{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px}
 .checkbox-task input{accent-color:var(--green)}
 .done{text-decoration:line-through;color:var(--muted)}

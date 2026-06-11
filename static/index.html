@@ -141,6 +141,7 @@
     <div class="noteslayout">
       <div class="card notelist">
         <button class="btn" style="width:100%;margin-bottom:10px" onclick="newNote()">+ New note</button>
+        <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" style="width:100%;margin-bottom:8px">
         <div id="noteList"></div>
       </div>
       <div class="card" id="noteEditor" style="display:none">
@@ -152,6 +153,12 @@
           <button onclick="noteInsert('list')" title="Bulleted list">&#8226; List</button>
           <button onclick="noteInsert('numlist')" title="Numbered list">1. List</button>
           <button onclick="noteInsert('divider')" title="Divider">&#8212;</button>
+        </div>
+        <div class="note-search-bar">
+          <input id="noteBodySearch" placeholder="Search in note…" oninput="noteBodySearchInput()">
+          <button class="note-search-btn" onclick="noteBodySearchNav(-1)" title="Previous match">↑</button>
+          <button class="note-search-btn" onclick="noteBodySearchNav(1)" title="Next match">↓</button>
+          <span id="noteBodySearchCount" class="muted"></span>
         </div>
         <textarea id="noteBody" placeholder="Write anything…" oninput="noteChanged()"></textarea>
         <div id="noteView" style="display:none;min-height:120px;line-height:1.6;padding:4px 0"></div>

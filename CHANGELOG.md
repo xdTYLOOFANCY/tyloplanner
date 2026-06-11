@@ -4,6 +4,10 @@ All notable changes to TyloPlanner are documented here.
 
 ## Unreleased
 
+- **Notes search:** global search bar in the note list filters by title and
+  body (with highlighted snippets); a per-note search bar lets you search
+  within the open note, with match count and ↑/↓ navigation in both edit
+  and view modes.
 - **Test suite:** added `test_app.py` (stdlib `unittest` + Flask test client,
   no new dependencies) covering the generic CRUD API and the auth/routing
   guard. Run with `python -m unittest test_app`. See `docs/development.md`.
