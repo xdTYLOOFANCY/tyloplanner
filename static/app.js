@@ -471,6 +471,15 @@ async function deleteNote(){
   await api("DELETE","/api/notes/"+currentNote);
   currentNote=null; await refresh();
 }
+async function toggleNotePin(id,ev){
+  ev.stopPropagation();
+  var n=S.notes.find(function(x){return x.id===id;});
+  if(!n) return;
+  var newPinned=n.is_pinned?0:1;
+  await api("PUT","/api/notes/"+id,{is_pinned:newPinned});
+  n.is_pinned=newPinned;
+  renderNoteList();
+}
 function noteSearchInput(){ renderNoteList(); }
 function noteBodySearchInput(){
   noteBodySearch.q=document.getElementById("noteBodySearch").value;
@@ -522,7 +531,10 @@ function applyNoteBodySearch(jump){
 }
 function renderNoteList(){
   var q=(document.getElementById("noteSearch")||{value:""}).value.trim().toLowerCase();
-  var list=S.notes.slice().sort(function(a,b){return (b.updated||0)-(a.updated||0);});
+  var list=S.notes.slice().sort(function(a,b){
+    if((b.is_pinned||0)!==(a.is_pinned||0)) return (b.is_pinned||0)-(a.is_pinned||0);
+    return (b.updated||0)-(a.updated||0);
+  });
   if(q) list=list.filter(function(n){
     return (n.title||"").toLowerCase().indexOf(q)!==-1||(n.body||"").toLowerCase().indexOf(q)!==-1;
   });
@@ -536,7 +548,9 @@ function renderNoteList(){
       snippet='<div class="muted" style="line-height:1.4;margin:2px 0">'+(start>0?"…":"")+
         highlightText((n.body||"").slice(start,end),q)+(end<(n.body||"").length?"…":"")+'</div>';
     }
-    html+='<div class="list-item'+(n.id===currentNote?' sel':'')+'" onclick="selectNote(\''+n.id+'\')">'+
+    var pinned=n.is_pinned?'note-pinned':'';
+    html+='<div class="list-item '+pinned+(n.id===currentNote?' sel':'')+'" onclick="selectNote(\''+n.id+'\')">'+
+      '<button class="btn-pin" onclick="toggleNotePin(\''+n.id+'\',event)" title="'+(n.is_pinned?'Unpin':'Pin')+'">★</button>'+
       '<div class="grow"><div>'+title+'</div>'+snippet+
       '<div class="muted">'+new Date(n.updated||0).toLocaleDateString()+'</div></div></div>';
   });
@@ -880,15 +894,26 @@ function renderFiles() {
     return (f.filename || "").toLowerCase().indexOf(q) !== -1;
   });
   if (fileSort === "name") {
-    list.sort(function(a, b) { return (a.filename || "").localeCompare(b.filename || ""); });
+    list.sort(function(a, b) {
+      if ((b.is_pinned||0) !== (a.is_pinned||0)) return (b.is_pinned||0) - (a.is_pinned||0);
+      return (a.filename || "").localeCompare(b.filename || "");
+    });
   } else if (fileSort === "size") {
-    list.sort(function(a, b) { return (b.size || 0) - (a.size || 0); });
+    list.sort(function(a, b) {
+      if ((b.is_pinned||0) !== (a.is_pinned||0)) return (b.is_pinned||0) - (a.is_pinned||0);
+      return (b.size || 0) - (a.size || 0);
+    });
   } else {
-    list.sort(function(a, b) { return (b.uploaded || 0) - (a.uploaded || 0); });
+    list.sort(function(a, b) {
+      if ((b.is_pinned||0) !== (a.is_pinned||0)) return (b.is_pinned||0) - (a.is_pinned||0);
+      return (b.uploaded || 0) - (a.uploaded || 0);
+    });
   }
   var html = "";
   list.forEach(function(f) {
-    html += '<div class="list-item">' +
+    var pinned = f.is_pinned ? 'file-pinned' : '';
+    html += '<div class="list-item ' + pinned + '">' +
+      '<button class="btn-pin" onclick="toggleFilePin(\'' + f.id + '\',event)" title="' + (f.is_pinned?'Unpin':'Pin') + '">★</button>' +
       '<div class="grow">' +
       '<div>' + esc(f.filename || "Unnamed") + '</div>' +
       '<div class="muted">' + fmtSize(f.size) + ' &middot; ' + new Date(f.uploaded || 0).toLocaleDateString() + '</div>' +
@@ -926,6 +951,15 @@ async function delFile(id) {
   if (!confirm("Delete this file?")) return;
   await api("DELETE", "/api/files/" + id);
   await refresh();
+}
+async function toggleFilePin(id, ev) {
+  ev.stopPropagation();
+  var f = (S.files || []).find(function(x) { return x.id === id; });
+  if (!f) return;
+  var newPinned = f.is_pinned ? 0 : 1;
+  await api("PUT", "/api/files/" + id, {is_pinned: newPinned});
+  f.is_pinned = newPinned;
+  renderFiles();
 }
 function setFileSort(s) { fileSort = s; renderFiles(); }
 

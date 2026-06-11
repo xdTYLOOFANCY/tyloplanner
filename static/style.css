@@ -102,6 +102,9 @@ mark.cur{background:#f5a623;color:#1c2230}
 .note-search-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit}
 .note-search-btn:hover{color:var(--text);border-color:var(--accent)}
 #noteBodySearchCount{min-width:54px;text-align:right}
+.btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
+.btn-pin:hover{color:var(--accent)}
+.note-pinned,.file-pinned{background:var(--panel2);border-left:3px solid var(--accent)}
 .checkbox-task{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px}
 .checkbox-task input{accent-color:var(--green)}
 .done{text-decoration:line-through;color:var(--muted)}

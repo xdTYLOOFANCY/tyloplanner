@@ -56,9 +56,9 @@ CREATE TABLE IF NOT EXISTS tasks(
   id TEXT PRIMARY KEY, name TEXT, done INTEGER DEFAULT 0,
   created TEXT, completed_at TEXT);
 CREATE TABLE IF NOT EXISTS notes(
-  id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER);
+  id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER, is_pinned INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS files(
-  id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER);
+  id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER, is_pinned INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
 """
 
@@ -69,7 +69,8 @@ TABLES = {
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
     "tasks":    ["name", "done", "created", "completed_at"],
-    "notes":    ["title", "body", "updated"],
+    "notes":    ["title", "body", "updated", "is_pinned"],
+    "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned"],
 }
 
 
@@ -79,8 +80,15 @@ def db():
     return con
 
 
+def _ensure_column(con, table, col, decl):
+    cols = [r["name"] for r in con.execute("PRAGMA table_info(%s)" % table)]
+    if col not in cols:
+        con.execute("ALTER TABLE %s ADD COLUMN %s" % (table, decl))
+
 with db() as con:
     con.executescript(SCHEMA)
+    _ensure_column(con, "notes", "is_pinned", "is_pinned INTEGER DEFAULT 0")
+    _ensure_column(con, "files", "is_pinned", "is_pinned INTEGER DEFAULT 0")
 
 _WELCOME_NOTE_TITLE = "How to use Notes"
 _WELCOME_NOTE_BODY = """\

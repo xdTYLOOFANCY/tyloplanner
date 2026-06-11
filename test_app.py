@@ -144,6 +144,18 @@ class CrudTests(unittest.TestCase):
         self.assertEqual(state["habits"], [])
         self.assertEqual(state["habit_log"], [])  # log entry removed too
 
+    # ---- notes: is_pinned ----
+    def test_note_pin_field(self):
+        r = self.c.post("/api/notes", json={"title": "test", "is_pinned": 1})
+        self.assertEqual(r.status_code, 200)
+        nid = r.get_json()["id"]
+        row = self._rows("notes")[0]
+        self.assertEqual(row["is_pinned"], 1)
+        # Update to unpin
+        self.c.put("/api/notes/%s" % nid, json={"is_pinned": 0})
+        row = self._rows("notes")[0]
+        self.assertEqual(row["is_pinned"], 0)
+
 
 class GuardAuthDisabledTests(unittest.TestCase):
     """With AUTH_PASSWORD unset, everything is reachable without a session."""
@@ -279,6 +291,21 @@ class FilesTests(unittest.TestCase):
     def test_download_unknown_id_404(self):
         r = self.c.get("/api/files/doesnotexist/download")
         self.assertEqual(r.status_code, 404)
+
+    def test_file_pin_field(self):
+        data = {"file": (io.BytesIO(b"test content"), "test.txt")}
+        fid = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
+        # Pin the file
+        r = self.c.put("/api/files/%s" % fid, json={"is_pinned": 1})
+        self.assertEqual(r.status_code, 200)
+        files = self.c.get("/api/state").get_json()["files"]
+        pinned = [f for f in files if f["id"] == fid][0]
+        self.assertEqual(pinned["is_pinned"], 1)
+        # Unpin the file
+        self.c.put("/api/files/%s" % fid, json={"is_pinned": 0})
+        files = self.c.get("/api/state").get_json()["files"]
+        unpinned = [f for f in files if f["id"] == fid][0]
+        self.assertEqual(unpinned["is_pinned"], 0)
 
 
 if __name__ == "__main__":
