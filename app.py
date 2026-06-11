@@ -19,12 +19,13 @@ from datetime import datetime
 import pyotp
 import qrcode
 import requests
-from flask import Flask, request, jsonify, redirect, Response, session
+from flask import Flask, request, jsonify, redirect, Response, session, send_file
 
 # ---------------- config ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "tyloplanner.db"))
 BACKUP_DIR = os.environ.get("BACKUP_DIR", os.path.join(os.path.dirname(DB_PATH), "backups"))
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.path.dirname(DB_PATH), "uploads"))
 APP_URL = os.environ.get("APP_URL", "http://localhost:8000").rstrip("/")
 STRAVA_CLIENT_ID = os.environ.get("STRAVA_CLIENT_ID", "")
 STRAVA_CLIENT_SECRET = os.environ.get("STRAVA_CLIENT_SECRET", "")
@@ -34,6 +35,7 @@ AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -55,6 +57,8 @@ CREATE TABLE IF NOT EXISTS tasks(
   created TEXT, completed_at TEXT);
 CREATE TABLE IF NOT EXISTS notes(
   id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER);
+CREATE TABLE IF NOT EXISTS files(
+  id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
 """
 
@@ -341,6 +345,7 @@ def get_state():
         for t in TABLES:
             out[t] = [dict(r) for r in con.execute("SELECT * FROM %s" % t)]
         out["habit_log"] = [dict(r) for r in con.execute("SELECT * FROM habit_log")]
+        out["files"] = [dict(r) for r in con.execute("SELECT * FROM files ORDER BY uploaded DESC")]
     out["strava"] = {
         "configured": bool(strava_client_id() and strava_client_secret()),
         "from_env": bool(STRAVA_CLIENT_ID),
@@ -425,6 +430,51 @@ def toggle_habit(hid):
             return jsonify({"on": False})
         con.execute('INSERT INTO habit_log(habit_id,"date") VALUES(?,?)', (hid, d))
         return jsonify({"on": True})
+
+
+# ---------------- file storage ----------------
+@app.post("/api/files/upload")
+def upload_file():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "no file provided"}), 400
+    fid = uid()
+    original_name = os.path.basename(f.filename or "upload")
+    disk_path = os.path.join(UPLOAD_DIR, fid)
+    f.save(disk_path)
+    size = os.path.getsize(disk_path)
+    ts = int(time.time() * 1000)
+    with db() as con:
+        con.execute(
+            "INSERT INTO files(id, filename, size, mimetype, uploaded) VALUES(?,?,?,?,?)",
+            (fid, original_name, size, f.mimetype or "application/octet-stream", ts))
+    return jsonify({"id": fid, "filename": original_name, "size": size})
+
+
+@app.get("/api/files/<fid>/download")
+def download_file(fid):
+    with db() as con:
+        row = con.execute("SELECT * FROM files WHERE id=?", (fid,)).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    disk_path = os.path.join(UPLOAD_DIR, fid)
+    if not os.path.exists(disk_path):
+        return jsonify({"error": "file missing from disk"}), 404
+    return send_file(disk_path, as_attachment=True, download_name=row["filename"],
+                     mimetype="application/octet-stream")
+
+
+@app.delete("/api/files/<fid>")
+def delete_file(fid):
+    with db() as con:
+        row = con.execute("SELECT id FROM files WHERE id=?", (fid,)).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        con.execute("DELETE FROM files WHERE id=?", (fid,))
+    disk_path = os.path.join(UPLOAD_DIR, fid)
+    if os.path.exists(disk_path):
+        os.remove(disk_path)
+    return jsonify({"ok": True})
 
 
 # ---------------- backup / restore ----------------

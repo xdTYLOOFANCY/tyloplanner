@@ -4,6 +4,10 @@ All notable changes to TyloPlanner are documented here.
 
 ## Unreleased
 
+- **File storage:** upload files, search by filename, sort by date/name/size,
+  and download them from a dedicated Files tab. Files are stored in
+  `data/uploads/` on disk; metadata is in the `files` table. Uploaded files
+  are not included in JSON backups — back up `data/uploads/` separately.
 - **Notes search:** global search bar in the note list filters by title and
   body (with highlighted snippets); a per-note search bar lets you search
   within the open note, with match count and ↑/↓ navigation in both edit

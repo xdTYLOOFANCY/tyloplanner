@@ -865,10 +865,74 @@ async function stravaDisconnect(){
   await refresh();
 }
 
+// ---------- files ----------
+var fileSort = "date";
+function fmtSize(bytes) {
+  if (bytes == null) return "—";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (Math.round(bytes / 102.4) / 10) + " KB";
+  return (Math.round(bytes / 104857.6) / 10) + " MB";
+}
+function renderFiles() {
+  var q = (document.getElementById("fileSearch") || {value: ""}).value.trim().toLowerCase();
+  var list = (S.files || []).slice();
+  if (q) list = list.filter(function(f) {
+    return (f.filename || "").toLowerCase().indexOf(q) !== -1;
+  });
+  if (fileSort === "name") {
+    list.sort(function(a, b) { return (a.filename || "").localeCompare(b.filename || ""); });
+  } else if (fileSort === "size") {
+    list.sort(function(a, b) { return (b.size || 0) - (a.size || 0); });
+  } else {
+    list.sort(function(a, b) { return (b.uploaded || 0) - (a.uploaded || 0); });
+  }
+  var html = "";
+  list.forEach(function(f) {
+    html += '<div class="list-item">' +
+      '<div class="grow">' +
+      '<div>' + esc(f.filename || "Unnamed") + '</div>' +
+      '<div class="muted">' + fmtSize(f.size) + ' &middot; ' + new Date(f.uploaded || 0).toLocaleDateString() + '</div>' +
+      '</div>' +
+      '<a class="btn small ghost" href="/api/files/' + f.id + '/download" style="text-decoration:none">Download</a>' +
+      '<button class="btn danger small" onclick="delFile(\'' + f.id + '\')">✕</button>' +
+      '</div>';
+  });
+  document.getElementById("fileList").innerHTML = html || (q ? '<div class="muted">No files match.</div>' : '<div class="muted">No files uploaded yet.</div>');
+  ["date", "name", "size"].forEach(function(s) {
+    var btn = document.getElementById("fileSort-" + s);
+    if (btn) btn.className = "btn small" + (fileSort === s ? "" : " ghost");
+  });
+}
+async function uploadFile() {
+  var input = document.getElementById("fileInput");
+  var files = input.files;
+  if (!files || !files.length) { alert("Choose a file first."); return; }
+  for (var i = 0; i < files.length; i++) {
+    var fd = new FormData();
+    fd.append("file", files[i]);
+    var r = await fetch("/api/files/upload", {method: "POST", body: fd});
+    if (!r.ok) {
+      var e = await r.json().catch(function() { return {error: r.statusText}; });
+      alert("Upload failed: " + (e.error || "unknown error"));
+      input.value = "";
+      return;
+    }
+  }
+  input.value = "";
+  toast("Uploaded " + files.length + " file" + (files.length > 1 ? "s" : ""));
+  await refresh();
+}
+async function delFile(id) {
+  if (!confirm("Delete this file?")) return;
+  await api("DELETE", "/api/files/" + id);
+  await refresh();
+}
+function setFileSort(s) { fileSort = s; renderFiles(); }
+
 // ---------- boot ----------
 function renderAll(){
   renderDashboard(); renderAnalytics(); renderPlanner(); renderExams();
-  renderHabits(); renderWorkouts(); renderTasks(); renderNotes(); renderSettings();
+  renderHabits(); renderWorkouts(); renderTasks(); renderNotes(); renderFiles(); renderSettings();
 }
 document.getElementById("wDate").value=todayStr();
 applyTheme();

@@ -31,6 +31,7 @@
   <button data-tab="workouts">Workouts</button>
   <button data-tab="tasks">To-do</button>
   <button data-tab="notes">Notes</button>
+  <button data-tab="files">Files</button>
   <button data-tab="settings">Settings</button>
 </nav>
 <main>
@@ -169,6 +170,26 @@
             <button class="btn danger small" onclick="deleteNote()">Delete</button>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-files">
+    <h2 class="pagetitle">Files</h2>
+    <div class="fileslayout">
+      <div class="card">
+        <div class="formrow">
+          <input type="file" id="fileInput" multiple>
+          <button class="btn" onclick="uploadFile()">Upload</button>
+        </div>
+        <div class="formrow" style="margin-bottom:10px">
+          <span class="muted" style="font-size:12px;line-height:28px">Sort:</span>
+          <button id="fileSort-date" class="btn small" onclick="setFileSort('date')">Date</button>
+          <button id="fileSort-name" class="btn small ghost" onclick="setFileSort('name')">Name</button>
+          <button id="fileSort-size" class="btn small ghost" onclick="setFileSort('size')">Size</button>
+          <input id="fileSearch" placeholder="Search files…" oninput="renderFiles()" style="flex:1;min-width:160px;margin-left:8px">
+        </div>
+        <div id="fileList"></div>
       </div>
     </div>
   </section>

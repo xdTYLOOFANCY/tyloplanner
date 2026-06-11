@@ -105,6 +105,8 @@ mark.cur{background:#f5a623;color:#1c2230}
 .checkbox-task{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px}
 .checkbox-task input{accent-color:var(--green)}
 .done{text-decoration:line-through;color:var(--muted)}
+/* files */
+.fileslayout{max-width:700px;margin:0 auto}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
 h2.pagetitle{font-size:20px;margin-bottom:16px}
 code.url{background:var(--panel2);padding:4px 8px;border-radius:6px;font-size:12px;word-break:break-all}

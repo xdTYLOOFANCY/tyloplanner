@@ -13,6 +13,7 @@ schema at import time.
 
 Run with:   python -m unittest test_app -v
 """
+import io
 import os
 import tempfile
 import unittest
@@ -27,6 +28,7 @@ warnings.filterwarnings("ignore", category=ResourceWarning)
 _TMP = tempfile.mkdtemp(prefix="tyloplanner-test-")
 os.environ["DB_PATH"] = os.path.join(_TMP, "test.db")
 os.environ["BACKUP_DIR"] = os.path.join(_TMP, "backups")
+os.environ["UPLOAD_DIR"] = os.path.join(_TMP, "uploads")
 os.environ["SECRET_KEY"] = "test-secret-key"
 # Import with auth OFF so the module-level AUTH_ENABLED starts False; individual
 # test cases flip the module globals to exercise the guard in both modes.
@@ -228,6 +230,55 @@ class GuardAuthEnabledTests(unittest.TestCase):
         self.assertEqual(self.c.get("/api/state").status_code, 200)
         self.c.get("/logout")
         self.assertEqual(self.c.get("/api/state").status_code, 401)
+
+
+class FilesTests(unittest.TestCase):
+    """File upload / download / delete endpoints."""
+
+    def setUp(self):
+        reset_db()
+        with appmod.db() as con:
+            con.execute("DELETE FROM files")
+        appmod.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_upload_appears_in_state(self):
+        data = {"file": (io.BytesIO(b"hello world"), "test.txt")}
+        r = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data)
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertIn("id", j)
+        self.assertEqual(j["filename"], "test.txt")
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0]["filename"], "test.txt")
+        self.assertEqual(files[0]["size"], 11)
+
+    def test_download_returns_bytes_as_attachment(self):
+        data = {"file": (io.BytesIO(b"file content"), "myfile.txt")}
+        fid = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
+        r = self.c.get("/api/files/%s/download" % fid)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r.headers.get("Content-Disposition", ""))
+        self.assertEqual(r.data, b"file content")
+
+    def test_delete_removes_row_and_disk_file(self):
+        data = {"file": (io.BytesIO(b"data"), "todel.txt")}
+        fid = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
+        disk_path = os.path.join(appmod.UPLOAD_DIR, fid)
+        self.assertTrue(os.path.exists(disk_path))
+        r = self.c.delete("/api/files/%s" % fid)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(os.path.exists(disk_path))
+        self.assertEqual(self.c.get("/api/state").get_json()["files"], [])
+
+    def test_upload_no_file_400(self):
+        r = self.c.post("/api/files/upload", content_type="multipart/form-data", data={})
+        self.assertEqual(r.status_code, 400)
+
+    def test_download_unknown_id_404(self):
+        r = self.c.get("/api/files/doesnotexist/download")
+        self.assertEqual(r.status_code, 404)
 
 
 if __name__ == "__main__":

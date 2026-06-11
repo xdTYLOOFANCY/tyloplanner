@@ -71,6 +71,9 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `GET/POST /api/settings` | Read / write user settings (ntfy, sync, …). |
 | `POST /api/notify/test` | Send a test ntfy push. |
 | `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore. |
+| `POST /api/files/upload` | Upload a file (multipart `file` field). Returns `{id, filename, size}`. |
+| `GET /api/files/<id>/download` | Download a file as an attachment. |
+| `DELETE /api/files/<id>` | Delete a file (removes DB row and disk file). |
 | `POST /api/ics/import` · `POST /api/ics/sync-now` · `DELETE /api/ics` | Calendar import, forced auto-sync, remove imported events. |
 | `GET /calendar.ics?key=…` | iCal feed (secret key instead of cookies). |
 | `POST /api/2fa/setup` · `GET /api/2fa/qr` · `POST /api/2fa/enable` · `POST /api/2fa/disable` | TOTP lifecycle. |
