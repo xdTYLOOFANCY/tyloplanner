@@ -25,7 +25,7 @@ import {
   saveCalSync as _saveCalSync, calSyncNow as _calSyncNow,
   tfaStart, tfaConfirm as _tfaConfirm, tfaDisable as _tfaDisable,
   backupNow as _backupNow, copyIcs,
-  importIcsFile as _importIcsFile, importIcsUrl as _importIcsUrl, clearIcs as _clearIcs,
+  importIcsFile as _importIcsFile, clearIcs as _clearIcs,
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
   saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
@@ -59,7 +59,6 @@ window.saveNotifySettings = function() { _saveNotifySettings(R); };
 window.saveCalSync = function() { _saveCalSync(R); };
 window.calSyncNow = function() { _calSyncNow(R); };
 window.importIcsFile = function() { _importIcsFile(R); };
-window.importIcsUrl = function() { _importIcsUrl(R); };
 window.clearIcs = function() { _clearIcs(R); };
 window.stravaSaveConfig = function() { _stravaSaveConfig(R); };
 window.stravaForget = function() { _stravaForget(R); };

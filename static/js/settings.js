@@ -199,16 +199,6 @@ export async function importIcsFile(refresh) {
   await refresh();
 }
 
-export async function importIcsUrl(refresh) {
-  var u = document.getElementById("icsImportUrl").value.trim();
-  if (!u) { alert("Paste an iCal URL first."); return; }
-  try {
-    var j = await api("POST", "/api/ics/import", { url: u });
-    toast("Imported " + j.added + " of " + j.found + " events");
-    await refresh();
-  } catch(e) { alert(e.message); }
-}
-
 export async function clearIcs(refresh) {
   if (!confirm("Remove all events imported from calendars?")) return;
   var j = await api("DELETE", "/api/ics");

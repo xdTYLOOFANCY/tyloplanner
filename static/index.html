@@ -211,16 +211,32 @@
       <p class="muted" style="margin-top:8px">Note: external calendar apps can only reach this URL if your server is reachable from the internet.</p>
     </div>
     <div class="card">
-      <h3>📅 Calendar — import</h3>
+      <h3>📅 Calendar — import &amp; sync</h3>
+      <p style="font-size:14px;margin-bottom:14px">Import a local calendar file or paste calendar feed URLs to automatically sync them in the background.</p>
+      
       <div class="formrow">
         <input type="file" id="icsFile" accept=".ics">
         <button class="btn" onclick="importIcsFile()">Import file</button>
       </div>
-      <div class="formrow">
-        <input id="icsImportUrl" placeholder="https://… secret iCal address (Google Calendar → Settings)" style="flex:1;min-width:240px" onkeydown="if(event.key==='Enter')importIcsUrl()">
-        <button class="btn" onclick="importIcsUrl()">Import from URL</button>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <p style="font-size:14px;margin-bottom:8px"><b>Auto-sync URLs</b> (one URL per line, e.g. your university timetable or Google Calendar secret address):</p>
+      <textarea id="calSyncUrls" rows="3" style="width:100%" placeholder="https://…/timetable.ics&#10;https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
+      
+      <div class="formrow" style="margin-top:8px">
+        <label class="muted">Sync every</label> <input id="calSyncHours" type="number" min="1" style="width:70px"> <label class="muted">hours</label>
+        <button class="btn" onclick="saveCalSync()">Save</button>
+        <button class="btn ghost" onclick="calSyncNow()">Sync now</button>
+        <span class="muted" id="calSyncMeta"></span>
       </div>
-      <button class="btn danger small" onclick="clearIcs()">Remove all imported events</button>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="muted" style="font-size:13px">Remove all events imported from files or sync URLs:</span>
+        <button class="btn danger small" onclick="clearIcs()">Remove imported events</button>
+      </div>
     </div>
     <div class="card">
       <h3>🔔 Notifications &amp; reminders</h3>
@@ -236,17 +252,6 @@
       </div>
       <button class="btn" onclick="saveNotifySettings()">Save</button>
       <button class="btn ghost" onclick="testNotify()">Send test notification</button>
-    </div>
-    <div class="card">
-      <h3>🔄 Calendar auto-sync</h3>
-      <p style="font-size:14px;margin-bottom:10px">Paste iCal URLs (one per line, e.g. your university timetable or Google Calendar secret address) and TyloPlanner re-imports them automatically in the background.</p>
-      <textarea id="calSyncUrls" rows="3" style="width:100%" placeholder="https://…/timetable.ics&#10;https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
-      <div class="formrow" style="margin-top:8px">
-        <label class="muted">Every</label> <input id="calSyncHours" type="number" min="1" style="width:70px"> <label class="muted">hours</label>
-        <button class="btn" onclick="saveCalSync()">Save</button>
-        <button class="btn ghost" onclick="calSyncNow()">Sync now</button>
-        <span class="muted" id="calSyncMeta"></span>
-      </div>
     </div>
     <div class="card">
       <h3>🎨 Appearance</h3>
