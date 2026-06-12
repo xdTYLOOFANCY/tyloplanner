@@ -200,7 +200,14 @@
     <div class="card">
       <h3>🔗 Dashboard shortcuts</h3>
       <p style="font-size:14px;margin-bottom:10px">Manage the quick links displayed on your dashboard.</p>
-      <button class="btn" onclick="addShortcut()">Add new shortcut</button>
+      <div style="display:flex;align-items:center;gap:10px;padding:0 10px 0 0;margin-bottom:8px">
+        <button class="btn" onclick="addShortcut()">Add new shortcut</button>
+        <div class="grow" style="flex:1;text-align:right">
+          <label for="showShortcutsToggle" class="muted" style="cursor:pointer">Show on dashboard</label>
+        </div>
+        <input type="checkbox" id="showShortcutsToggle" class="ios-toggle" style="margin-right:8px" onchange="toggleShowShortcuts()">
+        <button class="btn danger small" style="visibility:hidden;pointer-events:none">Remove</button>
+      </div>
       <div id="settingsShortcuts" style="margin-top:14px"></div>
     </div>
     <div class="card">

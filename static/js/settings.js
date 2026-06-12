@@ -50,15 +50,67 @@ export function renderSettings() {
     setVal("accentColor", SET.accent_color);
   }
   applyAccentFromSettings(SET);
+  var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
+  var toggleEl = document.getElementById("showShortcutsToggle");
+  if (toggleEl) toggleEl.checked = showShortcuts;
+
   if (S.shortcuts && S.shortcuts.length) {
+    var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
+    var sorted = S.shortcuts.slice().sort(function(a, b) {
+      var ia = order.indexOf(a.id);
+      var ib = order.indexOf(b.id);
+      if (ia === -1) ia = 999;
+      if (ib === -1) ib = 999;
+      return ia - ib;
+    });
+
+    var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
+    
     var sh = '';
-    S.shortcuts.forEach(function(s) {
-      sh += '<div class="list-item"><div class="grow">' + esc(s.name) + ' <span class="muted">(' + esc(s.url) + ')</span></div><button class="btn danger small" onclick="delRow(\'shortcuts\', \'' + s.id + '\')">Remove</button></div>';
+    sorted.forEach(function(s) {
+      var isOff = disabled.indexOf(s.id) !== -1;
+      var toggleInput = '<input type="checkbox" class="ios-toggle" style="margin-right:8px" ' + (isOff ? '' : 'checked') + ' onchange="toggleItem(\'' + s.id + '\')">';
+      
+      sh += '<div class="list-item" draggable="true" ondragstart="dragShortcutStart(event,\'' + s.id + '\')" ondragover="dragShortcutOver(event)" ondrop="dropShortcut(event,\'' + s.id + '\')" ondragend="dragShortcutEnd(event)" style="cursor:grab">';
+      sh += '<span class="muted" style="cursor:grab;padding-right:4px">☰</span>';
+      sh += '<div class="grow">' + esc(s.name) + ' <span class="muted">(' + esc(s.url) + ')</span></div>';
+      sh += toggleInput;
+      sh += '<button class="btn danger small" onclick="delRow(\'shortcuts\', \'' + s.id + '\')">Remove</button>';
+      sh += '</div>';
     });
     document.getElementById("settingsShortcuts").innerHTML = sh;
   } else {
     document.getElementById("settingsShortcuts").innerHTML = '<div class="muted">No shortcuts added yet.</div>';
   }
+}
+
+export async function toggleShowShortcuts(refresh) {
+  var show = document.getElementById("showShortcutsToggle").checked;
+  await api("POST", "/api/settings", { show_shortcuts: show ? "1" : "0" });
+  await refresh();
+}
+
+export async function toggleItem(id, refresh) {
+  var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',').filter(Boolean) : [];
+  var idx = disabled.indexOf(id);
+  if (idx === -1) disabled.push(id);
+  else disabled.splice(idx, 1);
+  await api("POST", "/api/settings", { disabled_shortcuts: disabled.join(',') });
+  await refresh();
+}
+
+export async function reorderShortcut(dragId, dropId, refresh) {
+  if (dragId === dropId) return;
+  var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',').filter(Boolean) : S.shortcuts.map(function(s) { return s.id; });
+  S.shortcuts.forEach(function(s) { if (order.indexOf(s.id) === -1) order.push(s.id); });
+  
+  var dragIdx = order.indexOf(dragId);
+  if (dragIdx > -1) order.splice(dragIdx, 1);
+  var dropIdx = order.indexOf(dropId);
+  if (dropIdx > -1) order.splice(dropIdx, 0, dragId);
+  
+  await api("POST", "/api/settings", { shortcut_order: order.join(',') });
+  await refresh();
 }
 
 export async function saveAccentColor(refresh) {

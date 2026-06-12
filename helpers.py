@@ -118,6 +118,9 @@ SETTING_DEFAULTS = {
     "cal_sync_urls": "",
     "cal_sync_hours": "6",
     "accent_color": "#4f8cff",
+    "show_shortcuts": "1",
+    "shortcut_order": "",
+    "disabled_shortcuts": "",
 }
 
 

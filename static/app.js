@@ -29,6 +29,8 @@ import {
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
   saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
+  toggleShowShortcuts as _toggleShowShortcuts, reorderShortcut as _reorderShortcut,
+  toggleItem as _toggleItem
 } from './js/settings.js';
 
 // ---- renderAll used by refresh() ----
@@ -69,6 +71,25 @@ window.tfaDisable = function() { _tfaDisable(R); };
 window.backupNow = function() { _backupNow(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
+window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
+window.toggleItem = function(id) { _toggleItem(id, R); };
+
+window.dragShortcutStart = function(e, id) {
+  e.dataTransfer.setData("text/plain", id);
+  e.target.style.opacity = '0.5';
+};
+window.dragShortcutEnd = function(e) {
+  e.target.style.opacity = '1';
+};
+window.dragShortcutOver = function(e) {
+  e.preventDefault();
+};
+window.dropShortcut = function(e, dropId) {
+  e.preventDefault();
+  e.target.style.opacity = '1';
+  var dragId = e.dataTransfer.getData("text/plain");
+  if (dragId && dragId !== dropId) _reorderShortcut(dragId, dropId, R);
+};
 
 // direct pass-throughs (no refresh parameter needed)
 window.moveWeek = moveWeek;

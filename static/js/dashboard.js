@@ -1,6 +1,6 @@
 // TyloPlanner — dashboard module.
 
-import { S, habitSet } from './state.js';
+import { S, habitSet, SET } from './state.js';
 import { todayStr, fmtShort, esc, daysUntil, api } from './utils.js';
 import { examBadge } from './exams.js';
 import { streak } from './habits.js';
@@ -53,8 +53,20 @@ export function renderDashboard() {
   document.getElementById("dashCards").innerHTML = html;
 
   var shortcutHtml = '';
-  if (S.shortcuts) {
-    S.shortcuts.forEach(function(s) {
+  var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
+  if (showShortcuts && S.shortcuts) {
+    var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
+    var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
+    var sorted = S.shortcuts.slice().sort(function(a, b) {
+      var ia = order.indexOf(a.id);
+      var ib = order.indexOf(b.id);
+      if (ia === -1) ia = 999;
+      if (ib === -1) ib = 999;
+      return ia - ib;
+    });
+
+    sorted.forEach(function(s) {
+      if (disabled.indexOf(s.id) !== -1) return;
       var domain = '';
       try { domain = new URL(s.url).hostname; } catch(e){}
       var icon = s.icon || ("https://www.google.com/s2/favicons?domain=" + domain + "&sz=64");
@@ -65,7 +77,7 @@ export function renderDashboard() {
               '</a>';
     });
   }
-  
+
   var shortcutsEl = document.getElementById("dashShortcuts");
   if (shortcutsEl) {
     shortcutsEl.innerHTML = shortcutHtml;
