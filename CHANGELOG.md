@@ -4,6 +4,11 @@ All notable changes to TyloPlanner are documented here.
 
 ## Unreleased
 
+- **Dashboard Shortcuts:** Custom user-defined website shortcuts directly visible on the dashboard.
+- **Customization:** Persistent custom accent color picker for UI theming.
+- **Mobile Navigation:** Bottom navigation bar for improved mobile experience.
+- **Week Planner:** Drag-and-drop functionality for easier event scheduling.
+- **Notes & Files:** Gold/yellow visual highlight for favorited items.
 - **File storage:** upload files, search by filename, sort by date/name/size,
   and download them from a dedicated Files tab. Files are stored in
   `data/uploads/` on disk; metadata is in the `files` table. Uploaded files

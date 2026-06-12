@@ -27,17 +27,17 @@ codebase is small enough to read in an afternoon and make your own.
 
 ## Features
 
-- **Dashboard** — today's plan, habits, upcoming deadlines, weekly training and your to-do list at a glance.
-- **Week planner** — plan study blocks and appointments; subscribe to the built-in calendar feed from Google/Apple/Outlook.
+- **Dashboard** — today's plan, custom website shortcuts, habits, upcoming deadlines, weekly training and your to-do list at a glance.
+- **Week planner** — drag-and-drop event scheduling; subscribe to the built-in calendar feed from Google/Apple/Outlook.
 - **Calendar auto-sync** — point it at your university timetable's iCal URL and it stays up to date.
 - **Exams & grades** — countdowns to every exam, enter grades as they come in, ECTS-weighted average.
 - **Habits** — daily check-offs with streaks and an evening reminder for whatever's still open.
 - **Workouts** — log runs, rides and gym sessions by hand or sync them automatically from **Strava** (requires subscription).
 - **Analytics** — 12-month history of workouts, distance, study hours and habit consistency, plus all-time totals.
-- **Notes** — write and organize markdown notes with full-text search, rich formatting, and linked cross-references.
-- **File storage** — upload and store documents, images and other files on your own server with no size limits.
+- **Notes & Files** — write markdown notes, upload documents/images, full-text search, and visually highlight favorited items.
+- **Customization** — persistent custom accent color picker and dark/light theme support.
 - **Notifications** — morning agenda and exam alerts pushed to your phone via [ntfy](https://ntfy.sh) (free, no account).
-- **Mobile app (PWA)** — *Add to Home Screen* on your phone and it runs fullscreen with its own icon.
+- **Mobile app (PWA)** — *Add to Home Screen* on your phone for a fullscreen app with a bottom navigation bar.
 - **Secure** — login screen, optional TOTP two-factor authentication, secret-key-protected calendar feed, automatic nightly backups.
 
 ## Quick start

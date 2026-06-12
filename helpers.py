@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS notes(
   id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER, is_pinned INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS files(
   id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER, is_pinned INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS shortcuts(
+  id TEXT PRIMARY KEY, name TEXT, url TEXT, icon TEXT);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
 """
 
@@ -63,6 +65,7 @@ TABLES = {
     "tasks":    ["name", "done", "created", "completed_at"],
     "notes":    ["title", "body", "updated", "is_pinned"],
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned"],
+    "shortcuts":["name", "url", "icon"],
 }
 
 
@@ -114,6 +117,7 @@ SETTING_DEFAULTS = {
     "notify_exam_days": "7,3,1",
     "cal_sync_urls": "",
     "cal_sync_hours": "6",
+    "accent_color": "#4f8cff",
 }
 
 

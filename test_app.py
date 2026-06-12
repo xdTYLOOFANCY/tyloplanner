@@ -311,5 +311,27 @@ class FilesTests(unittest.TestCase):
         self.assertEqual(unpinned["is_pinned"], 0)
 
 
+class SettingsTests(unittest.TestCase):
+    """User settings endpoints: GET/POST /api/settings."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_settings_defaults(self):
+        r = self.c.get("/api/settings")
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertEqual(j["accent_color"], "#4f8cff")
+
+    def test_settings_update(self):
+        r = self.c.post("/api/settings", json={"accent_color": "#ff0000"})
+        self.assertEqual(r.status_code, 200)
+        j = self.c.get("/api/settings").get_json()
+        self.assertEqual(j["accent_color"], "#ff0000")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

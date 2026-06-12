@@ -43,6 +43,11 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .badge.green{background:rgba(62,207,142,.15);color:var(--green)}
 .badge.gray{background:var(--panel2);color:var(--muted)}
 .badge.blue{background:rgba(79,140,255,.15);color:var(--accent)}
+.shortcuts-row{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:24px;justify-content:center}
+.shortcut-btn{width:90px;height:90px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;align-items:center;justify-content:center;text-decoration:none;color:var(--text);gap:8px;transition:transform 0.2s,border-color 0.2s;position:relative}
+.shortcut-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
+.shortcut-btn img{width:36px;height:36px;border-radius:8px;object-fit:contain}
+.shortcut-btn .name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 6px}
 /* planner */
 .weeknav{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .weeknav .label{font-weight:700}
@@ -51,9 +56,12 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 @media(max-width:520px){.weekgrid{grid-template-columns:1fr}}
 .daycol{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;min-height:140px}
 .daycol.today{border-color:var(--accent)}
+.daycol.drag-over{border-color:var(--accent);background:var(--panel2)}
 .daycol h4{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
 .daycol.today h4 .dname{color:var(--accent)}
 .event{background:var(--panel2);border-left:3px solid var(--accent);border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:12.5px;position:relative}
+.event[draggable="true"]{cursor:grab}
+.event[draggable="true"]:active{cursor:grabbing}
 .event.study{border-left-color:var(--accent2)}
 .event.workout{border-left-color:var(--green)}
 .event.ics{border-left-color:var(--orange)}
@@ -124,3 +132,67 @@ code.url{background:var(--panel2);padding:4px 8px;border-radius:6px;font-size:12
 .logintitle{font-size:22px;font-weight:800;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
 .loginerror{background:rgba(239,91,108,.15);color:var(--red);padding:8px;border-radius:8px;font-size:13px}
 header .headlogo{width:26px;height:26px}
+
+#bottomNav {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  #bottomNav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 100;
+    background: color-mix(in srgb, var(--panel) 85%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  #bottomNav button {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    flex: 1;
+    padding: 6px 0;
+    transition: color 0.2s ease, transform 0.2s ease;
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #bottomNav button:hover {
+    color: var(--text);
+  }
+
+  #bottomNav button.active {
+    color: var(--accent);
+  }
+
+  #bottomNav button .nav-icon {
+    font-size: 20px;
+    transition: transform 0.2s ease;
+  }
+
+  #bottomNav button.active .nav-icon {
+    transform: scale(1.15);
+  }
+
+  main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+}
+

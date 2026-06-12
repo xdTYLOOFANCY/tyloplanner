@@ -1,7 +1,7 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v9";
+const CACHE = "tylo-v10";
 const ASSETS = ["/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",

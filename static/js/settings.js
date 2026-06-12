@@ -2,6 +2,8 @@
 
 import { S, SET } from './state.js';
 import { esc, api, toast } from './utils.js';
+import { applyAccent, applyAccentFromSettings } from './theme.js';
+
 
 var stravaEditing = false;
 var tfaPending = false;
@@ -44,6 +46,39 @@ export function renderSettings() {
   box.innerHTML = html;
   renderNotifySettings();
   renderSecurity();
+  if (SET) {
+    setVal("accentColor", SET.accent_color);
+  }
+  applyAccentFromSettings(SET);
+  if (S.shortcuts && S.shortcuts.length) {
+    var sh = '';
+    S.shortcuts.forEach(function(s) {
+      sh += '<div class="list-item"><div class="grow">' + esc(s.name) + ' <span class="muted">(' + esc(s.url) + ')</span></div><button class="btn danger small" onclick="delRow(\'shortcuts\', \'' + s.id + '\')">Remove</button></div>';
+    });
+    document.getElementById("settingsShortcuts").innerHTML = sh;
+  } else {
+    document.getElementById("settingsShortcuts").innerHTML = '<div class="muted">No shortcuts added yet.</div>';
+  }
+}
+
+export async function saveAccentColor(refresh) {
+  var value = document.getElementById("accentColor").value;
+  await api("POST", "/api/settings", {
+    accent_color: value
+  });
+  applyAccent(value);
+  toast("Accent color saved");
+  await refresh();
+}
+
+export async function resetAccentColor(refresh) {
+  var value = "#4f8cff";
+  await api("POST", "/api/settings", {
+    accent_color: value
+  });
+  applyAccent(value);
+  toast("Accent color reset");
+  await refresh();
 }
 
 function renderNotifySettings() {

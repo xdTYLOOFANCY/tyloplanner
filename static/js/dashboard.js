@@ -1,7 +1,7 @@
 // TyloPlanner — dashboard module.
 
 import { S, habitSet } from './state.js';
-import { todayStr, fmtShort, esc, daysUntil } from './utils.js';
+import { todayStr, fmtShort, esc, daysUntil, api } from './utils.js';
 import { examBadge } from './exams.js';
 import { streak } from './habits.js';
 import { weekTotals } from './workouts.js';
@@ -51,4 +51,40 @@ export function renderDashboard() {
   html += '</div></div>';
 
   document.getElementById("dashCards").innerHTML = html;
+
+  var shortcutHtml = '';
+  if (S.shortcuts) {
+    S.shortcuts.forEach(function(s) {
+      var domain = '';
+      try { domain = new URL(s.url).hostname; } catch(e){}
+      var icon = s.icon || ("https://www.google.com/s2/favicons?domain=" + domain + "&sz=64");
+      
+      shortcutHtml += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn">' +
+              '<img src="' + esc(icon) + '" alt="">' +
+              '<div class="name">' + esc(s.name) + '</div>' +
+              '</a>';
+    });
+  }
+  
+  var shortcutsEl = document.getElementById("dashShortcuts");
+  if (shortcutsEl) {
+    shortcutsEl.innerHTML = shortcutHtml;
+  }
+}
+
+export async function addShortcut(refresh) {
+  var url = prompt("Enter website URL (e.g. https://github.com):");
+  if (!url) return;
+  if (!url.startsWith('http')) url = 'https://' + url;
+  var name = prompt("Enter shortcut name:");
+  if (!name) {
+    try {
+      name = new URL(url).hostname.replace(/^www\./, '');
+    } catch(e) {
+      name = url;
+    }
+  }
+  
+  await api("POST", "/api/shortcuts", { name: name, url: url, icon: "" });
+  await refresh();
 }

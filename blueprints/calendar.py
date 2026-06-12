@@ -2,7 +2,7 @@
 Calendar blueprint — ICS export, import, sync, and clear.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 from flask import Blueprint, request, jsonify, Response
@@ -90,7 +90,7 @@ def cal_auto_sync():
 # ---------------- routes ----------------
 @bp.get("/calendar.ics")
 def ics_export():
-    now = datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
+    now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//TyloPlanner//EN",
              "CALSCALE:GREGORIAN", "X-WR-CALNAME:TyloPlanner"]
     with db() as con:

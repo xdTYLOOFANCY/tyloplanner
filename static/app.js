@@ -5,11 +5,11 @@
 
 import { refresh } from './js/state.js';
 import { todayStr, esc, delRow as _delRow } from './js/utils.js';
-import { applyTheme, toggleTheme } from './js/theme.js';
+import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js';
 import { exportData, importData } from './js/backup.js';
-import { renderDashboard } from './js/dashboard.js';
+import { renderDashboard, addShortcut as _addShortcut } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, cancelAdd, saveEvent as _saveEvent } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, cancelAdd, saveEvent as _saveEvent, setPlannerRefresh } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
@@ -28,6 +28,7 @@ import {
   importIcsFile as _importIcsFile, importIcsUrl as _importIcsUrl, clearIcs as _clearIcs,
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
+  saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
 } from './js/settings.js';
 
 // ---- renderAll used by refresh() ----
@@ -39,6 +40,7 @@ function renderAll() {
 // ---- wrappers that bind refresh ----
 var R = function() { return refresh(renderAll); };
 window.delRow = function(t, id) { _delRow(t, id, R); };
+window.addShortcut = function() { _addShortcut(R); };
 window.saveEvent = function(iso) { _saveEvent(iso, R); };
 window.addExam = function() { _addExam(R); };
 window.setGrade = function(id, val) { _setGrade(id, val, R); };
@@ -66,6 +68,8 @@ window.stravaDisconnect = function() { _stravaDisconnect(R); };
 window.tfaConfirm = function() { _tfaConfirm(R); };
 window.tfaDisable = function() { _tfaDisable(R); };
 window.backupNow = function() { _backupNow(R); };
+window.saveAccentColor = function() { _saveAccentColor(R); };
+window.resetAccentColor = function() { _resetAccentColor(R); };
 
 // direct pass-throughs (no refresh parameter needed)
 window.moveWeek = moveWeek;
@@ -104,6 +108,7 @@ document.getElementById("wDate").value = todayStr();
 applyTheme();
 if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/sw.js").catch(function() {}); }
 refresh(renderAll).then(function() {
+  setPlannerRefresh(R);
   if (new URLSearchParams(location.search).get("strava") === "connected") {
     var toast_ = document.createElement("div"); toast_.className = "toast"; toast_.textContent = "Strava connected! Syncing\u2026";
     document.body.appendChild(toast_); setTimeout(function() { toast_.remove(); }, 2500);

@@ -95,6 +95,13 @@ with db() as con:
         )
         con.execute("INSERT INTO kv(key,value) VALUES('seed_welcome_note','1')")
 
+    seeded_shortcuts = con.execute("SELECT value FROM kv WHERE key='seed_default_shortcut'").fetchone()
+    if not seeded_shortcuts:
+        con.execute(
+            "INSERT INTO shortcuts(id,name,url,icon) VALUES(?,?,?,?)",
+            (uuid.uuid4().hex[:12], "TyloPlanner", "https://github.com/xdTYLOOFANCY/tyloplanner", "")
+        )
+        con.execute("INSERT INTO kv(key,value) VALUES('seed_default_shortcut','1')")
 
 # ---------------- app factory ----------------
 def create_app():
