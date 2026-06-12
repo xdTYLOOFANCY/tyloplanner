@@ -35,12 +35,13 @@ os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ.pop("AUTH_PASSWORD", None)
 
 import app as appmod  # noqa: E402
+import helpers  # noqa: E402
 
 
 def reset_db():
     """Empty every data table so each test starts from a clean slate."""
-    with appmod.db() as con:
-        for t in list(appmod.TABLES) + ["habit_log"]:
+    with helpers.db() as con:
+        for t in list(helpers.TABLES) + ["habit_log"]:
             con.execute("DELETE FROM %s" % t)
 
 
@@ -50,7 +51,7 @@ class CrudTests(unittest.TestCase):
     def setUp(self):
         reset_db()
         # CRUD tests run with auth disabled so requests need no session.
-        appmod.AUTH_ENABLED = False
+        helpers.AUTH_ENABLED = False
         self.c = appmod.app.test_client()
 
     def _rows(self, table):
@@ -162,7 +163,7 @@ class GuardAuthDisabledTests(unittest.TestCase):
 
     def setUp(self):
         reset_db()
-        appmod.AUTH_ENABLED = False
+        helpers.AUTH_ENABLED = False
         self.c = appmod.app.test_client()
 
     def test_index_ok(self):
@@ -177,22 +178,24 @@ class GuardAuthEnabledTests(unittest.TestCase):
 
     def setUp(self):
         reset_db()
-        self._orig_enabled = appmod.AUTH_ENABLED
-        self._orig_pw = appmod.AUTH_PASSWORD
-        self._orig_user = appmod.AUTH_USERNAME
-        appmod.AUTH_ENABLED = True
-        appmod.AUTH_PASSWORD = "testpw"
-        appmod.AUTH_USERNAME = "admin"
+        self._orig_enabled = helpers.AUTH_ENABLED
+        self._orig_pw = helpers.AUTH_PASSWORD
+        self._orig_user = helpers.AUTH_USERNAME
+        helpers.AUTH_ENABLED = True
+        helpers.AUTH_PASSWORD = "testpw"
+        helpers.AUTH_USERNAME = "admin"
         # Don't waste real seconds on the brute-force delay during tests.
-        self._orig_sleep = appmod.time.sleep
-        appmod.time.sleep = lambda *a, **k: None
+        import time as _time
+        self._orig_sleep = _time.sleep
+        _time.sleep = lambda *a, **k: None
         self.c = appmod.app.test_client()
 
     def tearDown(self):
-        appmod.AUTH_ENABLED = self._orig_enabled
-        appmod.AUTH_PASSWORD = self._orig_pw
-        appmod.AUTH_USERNAME = self._orig_user
-        appmod.time.sleep = self._orig_sleep
+        helpers.AUTH_ENABLED = self._orig_enabled
+        helpers.AUTH_PASSWORD = self._orig_pw
+        helpers.AUTH_USERNAME = self._orig_user
+        import time as _time
+        _time.sleep = self._orig_sleep
 
     # ---- unauthenticated ----
     def test_api_unauthorized_401(self):
@@ -218,7 +221,7 @@ class GuardAuthEnabledTests(unittest.TestCase):
         self.assertEqual(self.c.get("/calendar.ics").status_code, 403)
 
     def test_calendar_feed_with_key_ok(self):
-        r = self.c.get("/calendar.ics?key=%s" % appmod.feed_key())
+        r = self.c.get("/calendar.ics?key=%s" % helpers.feed_key())
         self.assertEqual(r.status_code, 200)
         self.assertIn("BEGIN:VCALENDAR", r.get_data(as_text=True))
 
@@ -249,9 +252,9 @@ class FilesTests(unittest.TestCase):
 
     def setUp(self):
         reset_db()
-        with appmod.db() as con:
+        with helpers.db() as con:
             con.execute("DELETE FROM files")
-        appmod.AUTH_ENABLED = False
+        helpers.AUTH_ENABLED = False
         self.c = appmod.app.test_client()
 
     def test_upload_appears_in_state(self):
@@ -277,7 +280,7 @@ class FilesTests(unittest.TestCase):
     def test_delete_removes_row_and_disk_file(self):
         data = {"file": (io.BytesIO(b"data"), "todel.txt")}
         fid = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
-        disk_path = os.path.join(appmod.UPLOAD_DIR, fid)
+        disk_path = os.path.join(helpers.UPLOAD_DIR, fid)
         self.assertTrue(os.path.exists(disk_path))
         r = self.c.delete("/api/files/%s" % fid)
         self.assertEqual(r.status_code, 200)

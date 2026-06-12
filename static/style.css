@@ -24,6 +24,7 @@ section.active{display:block}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px}
 .cards .card{margin-bottom:0}
 .card h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px}
+.card-scroll{max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .btn{background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
 .btn:hover{filter:brightness(1.1)}
 .btn.ghost{background:var(--panel2);color:var(--text)}
@@ -104,6 +105,7 @@ mark.cur{background:#f5a623;color:#1c2230}
 #noteBodySearchCount{min-width:54px;text-align:right}
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}
+.note-pinned .btn-pin,.file-pinned .btn-pin{color:#f5c518}
 .note-pinned,.file-pinned{background:var(--panel2);border-left:3px solid var(--accent)}
 .checkbox-task{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px}
 .checkbox-task input{accent-color:var(--green)}
