@@ -40,11 +40,9 @@ Apply changes with `docker compose up -d --build`.
 - **Everything** is stored in one SQLite file (`data/tyloplanner.db`).
   Copying that file *is* a full backup.
 - A JSON snapshot is also written to `data/backups/` every night at ~03:30
-  (newest 14 kept). Trigger one manually with **Settings → Security →
-  Backup now**.
-- The **Backup** button in the header downloads a JSON snapshot to your
-  device; **Restore** loads one back (replaces all current data). Restore
-  accepts the nightly snapshots too.
+  (newest 14 kept). Trigger one manually with **Settings → Data → Backup now**.
+- The **Backup** button in the header downloads a JSON snapshot to your device; **Restore** in the header loads one back (replaces all current data).
+- Alternatively, you can view a list of all automatic nightly backups directly in **Settings → Data** and restore from any of them with a single click after confirmation.
 
 ## Theming
 

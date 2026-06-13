@@ -69,7 +69,9 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `POST /api/habits/<id>/toggle` | Toggle a habit for `{date}`. |
 | `GET/POST /api/settings` | Read / write user settings (ntfy, sync, …). |
 | `POST /api/notify/test` | Send a test ntfy push. |
-| `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore. |
+| `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore (JSON payload). |
+| `GET /api/backups` | List all available automatic nightly backups. |
+| `POST /api/backups/<filename>/restore` | Restore database data from an automatic nightly backup. |
 | `POST /api/files/upload` | Upload a file (multipart `file` field). Returns `{id, filename, size}`. |
 | `GET /api/files/<id>/download` | Download a file as an attachment. |
 | `DELETE /api/files/<id>` | Delete a file (removes DB row and disk file). |

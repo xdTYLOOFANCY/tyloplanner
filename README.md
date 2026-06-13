@@ -27,18 +27,19 @@ codebase is small enough to read in an afternoon and make your own.
 
 ## Features
 
-- **Dashboard** — today's plan, custom website shortcuts, habits, upcoming deadlines, weekly training and your to-do list at a glance.
-- **Week planner** — drag-and-drop event scheduling; subscribe to the built-in calendar feed from Google/Apple/Outlook.
-- **Calendar auto-sync** — point it at your university timetable's iCal URL and it stays up to date.
-- **Exams & grades** — countdowns to every exam, enter grades as they come in, ECTS-weighted average.
-- **Habits** — daily check-offs with streaks and an evening reminder for whatever's still open.
-- **Workouts** — log runs, rides and gym sessions by hand or sync them automatically from **Strava** (requires subscription).
-- **Analytics** — 12-month history of workouts, distance, study hours and habit consistency, plus all-time totals.
-- **Notes & Files** — write markdown notes, upload documents/images, full-text search, and visually highlight favorited items.
-- **Customization** — persistent custom accent color picker and dark/light theme support.
-- **Notifications** — morning agenda and exam alerts pushed to your phone via [ntfy](https://ntfy.sh) (free, no account).
-- **Mobile app (PWA)** — *Add to Home Screen* on your phone for a fullscreen app with a bottom navigation bar.
-- **Secure** — login screen, optional TOTP two-factor authentication, secret-key-protected calendar feed, automatic nightly backups.
+- **Dashboard** — today's plan, habits, upcoming deadlines, weekly training, to-do list, and customizable website shortcuts (with custom ordering, toggling, and visibility) at a glance.
+- **Week planner** — drag-and-drop event scheduling, drag-to-select for scheduling custom time ranges, interactive event resizing, automatic scrolling to the current time, location pins, and a smart overlapping layout (greedy interval-clustering). Supports subscribing to/exporting a built-in calendar feed.
+- **Calendar auto-sync** — keep your schedule up to date by syncing university timetables or other shared calendar feeds (iCal URLs) at configurable intervals.
+- **Exams & grades** — countdowns to every exam, ECTS-weighted grade point average tracking, and task/exam reminders.
+- **Habits** — check off daily habits, track completion streaks, and receive automated evening nudges for incomplete items.
+- **Workouts** — log runs, rides, and gym sessions manually or sync them automatically with **Strava** integration.
+- **Analytics** — 12-month visual history of workouts, distance, study hours, and habit consistency, plus all-time totals.
+- **Notes & Files** — compose rich markdown notes, upload documents/images, filter with full-text/internal search, and organize using favorited status highlights.
+- **Keyboard shortcuts** — navigate swiftly across tabs and weeks with customizable global hotkeys (`t`, `w`, `d`, `m`, `n`, `p`, `c`) and a visual key customization modal.
+- **Theming & Customization** — toggle dark/light modes and personalize the UI with a persistent custom accent color picker.
+- **Notifications** — morning agendas and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) (completely free, no account required).
+- **Mobile app (PWA)** — *Add to Home Screen* on your mobile device for a fullscreen app experience complete with a mobile-friendly bottom navigation bar.
+- **Secure & Resilient** — session-based authentication, optional TOTP two-factor authentication (2FA), nightly automated database backups, and one-click restore directly from the settings panel.
 
 ## Quick start
 
