@@ -4,10 +4,13 @@ All notable changes to TyloPlanner are documented here.
 
 ## Unreleased
 
+- **Event Modal Enhancements:** Support for saving the event modal by pressing the "Enter" key on any input/select element (excluding the description textarea and custom reminder inputs), and display the event location pin `📍` and text directly below the time range on timed event cards.
 - **Dashboard Shortcuts:** Custom user-defined website shortcuts directly visible on the dashboard.
 - **Customization:** Persistent custom accent color picker for UI theming.
 - **Mobile Navigation:** Bottom navigation bar for improved mobile experience.
-- **Week Planner:** Drag-and-drop functionality for easier event scheduling.
+- **Week Planner Visuals & Overlaps:** Google Calendar style greedy interval-clustering overlapping layout, dotted half-hour lines in the time grid background, a red indicator dot at the left edge of the current time line, and drag-to-select support to easily schedule events across custom time ranges.
+- **High-Performance Rendering:** Event drag/drop, resizing, and modal saves/deletes update the UI instantly using optimistic rendering and background API calls, preventing full-screen blank flashing and UI freezing. Added layout scroll-locking guards to prevent the calendar viewport from shifting or scrolling down during view updates or drag-and-resize interactions.
+- **Keyboard Shortcuts:** Global hotkeys (`t`, `w`, `d`, `m`, `n`, `p`, `c`) for navigation, with a dedicated customization modal and "⌨️ Shortcuts" header button to review, modify, and persist custom shortcut keys.
 - **Notes & Files:** Gold/yellow visual highlight for favorited items.
 - **File storage:** upload files, search by filename, sort by date/name/size,
   and download them from a dedicated Files tab. Files are stored in

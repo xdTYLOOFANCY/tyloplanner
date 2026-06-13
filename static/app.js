@@ -9,7 +9,7 @@ import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js'
 import { exportData, importData } from './js/backup.js';
 import { renderDashboard, addShortcut as _addShortcut } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, cancelAdd, saveEvent as _saveEvent, setPlannerRefresh } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, closeEventModal, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, openShortcutsModal, closeShortcutsModal, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
@@ -36,14 +36,15 @@ import {
 // ---- renderAll used by refresh() ----
 function renderAll() {
   renderDashboard(); renderAnalytics(); renderPlanner(); renderExams();
-  renderHabits(); renderWorkouts(); renderTasks(); renderNotes(); renderFiles(); renderSettings();
+  renderHabits(); renderWorkouts(); renderTasks(); renderNotes(); renderFiles(); renderSettings(R);
 }
 
 // ---- wrappers that bind refresh ----
 var R = function() { return refresh(renderAll); };
 window.delRow = function(t, id) { _delRow(t, id, R); };
 window.addShortcut = function() { _addShortcut(R); };
-window.saveEvent = function(iso) { _saveEvent(iso, R); };
+window.saveEventModal = function() { _saveEventModal(R); };
+window.delEventModal = function() { _delEventModal(R); };
 window.addExam = function() { _addExam(R); };
 window.setGrade = function(id, val) { _setGrade(id, val, R); };
 window.addHabit = function() { _addHabit(R); };
@@ -72,6 +73,9 @@ window.backupNow = function() { _backupNow(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
 window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
+window.searchEvents = searchEvents;
+window.hideSearchSoon = hideSearchSoon;
+window.navigateToAndEditEvent = navigateToAndEditEvent;
 window.toggleItem = function(id) { _toggleItem(id, R); };
 
 window.dragShortcutStart = function(e, id) {
@@ -93,8 +97,14 @@ window.dropShortcut = function(e, dropId) {
 
 // direct pass-throughs (no refresh parameter needed)
 window.moveWeek = moveWeek;
+window.changePlannerView = changePlannerView;
 window.openAdd = openAdd;
-window.cancelAdd = cancelAdd;
+window.editEvent = editEvent;
+window.closeEventModal = closeEventModal;
+window.openShortcutsModal = openShortcutsModal;
+window.closeShortcutsModal = closeShortcutsModal;
+window.saveShortcuts = saveShortcuts;
+window.resetShortcutsToDefault = resetShortcutsToDefault;
 window.selectNote = selectNote;
 window.openNote = openNote;
 window.noteChanged = noteChanged;
@@ -111,7 +121,7 @@ window.exportData = exportData;
 window.testNotify = testNotify;
 window.tfaStart = tfaStart;
 window.copyIcs = copyIcs;
-window.renderSettings = renderSettings;
+window.renderSettings = function(refresh) { renderSettings(refresh || R); };
 
 // ---------- tabs ----------
 var tabsNav = document.getElementById("tabs");

@@ -3,6 +3,7 @@
 import { S, SET } from './state.js';
 import { esc, api, toast } from './utils.js';
 import { applyAccent, applyAccentFromSettings } from './theme.js';
+import { renderBackupList } from './backup.js';
 
 
 var stravaEditing = false;
@@ -13,7 +14,7 @@ function setVal(id, v) {
   if (el && document.activeElement !== el) el.value = v == null ? "" : v;
 }
 
-export function renderSettings() {
+export function renderSettings(refresh) {
   document.getElementById("icsUrl").textContent = S.feed_url;
   document.getElementById("icsDownload").href = S.feed_url;
   document.getElementById("logoutBtn").style.display = S.auth.enabled ? "inline-block" : "none";
@@ -82,6 +83,13 @@ export function renderSettings() {
   } else {
     document.getElementById("settingsShortcuts").innerHTML = '<div class="muted">No shortcuts added yet.</div>';
   }
+  var statusBox = document.getElementById("backupStatus");
+  if (statusBox && SET) {
+    statusBox.innerHTML = '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot is written to <b>data/backups/</b> every night (newest 14 kept).' +
+      (SET.last_backup ? ' Last backup: <b>' + esc(SET.last_backup) + '</b>.' : ' No backup made yet.') + '</p>' +
+      '<button class="btn small" onclick="backupNow()">Backup now</button>';
+  }
+  renderBackupList("backupList", refresh);
 }
 
 export async function toggleShowShortcuts(refresh) {
@@ -200,10 +208,6 @@ function renderSecurity() {
     html = '<p style="font-size:14px;margin-bottom:10px">Add a second login step with an authenticator app (TOTP):</p>' +
       '<button class="btn" onclick="tfaStart()">Enable 2FA</button>';
   }
-  html += '<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">' +
-    '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot is written to <b>data/backups/</b> every night (newest 14 kept).' +
-    (SET.last_backup ? ' Last backup: <b>' + esc(SET.last_backup) + '</b>.' : ' No backup made yet.') + '</p>' +
-    '<button class="btn ghost small" onclick="backupNow()">Backup now</button>';
   box.innerHTML = html;
 }
 

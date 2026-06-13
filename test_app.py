@@ -332,6 +332,78 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(j["accent_color"], "#ff0000")
 
 
+class BackupTests(unittest.TestCase):
+    """Automatic backups list and restore endpoints."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+        # Ensure backup dir is empty before we run
+        import shutil
+        if os.path.exists(helpers.BACKUP_DIR):
+            shutil.rmtree(helpers.BACKUP_DIR)
+        os.makedirs(helpers.BACKUP_DIR, exist_ok=True)
+
+    def test_list_backups_empty(self):
+        r = self.c.get("/api/backups")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json(), [])
+
+    def test_backup_now_and_list(self):
+        import re
+        r = self.c.post("/api/backup/now")
+        self.assertEqual(r.status_code, 200)
+        filename = r.get_json()["file"]
+        
+        # Now list it
+        r_list = self.c.get("/api/backups")
+        self.assertEqual(r_list.status_code, 200)
+        backups = r_list.get_json()
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0]["filename"], filename)
+        self.assertTrue(backups[0]["size_kb"] > 0)
+        self.assertTrue(re.match(r'^\d{4}-\d{2}-\d{2}$', backups[0]["date"]))
+
+    def test_restore_backup_success(self):
+        # Create some data
+        self.c.post("/api/tasks", json={"name": "test task"})
+        self.assertEqual(len(self.c.get("/api/state").get_json()["tasks"]), 1)
+
+        # Trigger backup
+        r = self.c.post("/api/backup/now")
+        filename = r.get_json()["file"]
+
+        # Clear data by deleting the task
+        tasks = self.c.get("/api/state").get_json()["tasks"]
+        self.assertEqual(len(tasks), 1)
+        self.c.delete("/api/tasks/%s" % tasks[0]["id"])
+        self.assertEqual(len(self.c.get("/api/state").get_json()["tasks"]), 0)
+
+        # Restore from backup
+        r_restore = self.c.post("/api/backups/%s/restore" % filename)
+        self.assertEqual(r_restore.status_code, 200)
+        self.assertTrue(r_restore.get_json()["ok"])
+        self.assertEqual(r_restore.get_json()["restored"], 1)
+
+        # Verify data is back
+        self.assertEqual(len(self.c.get("/api/state").get_json()["tasks"]), 1)
+
+    def test_restore_backup_validation_security(self):
+        # Validation should reject anything not matching backup-YYYY-MM-DD.json
+        r1 = self.c.post("/api/backups/backup-..-evil.json/restore")
+        self.assertEqual(r1.status_code, 400)
+        
+        r2 = self.c.post("/api/backups/backup-123.json/restore")
+        self.assertEqual(r2.status_code, 400)
+
+        r3 = self.c.post("/api/backups/backup-2026-06-12.json.txt/restore")
+        self.assertEqual(r3.status_code, 400)
+
+        r4 = self.c.post("/api/backups/backup-2026-06-12-json/restore")
+        self.assertEqual(r4.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -70,9 +70,21 @@
   <section id="tab-planner">
     <h2 class="pagetitle">Week planner</h2>
     <div class="weeknav">
+      <select id="plannerView" class="btn ghost small" onchange="changePlannerView(this.value)" style="margin-right:8px; padding-top:4px; padding-bottom:4px; border:none; outline:none; height:26px;">
+        <option value="1">Day</option>
+        <option value="3">3 Days</option>
+        <option value="5">5 Days</option>
+        <option value="7" selected>Week</option>
+        <option value="month">Month</option>
+      </select>
       <button class="btn ghost small" onclick="moveWeek(-1)">‹</button>
       <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
       <button class="btn ghost small" onclick="moveWeek(1)">›</button>
+      <button class="btn ghost small" onclick="openShortcutsModal()" style="margin-left:8px;">⌨️ Shortcuts</button>
+      <div style="position:relative; display:inline-block; vertical-align:middle;">
+        <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()">
+        <div id="plannerSearchResults" style="display:none; position:absolute; top:28px; left:8px; width:300px; max-height:250px; overflow-y:auto; background:var(--panel); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; padding:4px 0; text-align:left;"></div>
+      </div>
       <span class="label" id="weekLabel"></span>
     </div>
     <div class="weekgrid" id="weekGrid"></div>
@@ -132,6 +144,7 @@
     <div class="card">
       <div class="formrow">
         <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
+        <input id="taskDue" type="date" onkeydown="if(event.key==='Enter')addTask()">
         <button class="btn" onclick="addTask()">Add</button>
       </div>
       <div id="taskList"></div>
@@ -280,8 +293,174 @@
     <div class="card">
       <h3>💾 Data</h3>
       <p style="font-size:14px;margin-bottom:8px">Your data lives in <b>data/tyloplanner.db</b> (SQLite) on your server. Use Backup/Restore in the header for JSON snapshots, or copy the .db file directly. Login credentials are set in <b>.env</b> (AUTH_USERNAME / AUTH_PASSWORD).</p>
+      <div id="backupStatus" style="margin-top:14px"></div>
+      <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Available backups</h4>
+      <div id="backupList" class="card-scroll"><span class="muted">Loading…</span></div>
     </div>
   </section>
+  <div id="eventModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 400px; width: 90%;">
+      <h3 id="evModalTitleText" style="margin-bottom:16px; font-size:16px; font-weight:700;">Event Details</h3>
+      <input type="hidden" id="evModalId">
+      
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <!-- Title & Type -->
+        <div style="display:flex; gap:8px;">
+          <input id="evModalTitle" placeholder="Event Title" style="flex:1; padding:8px 10px; font-size:14px;">
+          <select id="evModalType" style="padding:8px; font-size:14px; width:110px;">
+            <option value="study">Study</option>
+            <option value="work">Work</option>
+            <option value="personal">Personal</option>
+            <option value="workout">Workout</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <!-- Date -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Date</label>
+          <input id="evModalDate" type="date" style="width:100%; padding:8px; font-size:14px;">
+        </div>
+
+        <!-- Start Time & Duration -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Start Time</label>
+            <input id="evModalStart" type="time" style="padding:8px; font-size:14px; width:100%;">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Duration</label>
+            <select id="evModalDuration" style="padding:8px; font-size:14px; width:100%;">
+              <option value="15">15 min</option>
+              <option value="30">30 min</option>
+              <option value="45">45 min</option>
+              <option value="60">1 hour</option>
+              <option value="90">1.5 hours</option>
+              <option value="120">2 hours</option>
+              <option value="180">3 hours</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- End Time -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">End Time</label>
+          <input id="evModalEnd" type="time" style="padding:8px; font-size:14px; width:100%;">
+        </div>
+
+        <!-- Description -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Description</label>
+          <textarea id="evModalDesc" placeholder="Description (optional)" rows="2" style="width:100%; padding:8px; font-size:14px; resize:vertical; font-family:inherit;"></textarea>
+        </div>
+
+        <!-- Location -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Location</label>
+          <input id="evModalLoc" placeholder="Location (optional)" style="width:100%; padding:8px; font-size:14px;">
+        </div>
+
+        <!-- Repeat & Until -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Repeat</label>
+            <select id="evModalRec" style="padding:8px; font-size:14px; width:100%;">
+              <option value="none">None</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div id="evModalRecUntilGroup" style="display:flex; flex-direction:column; gap:4px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Until</label>
+            <input id="evModalRecUntil" type="date" style="padding:8px; font-size:14px; width:100%;">
+          </div>
+        </div>
+
+        <!-- Reminder -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Reminders</label>
+          <div id="evModalRemList" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;"></div>
+          
+          <div id="evModalRemControl" style="display:flex; gap:8px; align-items:center;">
+            <button type="button" id="evModalRemAddBtn" class="btn ghost small" style="padding:4px 8px; font-size:12px;">+ Add Reminder</button>
+            
+            <div id="evModalRemSelectorGroup" style="display:none; gap:6px; align-items:center;">
+              <select id="evModalRemSelect" style="padding:4px 8px; font-size:12px; width:125px;">
+                <option value="" disabled selected>Select offset...</option>
+                <option value="0">At start</option>
+                <option value="5">5m before</option>
+                <option value="15">15m before</option>
+                <option value="30">30m before</option>
+                <option value="60">1h before</option>
+                <option value="120">2h before</option>
+                <option value="custom">Custom...</option>
+              </select>
+              
+              <div id="evModalRemCustomGroup" style="display:none; gap:4px; align-items:center;">
+                <input type="number" id="evModalRemCustomVal" placeholder="min" min="0" style="width:65px; padding:4px; font-size:12px;">
+                <button type="button" id="evModalRemCustomAdd" class="btn small" style="padding:4px 8px; font-size:12px;">Add</button>
+              </div>
+              
+              <button type="button" id="evModalRemCancel" class="btn ghost small" style="padding:4px 8px; font-size:12px; color:var(--muted);">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn" style="flex:1; padding:10px; font-size:14px;" onclick="saveEventModal()">Save</button>
+          <button class="btn danger" id="evModalDelBtn" style="display:none; padding:10px; font-size:14px;" onclick="delEventModal()">Delete</button>
+          <button class="btn ghost" style="padding:10px; font-size:14px;" onclick="closeEventModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="shortcutsModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 420px; width: 90%;">
+      <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Keyboard Shortcuts</h3>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Go to Today</span>
+          <input class="shortcut-input" data-action="today" readonly>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Switch to Week View</span>
+          <input class="shortcut-input" data-action="weekView" readonly>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Switch to Day View</span>
+          <input class="shortcut-input" data-action="dayView" readonly>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Switch to Month View</span>
+          <input class="shortcut-input" data-action="monthView" readonly>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Next Period</span>
+          <input class="shortcut-input" data-action="next" readonly>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Previous Period</span>
+          <input class="shortcut-input" data-action="prev" readonly>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px;">
+          <span>Create Event</span>
+          <input class="shortcut-input" data-action="create" readonly>
+        </div>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:16px;">
+        Click any input field and press a key to customize.
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" style="flex:1;" onclick="saveShortcuts()">Save</button>
+        <button class="btn ghost" style="padding:10px;" onclick="resetShortcutsToDefault()">Reset Defaults</button>
+        <button class="btn ghost" style="padding:10px;" onclick="closeShortcutsModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
 </main>
 <footer>TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</footer>
 <script type="module" src="app.js"></script>

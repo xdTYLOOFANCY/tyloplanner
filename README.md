@@ -77,13 +77,17 @@ one-command setup for Ubuntu, plus HTTPS and VPN options.
 
 ```
 tyloplanner/
-├── app.py              # entire backend: Flask + SQLite, ~700 lines
-├── static/             # entire frontend: vanilla HTML/CSS/JS, no build step
-│   ├── index.html      #   app shell
-│   ├── app.js          #   all UI logic
-│   ├── style.css       #   theming (dark/light)
-│   ├── login.html      #   sign-in + 2FA page
-│   └── sw.js           #   PWA service worker
+├── app.py              # application entry point & app factory
+├── helpers.py          # config, database init, generic helpers
+├── scheduler.py        # background jobs (auto-sync, backups, notifications)
+├── blueprints/         # Flask routes per feature (auth, api, calendar, etc.)
+├── static/             # frontend files
+│   ├── index.html      # app shell
+│   ├── app.js          # main UI entry point (wires modules to window)
+│   ├── js/             # UI modules per feature (ES modules)
+│   ├── style.css       # theming (dark/light, custom accent)
+│   ├── login.html      # sign-in + 2FA page
+│   └── sw.js           # PWA service worker
 ├── docs/               # user & developer guides
 ├── docker-compose.yml
 ├── Dockerfile

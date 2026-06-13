@@ -15,11 +15,10 @@ Flask (app.py) ── background thread (notifications, auto-sync, backups)
 SQLite (data/tyloplanner.db)
 ```
 
-- **One backend file.** `app.py` contains config, schema, auth, the REST
-  API, ICS import/export, Strava OAuth and the scheduler. ~700 lines.
-- **One frontend, no build step.** `static/app.js` fetches the full app
-  state (`GET /api/state`), keeps it in a global `S`, and re-renders
-  per-section. Edit a file, refresh the browser, done.
+- **Modular backend.** `app.py` builds the Flask app. `helpers.py` provides DB access, schemas, and config. `blueprints/` holds feature-specific route groups. `scheduler.py` runs background jobs.
+- **Modular frontend, no build step.** `static/app.js` fetches the full app
+  state (`GET /api/state`), keeps it in a global `S`, and coordinates rendering
+  using ES modules in `static/js/`. Edit a file, refresh the browser, done.
 - **One database.** Tables are created automatically from `SCHEMA` on first
   run. The `kv` table holds settings, tokens and scheduler bookkeeping.
 
@@ -80,7 +79,7 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `POST /api/strava/sync` · `POST /api/strava/disconnect` · `GET /strava/connect` · `GET /strava/callback` | Strava OAuth + sync. |
 | `POST /login` · `POST /login/2fa` · `GET /logout` | Auth flow (form posts). |
 
-Column whitelists live in the `TABLES` dict in `app.py` — the generic CRUD
+Column whitelists live in the `TABLES` dict in `helpers.py` — the generic CRUD
 ignores anything not listed there.
 
 ## Adding a feature (the typical recipe)
@@ -88,10 +87,10 @@ ignores anything not listed there.
 Example: a water-intake tracker.
 
 1. **Schema:** add a table to `SCHEMA` and its writable columns to `TABLES`
-   in `app.py`. Restart — the table is created automatically.
+   in `helpers.py`. Restart — the table is created automatically.
 2. **UI:** add a nav button + `<section id="tab-water">` in
-   `static/index.html`, then a `renderWater()` in `static/app.js` and call
-   it from `renderAll()`. Use the existing `api()` helper for requests.
+   `static/index.html`. Create `static/js/water.js` with a `renderWater()` function
+   and export it. Import it in `static/app.js`, then call it from `renderAll()`. Use the existing `api()` helper for requests.
 3. Generic CRUD endpoints already work for your new table — no backend
    routes needed unless you want custom logic.
 4. Want it in the analytics tab? Aggregate in `renderAnalytics()` and use
@@ -99,9 +98,9 @@ Example: a water-intake tracker.
 
 ## The background scheduler
 
-`scheduler_loop()` (a daemon thread) calls `scheduler_tick()` every minute.
-Daily jobs use `done_<job>` markers in the `kv` table so they fire once per
-day even across restarts. Add your own job by appending a block to
+`scheduler_loop()` (a daemon thread in `scheduler.py`) calls `scheduler_tick()`
+every minute. Daily jobs use `done_<job>` markers in the `kv` table so they
+fire once per day even across restarts. Add your own job by appending a block to
 `scheduler_tick()` following the same pattern.
 
 ## Conventions

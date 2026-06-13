@@ -23,6 +23,12 @@ with db() as con:
     con.executescript(SCHEMA)
     _ensure_column(con, "notes", "is_pinned", "is_pinned INTEGER DEFAULT 0")
     _ensure_column(con, "files", "is_pinned", "is_pinned INTEGER DEFAULT 0")
+    _ensure_column(con, "events", "description", "description TEXT")
+    _ensure_column(con, "events", "location", "location TEXT")
+    _ensure_column(con, "events", "recurrence", "recurrence TEXT DEFAULT 'none'")
+    _ensure_column(con, "events", "recurrence_until", "recurrence_until TEXT")
+    _ensure_column(con, "events", "reminder_offset", "reminder_offset INTEGER DEFAULT -1")
+    _ensure_column(con, "tasks", "due", "due TEXT")
 
 _WELCOME_NOTE_TITLE = "How to use Notes"
 _WELCOME_NOTE_BODY = """\

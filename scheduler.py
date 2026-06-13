@@ -5,7 +5,7 @@ Runs as a daemon thread: daily agenda push, evening habit nudge,
 nightly backup, and periodic calendar auto-sync.
 """
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from helpers import setting, kv_get, kv_set, ntfy_send, db, do_backup
 from blueprints.calendar import cal_auto_sync
@@ -54,10 +54,92 @@ def send_habit_nudge(today):
         ntfy_send("Habit check-in", "Still open today:\n- " + "\n- ".join(open_), "white_check_mark")
 
 
+def get_instances(e, target_date_str):
+    if not e.get("date"):
+        return False
+    if target_date_str < e["date"]:
+        return False
+    if e.get("recurrence_until") and target_date_str > e["recurrence_until"]:
+        return False
+        
+    rec = e.get("recurrence", "none")
+    if rec == "none":
+        return e["date"] == target_date_str
+    elif rec == "daily":
+        return True
+    elif rec == "weekly":
+        dt_start = datetime.strptime(e["date"], "%Y-%m-%d")
+        dt_target = datetime.strptime(target_date_str, "%Y-%m-%d")
+        return dt_start.weekday() == dt_target.weekday()
+    elif rec == "monthly":
+        dt_start = datetime.strptime(e["date"], "%Y-%m-%d")
+        dt_target = datetime.strptime(target_date_str, "%Y-%m-%d")
+        return dt_start.day == dt_target.day
+    return False
+
+
+def check_event_reminders(now):
+    today_str = now.strftime("%Y-%m-%d")
+    tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    with db() as con:
+        evs = [dict(r) for r in con.execute("SELECT * FROM events WHERE reminder_offset IS NOT NULL AND reminder_offset != -1 AND reminder_offset != '-1'")]
+        
+    for e in evs:
+        if not e.get("start"):
+            continue
+            
+        raw_offset = e.get("reminder_offset")
+        if raw_offset is None:
+            continue
+            
+        offset_str = str(raw_offset).strip()
+        if not offset_str or offset_str == "-1":
+            continue
+            
+        offsets = []
+        for part in offset_str.split(","):
+            try:
+                val = int(part.strip())
+                if val >= 0:
+                    offsets.append(val)
+            except ValueError:
+                continue
+                
+        if not offsets:
+            continue
+            
+        for d in (today_str, tomorrow_str):
+            if get_instances(e, d):
+                try:
+                    start_dt = datetime.strptime(f"{d} {e['start']}", "%Y-%m-%d %H:%M")
+                except ValueError:
+                    continue
+                
+                for offset in offsets:
+                    reminder_time = start_dt - timedelta(minutes=offset)
+                    if now.strftime("%Y-%m-%d %H:%M") == reminder_time.strftime("%Y-%m-%d %H:%M"):
+                        kv_key = f"reminder_sent:{e['id']}:{offset}:{start_dt.strftime('%Y%m%d%H%M')}"
+                        if not kv_get(kv_key):
+                            kv_set(kv_key, "1")
+                            title = f"Reminder: {e['title']}"
+                            loc_str = f" at {e['location']}" if e.get("location") else ""
+                            msg = f"Starts at {e['start']}{loc_str}"
+                            if offset > 0:
+                                if offset % 60 == 0:
+                                    hours = offset // 60
+                                    msg += f" (in {hours}h)"
+                                else:
+                                    msg += f" (in {offset}m)"
+                            ntfy_send(title, msg, "alarm_clock")
+
+
 def scheduler_tick():
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     hhmm = now.strftime("%H:%M")
+    
+    check_event_reminders(now)
     if hhmm >= setting("notify_agenda_time") and kv_get("done_agenda") != today:
         kv_set("done_agenda", today)
         send_agenda(today)

@@ -13,6 +13,22 @@ export function weekDates(off) {
   var out = []; for (var i = 0; i < 7; i++) out.push(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
   return out;
 }
+export function getViewDates(view, off) {
+  var now = new Date();
+  if (view === 'month') {
+    var m = new Date(now.getFullYear(), now.getMonth() + off, 1);
+    var dow = (m.getDay() + 6) % 7;
+    var start = new Date(m.getFullYear(), m.getMonth(), m.getDate() - dow);
+    var out = [];
+    for (var i = 0; i < 42; i++) out.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+    return out;
+  }
+  var days = parseInt(view, 10) || 7;
+  if (days === 7) return weekDates(off);
+  var startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (off * days));
+  var out = []; for (var i = 0; i < days; i++) out.push(new Date(startDay.getFullYear(), startDay.getMonth(), startDay.getDate() + i));
+  return out;
+}
 export function daysUntil(iso) { return Math.round((parseISO(iso) - parseISO(todayStr())) / 86400000); }
 export function fmtShort(d) { return DAYS[(d.getDay() + 6) % 7] + " " + d.getDate() + " " + MONTHS[d.getMonth()]; }
 

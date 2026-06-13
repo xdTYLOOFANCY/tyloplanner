@@ -34,7 +34,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events(
   id TEXT PRIMARY KEY, "date" TEXT, "start" TEXT, "end" TEXT,
-  title TEXT, type TEXT DEFAULT 'other', source TEXT DEFAULT 'local');
+  title TEXT, type TEXT DEFAULT 'other', source TEXT DEFAULT 'local',
+  description TEXT, location TEXT, recurrence TEXT DEFAULT 'none',
+  recurrence_until TEXT, reminder_offset INTEGER DEFAULT -1);
 CREATE TABLE IF NOT EXISTS exams(
   id TEXT PRIMARY KEY, name TEXT, "date" TEXT, grade REAL, ects REAL);
 CREATE TABLE IF NOT EXISTS habits(
@@ -46,7 +48,7 @@ CREATE TABLE IF NOT EXISTS workouts(
   note TEXT, source TEXT DEFAULT 'manual', ext_id TEXT);
 CREATE TABLE IF NOT EXISTS tasks(
   id TEXT PRIMARY KEY, name TEXT, done INTEGER DEFAULT 0,
-  created TEXT, completed_at TEXT);
+  created TEXT, completed_at TEXT, due TEXT);
 CREATE TABLE IF NOT EXISTS notes(
   id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER, is_pinned INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS files(
@@ -58,11 +60,11 @@ CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
 
 # whitelisted writable columns per table (id is managed by the server)
 TABLES = {
-    "events":   ["date", "start", "end", "title", "type", "source"],
+    "events":   ["date", "start", "end", "title", "type", "source", "description", "location", "recurrence", "recurrence_until", "reminder_offset"],
     "exams":    ["name", "date", "grade", "ects"],
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
-    "tasks":    ["name", "done", "created", "completed_at"],
+    "tasks":    ["name", "done", "created", "completed_at", "due"],
     "notes":    ["title", "body", "updated", "is_pinned"],
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned"],
     "shortcuts":["name", "url", "icon"],
