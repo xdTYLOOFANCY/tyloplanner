@@ -25,10 +25,6 @@ echo " Password: $PW   (also saved in .env)" && \
 echo "========================================="
 ```
 
-> **Private repo?** If the repo is private, `git clone` will ask for
-> credentials — use your GitHub username + a personal access token as the
-> password, or set the repo to public first.
-
 That's it. Sign in, set up 2FA in **Settings → Security**, and install it on
 your phone via *Add to Home Screen*.
 
