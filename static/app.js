@@ -48,7 +48,7 @@ import {
   toggleShowShortcuts as _toggleShowShortcuts, reorderShortcut as _reorderShortcut,
   toggleItem as _toggleItem, toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
-  updateCategoryColor as _updateCategoryColor
+  updateCategoryColor as _updateCategoryColor, checkForUpdates
 } from './js/settings.js';
 
 // ---- renderAll used by refresh() ----
@@ -186,6 +186,7 @@ window.testNotify = testNotify;
 window.tfaStart = tfaStart;
 window.copyIcs = copyIcs;
 window.renderSettings = function(refresh) { renderSettings(refresh || R); };
+window.checkForUpdates = checkForUpdates;
 
 // ---------- tabs ----------
 var tabsNav = document.getElementById("tabs");
@@ -219,7 +220,39 @@ if (savedTab) {
   }
 }
 
-if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/sw.js").catch(function() {}); }
+function showPwaUpdateBanner(worker) {
+  var banner = document.getElementById("update-banner");
+  if (!banner) return;
+  banner.style.display = "flex";
+  var btn = document.getElementById("update-btn");
+  if (btn) {
+    btn.onclick = function () {
+      worker.postMessage({ type: "SKIP_WAITING" });
+    };
+  }
+}
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").then(function (reg) {
+    if (reg.waiting) {
+      showPwaUpdateBanner(reg.waiting);
+    }
+    reg.addEventListener("updatefound", function () {
+      var installingWorker = reg.installing;
+      if (installingWorker) {
+        installingWorker.addEventListener("statechange", function () {
+          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+            showPwaUpdateBanner(installingWorker);
+          }
+        });
+      }
+    });
+  }).catch(function() {});
+
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    window.location.reload();
+  });
+}
 
 window.addEventListener("online", function() {
   syncQueue(R);
@@ -231,6 +264,7 @@ window.addEventListener("offline", function() {
 refresh(renderAll).then(function() {
   setPlannerRefresh(R);
   updateOfflineBanner();
+  checkForUpdates(false).catch(function() {});
   if (navigator.onLine) {
     syncQueue(R);
   }

@@ -12,6 +12,10 @@
 </head>
 <body>
 <div id="offline-banner" class="offline-banner" style="display: none;"></div>
+<div id="update-banner" class="update-banner" style="display: none;">
+  <span>✨ A software update is ready!</span>
+  <button id="update-btn">Update now</button>
+</div>
 <header>
   <img src="logo.svg" alt="" class="headlogo">
   <h1>TyloPlanner</h1>
@@ -33,7 +37,7 @@
   <button data-tab="tasks">To-do</button>
   <button data-tab="notes">Notes</button>
   <button data-tab="files">Files</button>
-  <button data-tab="settings">Settings</button>
+  <button data-tab="settings">Settings<span id="settings-update-badge" class="tab-badge" style="display: none;"></span></button>
 </nav>
 <main>
   <section id="tab-dashboard" class="active">
@@ -344,7 +348,40 @@
       <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Available backups</h4>
       <div id="backupList" class="card-scroll"><span class="muted">Loading…</span></div>
     </div>
+    <div class="card">
+      <h3>🔄 Software Updates</h3>
+      <p style="font-size:14px;margin-bottom:8px">Check if there is a new version of TyloPlanner available on GitHub.</p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span id="versionCheckStatus" style="font-size:14px" class="muted">Checking for updates...</span>
+        <button class="btn small" id="checkUpdateBtn" onclick="checkForUpdates(true)">Check now</button>
+        <button class="btn small" id="updateServerBtn" style="display:none" onclick="document.getElementById('updateModal').style.display='flex'">How to update</button>
+      </div>
+    </div>
   </section>
+
+  <div id="updateModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 450px; width: 90%;">
+      <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Update TyloPlanner</h3>
+      <p style="font-size:14px; margin-bottom:12px; line-height:1.5;">To update TyloPlanner to the latest version, run the following commands on your server:</p>
+      
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Docker (recommended)</label>
+        <div style="position:relative;">
+          <pre style="background:var(--panel2); padding:10px; border-radius:6px; font-size:12.5px; overflow-x:auto; border:1px solid var(--border); font-family:monospace; color:var(--text); margin:0;">git pull && sudo docker compose up -d --build</pre>
+        </div>
+      </div>
+      
+      <div style="margin-bottom:20px;">
+        <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Without Docker (Local/venv)</label>
+        <pre style="background:var(--panel2); padding:10px; border-radius:6px; font-size:12.5px; overflow-x:auto; border:1px solid var(--border); font-family:monospace; color:var(--text); margin:0;">git pull && source venv/bin/activate && pip install -r requirements.txt</pre>
+      </div>
+      
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn" onclick="document.getElementById('updateModal').style.display='none'">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="taskModal" class="modal" style="display:none">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>

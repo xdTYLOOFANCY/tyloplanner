@@ -3,7 +3,7 @@ Settings blueprint — get and update user settings.
 """
 from flask import Blueprint, request, jsonify
 
-from helpers import SETTING_DEFAULTS, setting, kv_get, kv_set, totp_enabled
+from helpers import SETTING_DEFAULTS, setting, kv_get, kv_set, totp_enabled, check_version
 
 bp = Blueprint("settings", __name__)
 
@@ -24,3 +24,10 @@ def set_settings():
         if k in data:
             kv_set("set_" + k, str(data[k]).strip())
     return jsonify({"ok": True})
+
+
+@bp.get("/api/version/check")
+def version_check():
+    force = request.args.get("force") == "true"
+    return jsonify(check_version(force=force))
+

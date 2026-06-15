@@ -4,6 +4,11 @@ All notable changes to TyloPlanner are documented here.
 
 ## Unreleased
 
+- (No changes yet)
+
+## 1.3.0 — 2026-06-15
+
+- **Software Update Notifications:** Added a non-obtrusive version check system that polls GitHub's API to subtly notify the user via a settings badge and bottom-right banner when an update is available, showing the command-line updates to run.
 - **PWA & Offline Mode Support:** Implemented a robust IndexedDB synchronization queue to allow viewing, creating, editing, and deleting notes, tasks, and events offline. Intercepted all client-side API requests to resolve state/settings from the database cache when offline and queue mutations (`POST`, `PUT`, `DELETE`). Added optimistic UI updates for instant feedback, a sticky "Working Offline — X changes pending" banner at the top of the viewport, automatic sequence replay on reconnect, and aggressive Service Worker asset caching.
 - **Advanced Task Management:** Added custom categories/tags with custom color pickers and dynamic badge styling, HTML5 drag-and-drop prioritization, nested checklists for subtasks, a datetime-local picker for due dates/times, filtering out subtasks from the dashboard open to-dos list, and automated ntfy reminders for overdue tasks and tasks due in the next 24 hours in the morning agenda.
 - **Notes Editor Enhancements:** Upgraded markdown rendering to use `marked.js` with custom wiki-style cross-link support and safe HTML escaping. Replaced manual Edit/View modes with a responsive dual-pane split layout (side-by-side on desktop, stacked on mobile). Added real-time word/character counters and a debounced autosave status indicator (Typing, Saving, Saved at timestamp). Added per-note persistence of Read Mode and Split View toggle preferences, as well as automatic active tab and active note restoration across page reloads. Added a toggle setting in the Appearance card to enable or disable active tab persistence. Styled the note search bar larger and full-width in Read Mode. Added Enter key navigation to step through search results in all search bars.

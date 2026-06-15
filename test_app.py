@@ -693,6 +693,39 @@ class AdvancedTaskManagementTests(unittest.TestCase):
         self.assertEqual(sub["parent_id"], tid)
 
 
+class VersionCheckTests(unittest.TestCase):
+    def setUp(self):
+        self.app = appmod.create_app()
+        self.c = self.app.test_client()
+        reset_db()
+
+    def test_version_check_endpoint(self):
+        # Verify endpoint returns the correct fields and status code
+        r = self.c.get("/api/version/check")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertIn("current", data)
+        self.assertIn("latest", data)
+        self.assertIn("update_available", data)
+        self.assertEqual(data["current"], "1.3.0")
+
+    def test_version_check_newer_logic(self):
+        # Test helper logic by using a lower version and mock cached release
+        original_version = helpers.VERSION
+        try:
+            helpers.VERSION = "1.1.0"
+            helpers.kv_set("latest_version_cached", "1.2.0")
+            import time
+            helpers.kv_set("last_version_check", str(int(time.time())))
+            
+            res = helpers.check_version(force=False)
+            self.assertTrue(res["update_available"])
+            self.assertEqual(res["latest"], "1.2.0")
+            self.assertEqual(res["current"], "1.1.0")
+        finally:
+            helpers.VERSION = original_version
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

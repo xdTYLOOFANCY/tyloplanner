@@ -26,6 +26,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
+VERSION = "1.3.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -187,3 +188,53 @@ def do_backup(today):
     for old in files[:-14]:
         os.remove(os.path.join(BACKUP_DIR, old))
     return path
+
+
+# ---------------- version & updates check ----------------
+def check_version(force=False):
+    """
+    Checks if a newer version of TyloPlanner is available on GitHub.
+    Caches the result for 24 hours in the kv table to avoid rate limits.
+    """
+    now = int(time.time())
+    last_check_str = kv_get("last_version_check")
+    last_check = int(last_check_str) if last_check_str and last_check_str.isdigit() else 0
+    cached_latest = kv_get("latest_version_cached", VERSION)
+
+    # 24 hours = 86400 seconds
+    if not force and (now - last_check < 86400):
+        latest = cached_latest
+    else:
+        try:
+            r = requests.get(
+                "https://api.github.com/repos/xdTYLOOFANCY/tyloplanner/releases/latest",
+                headers={"User-Agent": "TyloPlanner-App"},
+                timeout=2.0
+            )
+            if r.status_code == 200:
+                data = r.json()
+                latest = data.get("tag_name", VERSION).lstrip("v")
+                kv_set("last_version_check", str(now))
+                kv_set("latest_version_cached", latest)
+            else:
+                latest = cached_latest
+        except Exception:
+            latest = cached_latest
+
+    # Simple semver-like comparison
+    def parse_version(v_str):
+        return [int(x) for x in v_str.lstrip("v").split(".") if x.isdigit()]
+
+    try:
+        current_parsed = parse_version(VERSION)
+        latest_parsed = parse_version(latest)
+        update_available = latest_parsed > current_parsed
+    except Exception:
+        update_available = latest != VERSION
+
+    return {
+        "current": VERSION,
+        "latest": latest,
+        "update_available": update_available
+    }
+

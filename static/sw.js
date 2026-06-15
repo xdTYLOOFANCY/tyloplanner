@@ -1,7 +1,7 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v51";
+const CACHE = "tylo-v52";
 const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",
@@ -13,7 +13,6 @@ const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/mani
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }));
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", function (e) {
@@ -22,6 +21,12 @@ self.addEventListener("activate", function (e) {
       .map(function (k) { return caches.delete(k); }));
   }));
   self.clients.claim();
+});
+
+self.addEventListener("message", function (e) {
+  if (e.data && e.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", function (e) {

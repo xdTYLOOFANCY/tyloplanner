@@ -111,6 +111,7 @@ export function renderSettings(refresh) {
   }
 
   renderBackupList("backupList", refresh);
+  checkForUpdates(false).catch(function() {});
 }
 
 export async function toggleShowShortcuts(refresh) {
@@ -424,5 +425,39 @@ export async function deleteCategory(catName, refresh) {
     });
     await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
     await refresh();
+  }
+}
+
+export async function checkForUpdates(force) {
+  var statusEl = document.getElementById("versionCheckStatus");
+  var checkBtn = document.getElementById("checkUpdateBtn");
+  var updateBtn = document.getElementById("updateServerBtn");
+  var badgeEl = document.getElementById("settings-update-badge");
+
+  if (!statusEl) return;
+
+  statusEl.textContent = "Checking...";
+  statusEl.className = "muted";
+  if (checkBtn) checkBtn.disabled = true;
+
+  try {
+    var res = await api("GET", "/api/version/check" + (force ? "?force=true" : ""));
+    if (res.update_available) {
+      statusEl.innerHTML = "✨ Update available! (<b>v" + esc(res.latest) + "</b> is available, current is v" + esc(res.current) + ")";
+      statusEl.className = "";
+      if (updateBtn) updateBtn.style.display = "inline-block";
+      if (badgeEl) badgeEl.style.display = "inline-block";
+    } else {
+      statusEl.textContent = "Your software is up-to-date (v" + res.current + ").";
+      statusEl.className = "muted";
+      if (updateBtn) updateBtn.style.display = "none";
+      if (badgeEl) badgeEl.style.display = "none";
+    }
+  } catch (err) {
+    console.error("Version check error:", err);
+    statusEl.textContent = "Failed to check for updates.";
+    statusEl.className = "muted";
+  } finally {
+    if (checkBtn) checkBtn.disabled = false;
   }
 }
