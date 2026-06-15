@@ -41,7 +41,7 @@ All notable changes to TyloPlanner are documented here.
 
 - Restructured documentation for public release: new README, `docs/` folder
   (install, configuration, integrations, development), CONTRIBUTING,
-  SECURITY, MIT LICENSE, changelog.
+  SECURITY, GPLv3 LICENSE, changelog.
 - Install guide with a one-command Docker setup for Ubuntu servers.
 
 ## 1.1.0 — 2026-06-10

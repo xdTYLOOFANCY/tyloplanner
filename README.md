@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green">
+  <img alt="License: GPL v3" src="https://img.shields.io/badge/license-GPLv3-blue.svg">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
   <img alt="Docker ready" src="https://img.shields.io/badge/docker-ready-2496ED">
   <img alt="PWA" src="https://img.shields.io/badge/mobile-PWA-7c5cff">
@@ -109,4 +109,4 @@ Bug reports and pull requests are welcome — see
 
 ## License
 
-[MIT](LICENSE)
+[GPLv3](LICENSE)
