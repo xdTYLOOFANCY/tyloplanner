@@ -12,11 +12,35 @@ from blueprints.calendar import cal_auto_sync
 
 
 def send_agenda(today):
-    """Morning push: today's events + upcoming exam alerts."""
+    """Morning push: today's events + upcoming exam alerts + tasks due soon/overdue."""
+    now = datetime.now()
+    now_str = now.strftime("%Y-%m-%dT%H:%M")
+    plus_24h_str = (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M")
+
     with db() as con:
         evs = [dict(r) for r in con.execute(
             'SELECT * FROM events WHERE "date"=? ORDER BY "start"', (today,))]
         exams = [dict(r) for r in con.execute("SELECT * FROM exams")]
+        all_open_tasks = [dict(r) for r in con.execute("SELECT * FROM tasks WHERE done = 0")]
+
+    overdue_tasks = []
+    upcoming_tasks = []
+
+    for t in all_open_tasks:
+        if t.get("due_date"):
+            if t["due_date"] < now_str:
+                overdue_tasks.append(t)
+            elif now_str <= t["due_date"] <= plus_24h_str:
+                upcoming_tasks.append(t)
+        elif t.get("due"):
+            if t["due"] < today:
+                overdue_tasks.append(t)
+            elif t["due"] == today:
+                upcoming_tasks.append(t)
+
+    overdue_tasks.sort(key=lambda x: x.get("due_date") or x.get("due") or "")
+    upcoming_tasks.sort(key=lambda x: x.get("due_date") or x.get("due") or "")
+
     try:
         warn_days = {int(x) for x in setting("notify_exam_days").split(",") if x.strip().isdigit()}
     except ValueError:
@@ -33,13 +57,30 @@ def send_agenda(today):
             exl.append("%s is TODAY" % x["name"])
         elif dd in warn_days:
             exl.append("%s in %d day%s" % (x["name"], dd, "" if dd == 1 else "s"))
-    if not lines and not exl:
+
+    task_lines = []
+    if overdue_tasks:
+        task_lines.append("Overdue:")
+        for t in overdue_tasks:
+            dt_display = (t.get("due_date") or t.get("due") or "").replace("T", " ")
+            task_lines.append(f"- [OVERDUE] {t['name']} (due {dt_display})")
+    if upcoming_tasks:
+        if task_lines:
+            task_lines.append("")
+        task_lines.append("Due soon:")
+        for t in upcoming_tasks:
+            dt_display = (t.get("due_date") or t.get("due") or "").replace("T", " ")
+            task_lines.append(f"- {t['name']} (due {dt_display})")
+
+    if not lines and not exl and not task_lines:
         return
     msg = ""
     if lines:
         msg += "Today:\n- " + "\n- ".join(lines)
     if exl:
         msg += ("\n\n" if msg else "") + "Exams:\n- " + "\n- ".join(exl)
+    if task_lines:
+        msg += ("\n\n" if msg else "") + "Tasks:\n" + "\n".join(task_lines)
     ntfy_send("Your day — TyloPlanner", msg, "calendar")
 
 

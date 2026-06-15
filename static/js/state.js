@@ -12,6 +12,9 @@ export function setHabitEntry(key, val) {
   if (val) habitSet[key] = true; else delete habitSet[key];
 }
 
+export function setS(val) { S = val; }
+export function setSET(val) { SET = val; }
+
 export async function refresh(renderAll) {
   S = await api("GET", "/api/state");
   SET = await api("GET", "/api/settings");

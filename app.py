@@ -23,12 +23,17 @@ with db() as con:
     con.executescript(SCHEMA)
     _ensure_column(con, "notes", "is_pinned", "is_pinned INTEGER DEFAULT 0")
     _ensure_column(con, "files", "is_pinned", "is_pinned INTEGER DEFAULT 0")
+    _ensure_column(con, "files", "folder_id", "folder_id TEXT")
+    _ensure_column(con, "folders", "icon", "icon TEXT")
     _ensure_column(con, "events", "description", "description TEXT")
     _ensure_column(con, "events", "location", "location TEXT")
     _ensure_column(con, "events", "recurrence", "recurrence TEXT DEFAULT 'none'")
     _ensure_column(con, "events", "recurrence_until", "recurrence_until TEXT")
-    _ensure_column(con, "events", "reminder_offset", "reminder_offset INTEGER DEFAULT -1")
     _ensure_column(con, "tasks", "due", "due TEXT")
+    _ensure_column(con, "tasks", "category", "category TEXT")
+    _ensure_column(con, "tasks", "order_index", "order_index INTEGER DEFAULT 0")
+    _ensure_column(con, "tasks", "due_date", "due_date TEXT")
+    _ensure_column(con, "tasks", "parent_id", "parent_id TEXT")
 
 _WELCOME_NOTE_TITLE = "How to use Notes"
 _WELCOME_NOTE_BODY = """\
@@ -40,17 +45,29 @@ Welcome! Here is everything the Notes section can do.
 
 ## Writing & saving
 
-Type in the text area — your note **saves automatically** after a short pause. Fill in the **Title** field at the top to name it.
+Type in the editor — your note **saves automatically** in the background. A live save status indicator (e.g. *Typing...*, *Saving...*, or *Saved at HH:MM:SS*) is displayed in the header alongside word and character counters.
 
-## Edit and View modes
+## Read Mode & Split View
 
-Click **View** (bottom-right of the editor) to render your Markdown as formatted text. Click **Edit** to return to the text area at any time.
+You can customize the layout of the editor using the control toggles:
+- **Read Mode** (pill slider in the header) — When turned **ON**, it hides the editing area and toolbar, displaying the clean, formatted note along with the search bar.
+- **Split View** (checkmark toggle in the toolbar) — When Read Mode is **OFF**, toggle Split View to switch between a side-by-side editing layout (Split) or a distraction-free editor-only layout.
+
+Layout toggle states are saved automatically **per note** and persist across page reloads.
+
+## Searching within notes
+
+Use the search bar at the bottom of the header to search for text inside the current note.
+- All matching text will be highlighted in yellow.
+- Use the **↑** and **↓** arrows, or simply press **Enter** in the search box, to step through each result.
+- The search bar takes up the full width of the editor and is styled slightly larger in **Read Mode** for readability.
+- It is fully active in both editing layouts and in **Read Mode**.
 
 ---
 
 ## Formatting toolbar
 
-The toolbar above the text area inserts Markdown at your cursor position. Select text first, then click **B** or **I** to wrap the selection.
+The toolbar above the text area inserts Markdown at your cursor position. Select text first, then click a formatting button to wrap the selection:
 
 - **B** — bold: `**text**`
 - **I** — italic: `*text*`
@@ -67,17 +84,15 @@ The toolbar above the text area inserts Markdown at your cursor position. Select
 ## Heading 2
 ### Heading 3
 
-**bold text** and *italic text* and __underlined text__ and ~~strikethrough~~
+**bold text** and *italic text* and ~~strikethrough~~
 
 > This is a blockquote. Great for callouts or quotes.
 
 - Bullet one
 - Bullet two
-- Bullet three
 
 1. Step one
 2. Step two
-3. Step three
 
 ---
 
@@ -89,7 +104,7 @@ Type `[[Note Title]]` anywhere to create a clickable cross-reference.
 - If the note **does not exist yet**: the link appears grey with a dashed underline.
 - Titles are matched **case-insensitively**, so `[[my note]]` and `[[My Note]]` both work.
 
-*This note can be edited or deleted at any time — it will not come back.*\\
+*This note can be edited or deleted at any time — it will not come back.*
 """
 
 with db() as con:
@@ -99,7 +114,13 @@ with db() as con:
             "INSERT INTO notes(id,title,body,updated) VALUES(?,?,?,?)",
             (uuid.uuid4().hex[:12], _WELCOME_NOTE_TITLE, _WELCOME_NOTE_BODY, int(time.time() * 1000))
         )
-        con.execute("INSERT INTO kv(key,value) VALUES('seed_welcome_note','1')")
+        con.execute("INSERT INTO kv(key,value) VALUES('seed_welcome_note','4')")
+    elif seeded[0] in ('1', '2', '3'):
+        # Update the welcome note body to the new version if it hasn't been deleted
+        note = con.execute("SELECT id FROM notes WHERE title=?", (_WELCOME_NOTE_TITLE,)).fetchone()
+        if note:
+            con.execute("UPDATE notes SET body=?, updated=? WHERE id=?", (_WELCOME_NOTE_BODY, int(time.time() * 1000), note[0]))
+        con.execute("UPDATE kv SET value='4' WHERE key='seed_welcome_note'")
 
     seeded_shortcuts = con.execute("SELECT value FROM kv WHERE key='seed_default_shortcut'").fetchone()
     if not seeded_shortcuts:

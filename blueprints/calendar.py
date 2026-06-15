@@ -3,6 +3,7 @@ Calendar blueprint — ICS export, import, sync, and clear.
 """
 import re
 from datetime import datetime, timezone
+import zoneinfo
 
 import requests
 from flask import Blueprint, request, jsonify, Response
@@ -18,8 +19,64 @@ def ics_escape(s):
             .replace(",", "\\,").replace("\n", "\\n"))
 
 
+def parse_ics_datetime(head, val):
+    """Parses an ICS date or date-time value.
+    Converts aware datetimes (UTC or with TZID) to the local system timezone.
+    Returns (date_str, time_str, dt_obj).
+    """
+    if "T" not in val:
+        m = re.match(r"(\d{4})(\d{2})(\d{2})", val)
+        if m:
+            return "%s-%s-%s" % (m.group(1), m.group(2), m.group(3)), "", None
+        return None, None, None
+
+    m = re.match(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?", val)
+    if not m:
+        m = re.match(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})", val)
+        if not m:
+            return None, None, None
+        year, month, day, hour, minute = m.groups()[:5]
+        second = "00"
+        is_utc = val.endswith("Z")
+    else:
+        year, month, day, hour, minute, second, is_utc = m.groups()
+        if not second:
+            second = "00"
+
+    y, mo, d, h, mi, s = map(int, [year, month, day, hour, minute, second])
+
+    tz = None
+    if is_utc:
+        tz = timezone.utc
+    else:
+        tzid_match = re.search(r"TZID=([^;:\s]+)", head)
+        if tzid_match:
+            tzid = tzid_match.group(1).strip('"')
+            try:
+                tz = zoneinfo.ZoneInfo(tzid)
+            except Exception:
+                parts = tzid.split('/')
+                if len(parts) >= 2:
+                    for i in range(len(parts) - 1):
+                        sub_tzid = "/".join(parts[i:])
+                        try:
+                            tz = zoneinfo.ZoneInfo(sub_tzid)
+                            break
+                        except Exception:
+                            pass
+
+    dt = datetime(y, mo, d, h, mi, s)
+    if tz:
+        dt = dt.replace(tzinfo=tz)
+        dt_local = dt.astimezone()
+    else:
+        dt_local = dt
+
+    return dt_local.strftime("%Y-%m-%d"), dt_local.strftime("%H:%M"), dt_local
+
+
 def parse_ics(text):
-    """Minimal tolerant ICS parser: returns list of {date,start,end,title}.
+    """Minimal tolerant ICS parser: returns list of {date,start,end,title,location,description}.
     Recurring events are imported as their first occurrence only."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n[ \t]", "", text)  # unfold continuation lines
@@ -34,20 +91,36 @@ def parse_ics(text):
             props[key] = (head, val.strip())
         if "DTSTART" not in props:
             continue
-        _, dt = props["DTSTART"]
-        m = re.match(r"(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?", dt)
-        if not m:
+        
+        start_head, start_val = props["DTSTART"]
+        d, start, _ = parse_ics_datetime(start_head, start_val)
+        if not d:
             continue
-        d = "%s-%s-%s" % (m.group(1), m.group(2), m.group(3))
-        start = "%s:%s" % (m.group(4), m.group(5)) if m.group(4) else ""
+
         end = ""
         if "DTEND" in props:
-            m2 = re.match(r"(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?", props["DTEND"][1])
-            if m2 and m2.group(4) and "%s-%s-%s" % (m2.group(1), m2.group(2), m2.group(3)) == d:
-                end = "%s:%s" % (m2.group(4), m2.group(5))
+            end_head, end_val = props["DTEND"]
+            d_end, end_time, _ = parse_ics_datetime(end_head, end_val)
+            if d_end and end_time and d_end == d:
+                end = end_time
+
         title = props.get("SUMMARY", ("", "(no title)"))[1]
         title = title.replace("\\n", " ").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
-        events.append({"date": d, "start": start, "end": end, "title": title})
+
+        location = props.get("LOCATION", ("", ""))[1]
+        location = location.replace("\\n", " ").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
+
+        description = props.get("DESCRIPTION", ("", ""))[1]
+        description = description.replace("\\n", "\n").replace("\\N", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
+
+        events.append({
+            "date": d,
+            "start": start,
+            "end": end,
+            "title": title,
+            "location": location,
+            "description": description
+        })
     return events
 
 
@@ -62,9 +135,9 @@ def import_ics_text(text):
             if dup:
                 continue
             con.execute(
-                'INSERT INTO events(id,"date","start","end",title,type,source) '
-                "VALUES(?,?,?,?,?,?,?)",
-                (uid(), e["date"], e["start"], e["end"], e["title"], "other", "ics"))
+                'INSERT INTO events(id,"date","start","end",title,type,source,location,description) '
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (uid(), e["date"], e["start"], e["end"], e["title"], "other", "ics", e["location"], e["description"]))
             added += 1
     return {"found": len(evs), "added": added}
 

@@ -55,6 +55,10 @@ export function renderSettings(refresh) {
   var toggleEl = document.getElementById("showShortcutsToggle");
   if (toggleEl) toggleEl.checked = showShortcuts;
 
+  var persistTab = SET ? SET.persist_active_tab !== "0" : true;
+  var tabToggleEl = document.getElementById("tabPersistenceToggle");
+  if (tabToggleEl) tabToggleEl.checked = persistTab;
+
   if (S.shortcuts && S.shortcuts.length) {
     var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
     var sorted = S.shortcuts.slice().sort(function(a, b) {
@@ -89,12 +93,45 @@ export function renderSettings(refresh) {
       (SET.last_backup ? ' Last backup: <b>' + esc(SET.last_backup) + '</b>.' : ' No backup made yet.') + '</p>' +
       '<button class="btn small" onclick="backupNow()">Backup now</button>';
   }
+
+  // Render categories
+  var cats = getTaskCategories();
+  var catsHtml = "";
+  cats.forEach(function(cat) {
+    catsHtml += '<div class="list-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:10px;">' +
+      '<span class="badge" style="background-color:' + esc(cat.color) + '; color:#fff; font-weight:600; padding:4px 8px; border-radius:4px;">' + esc(cat.name) + '</span>' +
+      '<div style="flex:1"></div>' +
+      '<input type="color" value="' + esc(cat.color) + '" onchange="updateCategoryColor(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="width:30px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
+      '<button class="btn danger small" onclick="deleteCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\')">Delete</button>' +
+      '</div>';
+  });
+  var settingsCategoriesEl = document.getElementById("settingsCategories");
+  if (settingsCategoriesEl) {
+    settingsCategoriesEl.innerHTML = catsHtml || '<div class="muted">No categories configured.</div>';
+  }
+
   renderBackupList("backupList", refresh);
 }
 
 export async function toggleShowShortcuts(refresh) {
   var show = document.getElementById("showShortcutsToggle").checked;
   await api("POST", "/api/settings", { show_shortcuts: show ? "1" : "0" });
+  await refresh();
+}
+
+export async function toggleTabPersistence(refresh) {
+  var toggle = document.getElementById("tabPersistenceToggle");
+  var persist = toggle ? toggle.checked : true;
+  await api("POST", "/api/settings", { persist_active_tab: persist ? "1" : "0" });
+  
+  if (!persist) {
+    localStorage.removeItem("active_tab");
+  } else {
+    var activeBtn = document.querySelector("#tabs button.active");
+    if (activeBtn) {
+      localStorage.setItem("active_tab", activeBtn.dataset.tab);
+    }
+  }
   await refresh();
 }
 
@@ -296,3 +333,96 @@ export async function stravaDisconnect(refresh) {
 
 // expose stravaEditing for inline onclick toggle
 export { stravaEditing, tfaPending };
+
+export function getCategoryColorHex(name) {
+  var hash = 0;
+  for (var i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  var color = '#';
+  for (var i = 0; i < 3; i++) {
+    var value = (hash >> (i * 8)) & 0xFF;
+    value = Math.floor((value + 128) / 2);
+    color += ('00' + value.toString(16)).substr(-2);
+  }
+  return color;
+}
+
+export function getTaskCategories() {
+  var raw = (SET && SET.task_categories) ? SET.task_categories.trim() : "";
+  if (!raw) {
+    return [
+      { name: "School", color: "#4f8cff" },
+      { name: "Work", color: "#3ecf8e" },
+      { name: "Personal", color: "#f5a623" }
+    ];
+  }
+  if (raw.startsWith("{")) {
+    try {
+      var obj = JSON.parse(raw);
+      var res = [];
+      for (var k in obj) {
+        res.push({ name: k, color: obj[k] });
+      }
+      return res;
+    } catch (e) {
+      // Fall through
+    }
+  }
+  var parts = raw.split(',').map(function(c) { return c.trim(); }).filter(Boolean);
+  var defaultColors = { "School": "#4f8cff", "Work": "#3ecf8e", "Personal": "#f5a623" };
+  return parts.map(function(c) {
+    return { name: c, color: defaultColors[c] || getCategoryColorHex(c) };
+  });
+}
+
+export async function updateCategoryColor(name, color, refresh) {
+  var cats = getTaskCategories();
+  var cat = cats.find(function(c) { return c.name === name; });
+  if (cat) {
+    cat.color = color;
+    var obj = {};
+    cats.forEach(function(c) {
+      obj[c.name] = c.color;
+    });
+    await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
+    await refresh();
+  }
+}
+
+export async function addCustomCategory(refresh) {
+  var input = document.getElementById("newCategoryInput");
+  var colorInput = document.getElementById("newCategoryColor");
+  if (!input) return;
+  var newCat = input.value.trim();
+  if (!newCat) return;
+  var newColor = colorInput ? colorInput.value : "#4f8cff";
+  
+  var cats = getTaskCategories();
+  var exists = cats.some(function(c) { return c.name.toLowerCase() === newCat.toLowerCase(); });
+  if (!exists) {
+    cats.push({ name: newCat, color: newColor });
+    var obj = {};
+    cats.forEach(function(c) {
+      obj[c.name] = c.color;
+    });
+    await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
+    input.value = "";
+    if (colorInput) colorInput.value = "#4f8cff";
+    await refresh();
+  }
+}
+
+export async function deleteCategory(catName, refresh) {
+  var cats = getTaskCategories();
+  var idx = cats.findIndex(function(c) { return c.name === catName; });
+  if (idx !== -1) {
+    cats.splice(idx, 1);
+    var obj = {};
+    cats.forEach(function(c) {
+      obj[c.name] = c.color;
+    });
+    await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
+    await refresh();
+  }
+}

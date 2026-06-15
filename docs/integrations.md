@@ -20,8 +20,7 @@ feed URL from **Settings → Calendar export**, then:
 page). Imported events show with an orange marker in the planner and can be
 removed in one click with *Remove all imported events*.
 
-Limitations: recurring events are imported as their first occurrence only,
-and times are taken as written (timezones are not converted).
+Limitations: recurring events are imported as their first occurrence only. Times are automatically converted to your server's local timezone (UTC times ending in Z and events with specific TZID values are offset accordingly). Event locations and descriptions are also parsed and synced.
 
 ### Auto-sync — keep timetables up to date
 
@@ -43,8 +42,9 @@ Free push notifications to your phone, no account needed:
 
 What you'll receive:
 
-- **Morning agenda** (default 07:30): today's planner events plus alerts for
-  exams that are 7, 3 or 1 day(s) away (thresholds configurable).
+- **Morning agenda** (default 07:30): today's planner events, alerts for
+  exams that are 7, 3 or 1 day(s) away (thresholds configurable), plus a summary
+  of overdue tasks and tasks due in the next 24 hours.
 - **Evening habit nudge** (default 20:00): any habits not yet checked off.
 - Nothing scheduled and nothing due? No notification — it stays quiet.
 

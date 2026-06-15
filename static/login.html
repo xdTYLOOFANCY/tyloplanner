@@ -27,6 +27,9 @@
     <div id="tfaError" class="loginerror" style="display:none">Wrong code, try again.</div>
     <input name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="123456" autocomplete="one-time-code" style="text-align:center;font-size:20px;letter-spacing:6px">
     <button class="btn" type="submit">Verify</button>
+    <p class="muted" style="font-size:11px;margin-top:16px;text-align:center">
+      Lost device? Delete <code>totp_secret</code> key from <code>kv</code> table in SQLite database.
+    </p>
   </form>
 </div>
 <script>

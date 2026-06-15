@@ -1,14 +1,15 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v27";
-const ASSETS = ["/style.css", "/app.js", "/logo.svg", "/manifest.json",
+const CACHE = "tylo-v51";
+const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",
                 "/js/planner.js", "/js/exams.js", "/js/habits.js",
                 "/js/workouts.js", "/js/tasks.js", "/js/notes.js",
                 "/js/analytics.js", "/js/dashboard.js", "/js/backup.js",
-                "/js/files.js", "/js/settings.js"];
+                "/js/files.js", "/js/settings.js", "/js/marked.min.js",
+                "/js/offline.js"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }));

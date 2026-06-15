@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="offline-banner" class="offline-banner" style="display: none;"></div>
 <header>
   <img src="logo.svg" alt="" class="headlogo">
   <h1>TyloPlanner</h1>
@@ -82,7 +83,7 @@
       <button class="btn ghost small" onclick="moveWeek(1)">›</button>
       <button class="btn ghost small" onclick="openShortcutsModal()" style="margin-left:8px;">⌨️ Shortcuts</button>
       <div style="position:relative; display:inline-block; vertical-align:middle;">
-        <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()">
+        <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
         <div id="plannerSearchResults" style="display:none; position:absolute; top:28px; left:8px; width:300px; max-height:250px; overflow-y:auto; background:var(--panel); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; padding:4px 0; text-align:left;"></div>
       </div>
       <span class="label" id="weekLabel"></span>
@@ -144,7 +145,9 @@
     <div class="card">
       <div class="formrow">
         <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
-        <input id="taskDue" type="date" onkeydown="if(event.key==='Enter')addTask()">
+        <select id="taskCategory" style="min-width:120px;"></select>
+        <button class="btn ghost" onclick="openCategoriesModal()" style="padding:4px 8px; line-height:1; font-size:14px;" title="Manage categories">🏷️</button>
+        <input id="taskDue" type="datetime-local" onkeydown="if(event.key==='Enter')addTask()">
         <button class="btn" onclick="addTask()">Add</button>
       </div>
       <div id="taskList"></div>
@@ -156,11 +159,27 @@
     <div class="noteslayout">
       <div class="card notelist">
         <button class="btn" style="width:100%;margin-bottom:10px" onclick="newNote()">+ New note</button>
-        <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" style="width:100%;margin-bottom:8px">
+        <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" onkeydown="handleNoteSearchKeydown(event)" style="width:100%;margin-bottom:8px">
         <div id="noteList"></div>
       </div>
       <div class="card" id="noteEditor" style="display:none">
         <input id="noteTitle" placeholder="Title" oninput="noteChanged()">
+        <div class="note-header-bar">
+          <div class="note-stats">
+            <span id="noteWordCount">0 words</span>
+            <span class="note-stats-divider">|</span>
+            <span id="noteCharCount">0 characters</span>
+            <span class="note-stats-divider">|</span>
+            <span id="noteSaveStatus" class="note-status">Saved</span>
+          </div>
+          <div class="note-control-grid">
+            <span class="muted note-control-label">Read Mode</span>
+            <div class="note-control-widget">
+              <input type="checkbox" id="noteReadToggle" class="ios-toggle" onchange="toggleNoteReadMode()">
+            </div>
+            <button class="btn danger small note-control-delete" onclick="deleteNote()">Delete</button>
+          </div>
+        </div>
         <div class="note-toolbar" id="noteToolbar" onmousedown="event.preventDefault()">
           <button onclick="noteInsert('bold')" title="Bold"><b>B</b></button>
           <button onclick="noteInsert('italic')" title="Italic"><i>I</i></button>
@@ -168,41 +187,63 @@
           <button onclick="noteInsert('list')" title="Bulleted list">&#8226; List</button>
           <button onclick="noteInsert('numlist')" title="Numbered list">1. List</button>
           <button onclick="noteInsert('divider')" title="Divider">&#8212;</button>
+          <div style="flex:1"></div>
+          <div class="note-control-grid">
+            <span class="muted note-control-label">Split View</span>
+            <div class="note-control-widget">
+              <span class="hcheck on" id="noteSplitCheck" onclick="toggleNoteSplitOnly()">✓</span>
+            </div>
+            <div class="note-control-delete-spacer"></div>
+          </div>
         </div>
         <div class="note-search-bar">
-          <input id="noteBodySearch" placeholder="Search in note…" oninput="noteBodySearchInput()">
+          <input id="noteBodySearch" placeholder="Search in note…" oninput="noteBodySearchInput()" onkeydown="handleNoteBodySearchKeydown(event)">
           <button class="note-search-btn" onclick="noteBodySearchNav(-1)" title="Previous match">↑</button>
           <button class="note-search-btn" onclick="noteBodySearchNav(1)" title="Next match">↓</button>
           <span id="noteBodySearchCount" class="muted"></span>
         </div>
-        <textarea id="noteBody" placeholder="Write anything…" oninput="noteChanged()"></textarea>
-        <div id="noteView" style="display:none;min-height:120px;line-height:1.6;padding:4px 0"></div>
-        <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
-          <span class="muted" id="noteMeta"></span>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button class="btn small" id="noteModeBtn" onclick="toggleNoteMode()">View</button>
-            <button class="btn danger small" onclick="deleteNote()">Delete</button>
-          </div>
+        <div class="note-split-pane">
+          <textarea id="noteBody" placeholder="Write anything…" oninput="noteChanged()"></textarea>
+          <div id="noteView" class="markdown-body"></div>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="tab-files">
+  <section id="tab-files" style="position: relative;">
+    <!-- Drop Zone Overlay -->
+    <div id="fileDropOverlay" class="drop-overlay" style="display:none">
+      <div class="drop-overlay-content">Drop files to upload into <span id="dropFolderName">Root</span></div>
+    </div>
+
     <h2 class="pagetitle">Files</h2>
     <div class="fileslayout">
       <div class="card">
-        <div class="formrow">
-          <input type="file" id="fileInput" multiple>
-          <button class="btn" onclick="uploadFile()">Upload</button>
+        <!-- Folder navigation header -->
+        <div id="folderHeader"></div>
+
+        <!-- Folder directory list -->
+        <div id="folderList"></div>
+
+        <!-- Hidden input triggered by header upload button -->
+        <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFile()">
+
+        <div id="fileSelectionBar"></div>
+
+        <!-- Clean Toolbar -->
+        <div class="file-toolbar">
+          <div class="file-search-container">
+            <span class="search-icon">🔍</span>
+            <input id="fileSearch" placeholder="Search files…" oninput="renderFiles()" onkeydown="handleFileSearchKeydown(event)">
+          </div>
+          <div class="file-sort-group">
+            <span class="sort-label">Sort:</span>
+            <button id="fileSort-date" class="btn-sort active" onclick="setFileSort('date')">Date</button>
+            <button id="fileSort-name" class="btn-sort" onclick="setFileSort('name')">Name</button>
+            <button id="fileSort-size" class="btn-sort" onclick="setFileSort('size')">Size</button>
+          </div>
         </div>
-        <div class="formrow" style="margin-bottom:10px">
-          <span class="muted" style="font-size:12px;line-height:28px">Sort:</span>
-          <button id="fileSort-date" class="btn small" onclick="setFileSort('date')">Date</button>
-          <button id="fileSort-name" class="btn small ghost" onclick="setFileSort('name')">Name</button>
-          <button id="fileSort-size" class="btn small ghost" onclick="setFileSort('size')">Size</button>
-          <input id="fileSearch" placeholder="Search files…" oninput="renderFiles()" style="flex:1;min-width:160px;margin-left:8px">
-        </div>
+
         <div id="fileList"></div>
       </div>
     </div>
@@ -281,7 +322,13 @@
         <button class="btn" onclick="saveAccentColor()">Save accent color</button>
         <button class="btn ghost" onclick="resetAccentColor()">Reset</button>
       </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <label for="tabPersistenceToggle" class="muted" style="cursor:pointer;font-size:14px">Persist active tab on reload</label>
+        <input type="checkbox" id="tabPersistenceToggle" class="ios-toggle" onchange="toggleTabPersistence()">
+      </div>
     </div>
+
     <div class="card">
       <h3>🔐 Security</h3>
       <div id="securityBox"></div>
@@ -298,6 +345,51 @@
       <div id="backupList" class="card-scroll"><span class="muted">Loading…</span></div>
     </div>
   </section>
+  <div id="taskModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 400px; width: 90%;">
+      <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>
+      <input type="hidden" id="editTaskId">
+      
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Task Name</label>
+          <input type="text" id="editTaskName" style="width:100%; padding:6px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Category</label>
+          <select id="editTaskCategory" style="width:100%; padding:6px; box-sizing:border-box;"></select>
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Due Date &amp; Time</label>
+          <input type="datetime-local" id="editTaskDue" style="width:100%; padding:6px; box-sizing:border-box;">
+        </div>
+      </div>
+      
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px;">
+        <button class="btn ghost" onclick="closeTaskModal()">Cancel</button>
+        <button class="btn" onclick="saveTaskModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="categoriesModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 400px; width: 90%;">
+      <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Manage Categories</h3>
+      
+      <div class="formrow" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+        <input id="modalCategoryInput" placeholder="New category name..." style="flex:1; padding:6px;" onkeydown="if(event.key==='Enter')addModalCategory()">
+        <input type="color" id="modalCategoryColor" value="#4f8cff" style="width:36px; height:32px; padding:0; border:none; background:none; cursor:pointer;">
+        <button class="btn" onclick="addModalCategory()">Add</button>
+      </div>
+      
+      <div id="modalCategoriesList" class="card-scroll" style="max-height:200px; margin-bottom:16px;"></div>
+      
+      <div style="display:flex; justify-content:flex-end;">
+        <button class="btn" onclick="closeCategoriesModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="eventModal" class="modal" style="display:none">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 id="evModalTitleText" style="margin-bottom:16px; font-size:16px; font-weight:700;">Event Details</h3>
@@ -461,8 +553,24 @@
       </div>
     </div>
   </div>
+
+  <div id="mediaPreviewModal" class="modal" style="display:none">
+    <div class="modal-content" style="max-width: 800px; width: 95%; height: 85%; display: flex; flex-direction: column; box-sizing: border-box;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 id="mediaPreviewTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">File Preview</h3>
+        <button class="btn ghost small" onclick="closeMediaPreviewModal()" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+      </div>
+      <div id="mediaPreviewContainer" style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto; background:#121212; border-radius:4px; min-height:0; padding:10px;">
+        <!-- Embedded preview will go here -->
+      </div>
+      <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+        <button class="btn ghost" onclick="closeMediaPreviewModal()">Close</button>
+      </div>
+    </div>
+  </div>
 </main>
 <footer>TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</footer>
+<script src="js/marked.min.js"></script>
 <script type="module" src="app.js"></script>
 <nav id="bottomNav">
   <button data-tab="dashboard">

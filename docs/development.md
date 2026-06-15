@@ -19,6 +19,7 @@ SQLite (data/tyloplanner.db)
 - **Modular frontend, no build step.** `static/app.js` fetches the full app
   state (`GET /api/state`), keeps it in a global `S`, and coordinates rendering
   using ES modules in `static/js/`. Edit a file, refresh the browser, done.
+- **Offline Mode & Sync Queue.** Uses a service worker to cache frontend assets, and an IndexedDB database `tyloplanner_offline` to cache the application state (`state_cache`) and queue modifications (`api_queue`) offline. When the network connection is restored, the client automatically replays queued mutations sequentially to the backend.
 - **One database.** Tables are created automatically from `SCHEMA` on first
   run. The `kv` table holds settings, tokens and scheduler bookkeeping.
 
@@ -72,9 +73,12 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore (JSON payload). |
 | `GET /api/backups` | List all available automatic nightly backups. |
 | `POST /api/backups/<filename>/restore` | Restore database data from an automatic nightly backup. |
-| `POST /api/files/upload` | Upload a file (multipart `file` field). Returns `{id, filename, size}`. |
+| `POST /api/files/upload` | Upload a file (multipart `file` field). Supports optional `folder_id` form field. Returns `{id, filename, size}`. |
 | `GET /api/files/<id>/download` | Download a file as an attachment. |
+| `GET /api/files/<id>/view` | View/stream a file inline with correct mimetype (for media previews). |
 | `DELETE /api/files/<id>` | Delete a file (removes DB row and disk file). |
+| `DELETE /api/folders/<id>` | Delete a folder recursively (relocating child files and folders to the parent directory). |
+| `POST /api/files/move` | Batch move multiple files to a folder. Payload: `{file_ids: [...], folder_id: ...}`. |
 | `POST /api/ics/import` · `POST /api/ics/sync-now` · `DELETE /api/ics` | Calendar import, forced auto-sync, remove imported events. |
 | `GET /calendar.ics?key=…` | iCal feed (secret key instead of cookies). |
 | `POST /api/2fa/setup` · `GET /api/2fa/qr` · `POST /api/2fa/enable` · `POST /api/2fa/disable` | TOTP lifecycle. |

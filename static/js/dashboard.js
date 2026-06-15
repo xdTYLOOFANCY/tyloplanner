@@ -43,10 +43,10 @@ export function renderDashboard() {
     '<div class="stat"><div class="v">' + (Math.round(t.bikeKm * 10) / 10) + '</div><div class="l">bike km</div></div>' +
     '<div class="stat"><div class="v">' + Math.round(t.min) + '</div><div class="l">min</div></div></div></div>';
 
-  var open = S.tasks.filter(function(x) { return !x.done; });
+  var open = S.tasks.filter(function(x) { return !x.done && !x.parent_id; });
   html += '<div class="card"><h3>Open to-dos</h3><div class="card-scroll">';
   if (open.length) open.forEach(function(o) {
-    html += '<div class="checkbox-task"><input type="checkbox" onchange="toggleTask(\'' + o.id + '\',true)"><span>' + esc(o.name) + '</span></div>'; });
+    html += '<div class="checkbox-task"><span class="hcheck' + (o.done ? ' on' : '') + '" onclick="toggleTask(\'' + o.id + '\',true)">' + (o.done ? '✓' : '') + '</span><span>' + esc(o.name) + '</span></div>'; });
   else html += '<div class="muted">All clear \u2728</div>';
   html += '</div></div>';
 

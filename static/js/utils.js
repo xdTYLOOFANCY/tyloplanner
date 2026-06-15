@@ -40,12 +40,165 @@ export function toast(msg) {
 }
 
 // ---------- API ----------
+// ---------- API ----------
+function generateClientId() {
+  return Math.random().toString(36).substring(2, 14);
+}
+
+function optimisticUpdate(method, path, body, id, S, SET) {
+  if (path === "/api/settings") {
+    if (method === "POST" && body) {
+      Object.assign(SET, body);
+    }
+    return;
+  }
+
+  var parts = path.split("/");
+  var table = parts[2];
+  var pathId = parts[3];
+  var subRoute = parts[4];
+
+  if (!table || !S || !S[table]) return;
+
+  if (method === "POST") {
+    if (subRoute === "toggle") {
+      var date = body && body.date;
+      if (date) {
+        if (!S.habit_log) S.habit_log = [];
+        var idx = S.habit_log.findIndex(function(l) { return l.habit_id === pathId && l.date === date; });
+        if (idx > -1) {
+          S.habit_log.splice(idx, 1);
+        } else {
+          S.habit_log.push({ habit_id: pathId, date: date });
+        }
+      }
+    } else {
+      var existingTemp = null;
+      if (S[table] && S[table].find) {
+        existingTemp = S[table].find(function(x) {
+          if (body && body.id && x.id === body.id) return true;
+          if (!x.id || typeof x.id !== "string" || !x.id.startsWith("temp_")) return false;
+          for (var k in body) {
+            if (k !== "id" && body[k] !== x[k]) return false;
+          }
+          return true;
+        });
+      }
+
+      if (existingTemp) {
+        existingTemp.id = id;
+      } else {
+        var newRow = Object.assign({}, body);
+        delete newRow.id;
+        newRow.id = id;
+        S[table].push(newRow);
+      }
+    }
+  } else if (method === "PUT") {
+    var idx = S[table].findIndex(function(item) { return item.id === id; });
+    if (idx > -1) {
+      Object.assign(S[table][idx], body);
+    }
+  } else if (method === "DELETE") {
+    S[table] = S[table].filter(function(item) { return item.id !== id; });
+    if (table === "habits" && S.habit_log) {
+      S.habit_log = S.habit_log.filter(function(l) { return l.habit_id !== id; });
+    }
+  }
+}
+
 export async function api(method, path, body) {
+  var offMod = await import('./offline.js');
+  var stateMod = await import('./state.js');
+
+  var count = await offMod.getQueueCount();
+  var isOfflineOrQueued = !navigator.onLine || count > 0;
+
+  if (isOfflineOrQueued) {
+    if (method === "GET") {
+      if (path === "/api/state") {
+        var cachedState = await offMod.getCache("state");
+        if (cachedState) return cachedState;
+        throw new Error("No cached state available offline");
+      }
+      if (path === "/api/settings") {
+        var cachedSettings = await offMod.getCache("settings");
+        if (cachedSettings) return cachedSettings;
+        throw new Error("No cached settings available offline");
+      }
+      throw new Error("Cannot fetch GET " + path + " offline");
+    } else if (method === "POST" || method === "PUT" || method === "DELETE") {
+      var isToggle = path.includes("/toggle");
+      var isSettings = path === "/api/settings";
+      var parts = path.split("/");
+      var pathId = parts[3] || null;
+
+      var generatedId = null;
+      if (method === "POST" && !isToggle && !isSettings) {
+        generatedId = generateClientId();
+      }
+      var targetId = generatedId || pathId;
+
+      var queueId = generateClientId();
+      var queueItem = {
+        id: queueId,
+        method: method,
+        path: path,
+        data: body,
+        timestamp: Date.now()
+      };
+
+      await offMod.addToQueue(queueItem);
+
+      // Mutate local state
+      var S = stateMod.S;
+      var SET = stateMod.SET;
+      if (!S) {
+        S = await offMod.getCache("state");
+        stateMod.setS(S);
+      }
+      if (!SET) {
+        SET = await offMod.getCache("settings");
+        stateMod.setSET(SET);
+      }
+
+      optimisticUpdate(method, path, body, targetId, S, SET);
+
+      if (S) await offMod.setCache("state", S);
+      if (SET) await offMod.setCache("settings", SET);
+
+      await offMod.updateOfflineBanner();
+
+      if (navigator.onLine) {
+        offMod.syncQueue(window.refreshApp);
+      }
+
+      if (method === "POST") {
+        if (isToggle) {
+          var isToggled = S && S.habit_log && S.habit_log.some(function(l) { return l.habit_id === pathId && l.date === body.date; });
+          return { on: !!isToggled };
+        }
+        return { id: targetId };
+      }
+      return { ok: true };
+    }
+  }
+
   var opt = { method: method, headers: { "Content-Type": "application/json" } };
   if (body !== undefined) opt.body = JSON.stringify(body);
   var r = await fetch(path, opt);
   if (!r.ok) { var e = await r.json().catch(function() { return { error: r.statusText }; }); throw new Error(e.error || "request failed"); }
-  return r.json();
+  var res = await r.json();
+
+  if (method === "GET") {
+    if (path === "/api/state") {
+      await offMod.setCache("state", res);
+    } else if (path === "/api/settings") {
+      await offMod.setCache("settings", res);
+    }
+  }
+
+  return res;
 }
 
 // ---------- shared actions ----------

@@ -48,11 +48,14 @@ CREATE TABLE IF NOT EXISTS workouts(
   note TEXT, source TEXT DEFAULT 'manual', ext_id TEXT);
 CREATE TABLE IF NOT EXISTS tasks(
   id TEXT PRIMARY KEY, name TEXT, done INTEGER DEFAULT 0,
-  created TEXT, completed_at TEXT, due TEXT);
+  created TEXT, completed_at TEXT, due TEXT,
+  category TEXT, order_index INTEGER DEFAULT 0, due_date TEXT, parent_id TEXT);
 CREATE TABLE IF NOT EXISTS notes(
   id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER, is_pinned INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS files(
-  id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER, is_pinned INTEGER DEFAULT 0);
+  id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER, is_pinned INTEGER DEFAULT 0, folder_id TEXT);
+CREATE TABLE IF NOT EXISTS folders(
+  id TEXT PRIMARY KEY, name TEXT, parent_id TEXT, icon TEXT);
 CREATE TABLE IF NOT EXISTS shortcuts(
   id TEXT PRIMARY KEY, name TEXT, url TEXT, icon TEXT);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
@@ -64,9 +67,10 @@ TABLES = {
     "exams":    ["name", "date", "grade", "ects"],
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
-    "tasks":    ["name", "done", "created", "completed_at", "due"],
+    "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id"],
     "notes":    ["title", "body", "updated", "is_pinned"],
-    "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned"],
+    "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
+    "folders":  ["name", "parent_id", "icon"],
     "shortcuts":["name", "url", "icon"],
 }
 
@@ -123,6 +127,8 @@ SETTING_DEFAULTS = {
     "show_shortcuts": "1",
     "shortcut_order": "",
     "disabled_shortcuts": "",
+    "persist_active_tab": "1",
+    "task_categories": "School,Work,Personal",
 }
 
 

@@ -3,23 +3,39 @@
 // inline onclick/onchange handlers in the HTML keep working.
 "use strict";
 
-import { refresh } from './js/state.js';
+import { refresh, SET } from './js/state.js';
 import { todayStr, esc, delRow as _delRow } from './js/utils.js';
+import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js';
 import { exportData, importData } from './js/backup.js';
 import { renderDashboard, addShortcut as _addShortcut } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, editEvent, closeEventModal, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, openShortcutsModal, closeShortcutsModal, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, closeEventModal, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, openShortcutsModal, closeShortcutsModal, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, handlePlannerSearchKeydown } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
-import { addTask as _addTask, toggleTask as _toggleTask, renderTasks } from './js/tasks.js';
+import {
+  addTask as _addTask, toggleTask as _toggleTask, renderTasks, addSubtask as _addSubtask,
+  dragTaskStart, dragTaskOver, dragTaskEnd, dropTask,
+  openCategoriesModal, closeCategoriesModal,
+  addModalCategory as _addModalCategory, deleteModalCategory as _deleteModalCategory,
+  updateModalCategoryColor as _updateModalCategoryColor, renameModalCategory as _renameModalCategory,
+  openTaskModal, closeTaskModal, saveTaskModal as _saveTaskModal
+} from './js/tasks.js';
 import {
   renderNotes, newNote as _newNote, selectNote, openNote, noteChanged, deleteNote as _deleteNote,
   toggleNotePin, noteSearchInput, noteBodySearchInput, noteBodySearchNav,
-  toggleNoteMode, noteInsert
+  toggleNoteMode, noteInsert, toggleNoteReadMode, toggleNoteSplitOnly,
+  handleNoteSearchKeydown, handleNoteBodySearchKeydown
 } from './js/notes.js';
-import { renderFiles, uploadFile as _uploadFile, delFile as _delFile, toggleFilePin, setFileSort } from './js/files.js';
+import {
+  renderFiles, uploadFile as _uploadFile, delFile as _delFile, toggleFilePin, setFileSort,
+  navigateToFolder, createFolderPrompt, renameFolderPrompt, changeFolderIconPrompt, deleteFolderConfirm,
+  previewFile, closeMediaPreviewModal, renameFilePrompt,
+  onFileDragStart, onFileDragEnd, onFolderDragOver, onFolderDragLeave, onFolderDrop,
+  toggleSelectAllFiles, onFileSelectChange, moveSelectedFilesToFolder, deleteSelectedFiles,
+  clearFileSelection, handleFileSearchKeydown
+} from './js/files.js';
 import {
   renderSettings, saveNotifySettings as _saveNotifySettings, testNotify,
   saveCalSync as _saveCalSync, calSyncNow as _calSyncNow,
@@ -30,7 +46,9 @@ import {
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
   saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
   toggleShowShortcuts as _toggleShowShortcuts, reorderShortcut as _reorderShortcut,
-  toggleItem as _toggleItem
+  toggleItem as _toggleItem, toggleTabPersistence as _toggleTabPersistence,
+  addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
+  updateCategoryColor as _updateCategoryColor
 } from './js/settings.js';
 
 // ---- renderAll used by refresh() ----
@@ -53,10 +71,45 @@ window.toggleHabit = function(id, iso) { _toggleHabit(id, iso, renderHabits, ren
 window.addWorkout = function() { _addWorkout(R); };
 window.addTask = function() { _addTask(R); };
 window.toggleTask = function(id, done) { _toggleTask(id, done, R); };
+window.addSubtask = function(parentId) { _addSubtask(parentId, R); };
+window.dragTaskStart = dragTaskStart;
+window.dragTaskOver = dragTaskOver;
+window.dragTaskEnd = dragTaskEnd;
+window.dropTask = function(e, dropId) { dropTask(e, dropId, R); };
+
+window.openCategoriesModal = openCategoriesModal;
+window.closeCategoriesModal = closeCategoriesModal;
+window.addModalCategory = function() { _addModalCategory(R); };
+window.deleteModalCategory = function(catName) { _deleteModalCategory(catName, R); };
+window.updateModalCategoryColor = function(name, color) { _updateModalCategoryColor(name, color, R); };
+window.renameModalCategory = function(oldName, newName) { _renameModalCategory(oldName, newName, R); };
+
+window.openTaskModal = openTaskModal;
+window.closeTaskModal = closeTaskModal;
+window.saveTaskModal = function() { _saveTaskModal(R); };
 window.newNote = function() { _newNote(R); };
 window.deleteNote = function() { _deleteNote(R); };
 window.uploadFile = function() { _uploadFile(R); };
 window.delFile = function(id) { _delFile(id, R); };
+window.navigateToFolder = navigateToFolder;
+window.createFolderPrompt = function() { createFolderPrompt(R); };
+window.renameFolderPrompt = function(id, oldName) { renameFolderPrompt(id, oldName, R); };
+window.changeFolderIconPrompt = function(id, oldIcon) { changeFolderIconPrompt(id, oldIcon, R); };
+window.deleteFolderConfirm = function(id) { deleteFolderConfirm(id, R); };
+window.renameFilePrompt = function(id, oldName) { renameFilePrompt(id, oldName, R); };
+window.previewFile = previewFile;
+window.closeMediaPreviewModal = closeMediaPreviewModal;
+window.onFileDragStart = onFileDragStart;
+window.onFileDragEnd = onFileDragEnd;
+window.onFolderDragOver = onFolderDragOver;
+window.onFolderDragLeave = onFolderDragLeave;
+window.onFolderDrop = onFolderDrop;
+window.toggleSelectAllFiles = toggleSelectAllFiles;
+window.onFileSelectChange = onFileSelectChange;
+window.moveSelectedFilesToFolder = moveSelectedFilesToFolder;
+window.deleteSelectedFiles = deleteSelectedFiles;
+window.clearFileSelection = clearFileSelection;
+window.refreshApp = R;
 window.importData = function(ev) { importData(ev, R); };
 window.saveNotifySettings = function() { _saveNotifySettings(R); };
 window.saveCalSync = function() { _saveCalSync(R); };
@@ -76,7 +129,12 @@ window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
 window.searchEvents = searchEvents;
 window.hideSearchSoon = hideSearchSoon;
 window.navigateToAndEditEvent = navigateToAndEditEvent;
+window.handlePlannerSearchKeydown = handlePlannerSearchKeydown;
 window.toggleItem = function(id) { _toggleItem(id, R); };
+window.toggleTabPersistence = function() { _toggleTabPersistence(R); };
+window.addCustomCategory = function() { _addCustomCategory(R); };
+window.deleteCategory = function(catName) { _deleteCategory(catName, R); };
+window.updateCategoryColor = function(name, color) { _updateCategoryColor(name, color, R); };
 
 window.dragShortcutStart = function(e, id) {
   e.dataTransfer.setData("text/plain", id);
@@ -111,11 +169,17 @@ window.noteChanged = noteChanged;
 window.noteSearchInput = noteSearchInput;
 window.noteBodySearchInput = noteBodySearchInput;
 window.noteBodySearchNav = noteBodySearchNav;
+window.handleNoteSearchKeydown = handleNoteSearchKeydown;
+window.handleNoteBodySearchKeydown = handleNoteBodySearchKeydown;
 window.toggleNoteMode = toggleNoteMode;
+window.toggleNoteReadMode = toggleNoteReadMode;
+window.toggleNoteSplitOnly = toggleNoteSplitOnly;
 window.noteInsert = noteInsert;
 window.toggleNotePin = toggleNotePin;
 window.toggleFilePin = toggleFilePin;
 window.setFileSort = setFileSort;
+window.renderFiles = renderFiles;
+window.handleFileSearchKeydown = handleFileSearchKeydown;
 window.toggleTheme = toggleTheme;
 window.exportData = exportData;
 window.testNotify = testNotify;
@@ -131,14 +195,45 @@ tabsNav.addEventListener("click", function(e) {
   b.classList.add("active");
   document.querySelectorAll("main section").forEach(function(s) { s.classList.remove("active"); });
   document.getElementById("tab-" + b.dataset.tab).classList.add("active");
+  if (!SET || SET.persist_active_tab !== "0") {
+    localStorage.setItem("active_tab", b.dataset.tab);
+  } else {
+    localStorage.removeItem("active_tab");
+  }
 });
 
 // ---------- boot ----------
 document.getElementById("wDate").value = todayStr();
 applyTheme();
+
+// Restore active tab
+var savedTab = localStorage.getItem("active_tab");
+if (savedTab) {
+  var btn = document.querySelector("#tabs button[data-tab='" + savedTab + "']");
+  if (btn) {
+    tabsNav.querySelectorAll("button").forEach(function(x) { x.classList.remove("active"); });
+    btn.classList.add("active");
+    document.querySelectorAll("main section").forEach(function(s) { s.classList.remove("active"); });
+    var sect = document.getElementById("tab-" + savedTab);
+    if (sect) sect.classList.add("active");
+  }
+}
+
 if ("serviceWorker" in navigator) { navigator.serviceWorker.register("/sw.js").catch(function() {}); }
+
+window.addEventListener("online", function() {
+  syncQueue(R);
+});
+window.addEventListener("offline", function() {
+  updateOfflineBanner();
+});
+
 refresh(renderAll).then(function() {
   setPlannerRefresh(R);
+  updateOfflineBanner();
+  if (navigator.onLine) {
+    syncQueue(R);
+  }
   if (new URLSearchParams(location.search).get("strava") === "connected") {
     var toast_ = document.createElement("div"); toast_.className = "toast"; toast_.textContent = "Strava connected! Syncing\u2026";
     document.body.appendChild(toast_); setTimeout(function() { toast_.remove(); }, 2500);
@@ -146,5 +241,6 @@ refresh(renderAll).then(function() {
     history.replaceState({}, "", "/");
   }
 }).catch(function(e) {
+  updateOfflineBanner();
   document.getElementById("dashCards").innerHTML = '<div class="card">Could not reach the backend: ' + esc(e.message) + '</div>';
 });

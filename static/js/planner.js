@@ -198,9 +198,9 @@ export function renderPlanner() {
       html += '<div class="day-col' + (iso === today ? ' today' : '') + '" data-iso="' + iso + '">';
       html += '<div class="day-col-header"><span class="dname">' + DAYS[(d.getDay()+6)%7] + ' ' + d.getDate() + '</span><button class="btn ghost small" onclick="openAdd(\'' + iso + '\')">+</button></div>';
       
-      html += '<div class="all-day-bar">';
+      html += '<div class="all-day-bar" onclick="if (event.target === this) openAdd(\'' + iso + '\')">';
       tDue.forEach(function(t) {
-        html += '<div class="event" style="border-left-color:var(--muted); cursor:pointer"><label style="cursor:pointer; display:flex; align-items:flex-start; gap:6px"><input type="checkbox" onchange="toggleTask(\'' + t.id + '\',this.checked)" style="accent-color:var(--green);margin-top:2px"> <span>' + esc(t.name) + '</span></label></div>';
+        html += '<div class="event" style="border-left-color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:6px"><span class="hcheck' + (t.done ? ' on' : '') + '" onclick="toggleTask(\'' + t.id + '\',' + !t.done + ')" style="flex-shrink:0; width:16px; height:16px; line-height:16px; border-radius:4px; font-size:10px;">' + (t.done ? '✓' : '') + '</span> <span>' + esc(t.name) + '</span></div>';
       });
       allDayEvs.forEach(function(e) {
         var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
@@ -455,7 +455,10 @@ export function renderPlanner() {
     var allDayH = 0;
     document.querySelectorAll('.day-col-header').forEach(function(el) { if (el.offsetHeight > headerH) headerH = el.offsetHeight; });
     document.querySelectorAll('.all-day-bar').forEach(function(el) { if (el.offsetHeight > allDayH) allDayH = el.offsetHeight; });
-    document.querySelectorAll('.all-day-bar').forEach(function(el) { el.style.height = allDayH + 'px'; });
+    document.querySelectorAll('.all-day-bar').forEach(function(el) {
+      el.style.height = allDayH + 'px';
+      el.style.top = headerH + 'px';
+    });
     var spacer = document.querySelector('.time-axis-spacer');
     if (spacer) spacer.style.height = (headerH + allDayH) + 'px';
     
@@ -1181,7 +1184,6 @@ export async function delEventModal(refresh) {
   if (eventToDelete) {
     var deletedEvent = Object.assign({}, eventToDelete);
     var postData = Object.assign({}, deletedEvent);
-    delete postData.id;
     delete postData.virtualDate;
     delete postData._left;
     delete postData._width;
@@ -1373,6 +1375,19 @@ export function searchEvents() {
     resultsDiv.innerHTML = html;
   }
   resultsDiv.style.display = "block";
+}
+
+export function handlePlannerSearchKeydown(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    var resultsDiv = document.getElementById("plannerSearchResults");
+    if (resultsDiv && resultsDiv.style.display !== "none") {
+      var firstItem = resultsDiv.querySelector(".search-result-item");
+      if (firstItem) {
+        firstItem.click();
+      }
+    }
+  }
 }
 
 export function hideSearchSoon() {

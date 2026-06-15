@@ -29,16 +29,19 @@ codebase is small enough to read in an afternoon and make your own.
 
 - **Dashboard** — today's plan, habits, upcoming deadlines, weekly training, to-do list, and customizable website shortcuts (with custom ordering, toggling, and visibility) at a glance.
 - **Week planner** — drag-and-drop event scheduling, drag-to-select for scheduling custom time ranges, interactive event resizing, automatic scrolling to the current time, location pins, and a smart overlapping layout (greedy interval-clustering). Supports subscribing to/exporting a built-in calendar feed.
-- **Calendar auto-sync** — keep your schedule up to date by syncing university timetables or other shared calendar feeds (iCal URLs) at configurable intervals.
+- **Calendar auto-sync** — keep your schedule up to date by syncing university timetables or other shared calendar feeds (iCal URLs) at configurable intervals. Automatically parses event locations and descriptions, and offsets UTC/timezone-aware dates to match the server's local timezone.
 - **Exams & grades** — countdowns to every exam, ECTS-weighted grade point average tracking, and task/exam reminders.
 - **Habits** — check off daily habits, track completion streaks, and receive automated evening nudges for incomplete items.
 - **Workouts** — log runs, rides, and gym sessions manually or sync them automatically with **Strava** integration.
+- **Advanced Task Management** — organize tasks using custom categories with styled color tags, drag-and-drop prioritization, subtask checklists, and datetime-local due date/time fields.
+- **Notes Editor** — compose rich notes with `marked.js` markdown rendering, wiki-style cross-links (`[[Note Title]]`), a dual-pane split editor layout, real-time word/character count, per-note layout persistence, and debounced background autosaving.
+- **File Manager** — upload documents/images via a full-screen drag-and-drop upload zone, preview media inline, organize with nested directories and breadcrumb navigation, and manage files in bulk.
 - **Analytics** — 12-month visual history of workouts, distance, study hours, and habit consistency, plus all-time totals.
-- **Notes & Files** — compose rich markdown notes, upload documents/images, filter with full-text/internal search, and organize using favorited status highlights.
 - **Keyboard shortcuts** — navigate swiftly across tabs and weeks with customizable global hotkeys (`t`, `w`, `d`, `m`, `n`, `p`, `c`) and a visual key customization modal.
 - **Theming & Customization** — toggle dark/light modes and personalize the UI with a persistent custom accent color picker.
-- **Notifications** — morning agendas and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) (completely free, no account required).
-- **Mobile app (PWA)** — *Add to Home Screen* on your mobile device for a fullscreen app experience complete with a mobile-friendly bottom navigation bar.
+- **Notifications** — morning agendas (including overdue/upcoming tasks), evening habit nudges, and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) (completely free, no account required).
+- **Mobile app (PWA) & Offline Sync** — install as a PWA for a fullscreen mobile app. IndexedDB offline sync queues your actions (creating/editing/deleting notes, tasks, events) while offline and replays them automatically when your connection is restored.
+
 - **Secure & Resilient** — session-based authentication, optional TOTP two-factor authentication (2FA), nightly automated database backups, and one-click restore directly from the settings panel.
 
 ## Quick start

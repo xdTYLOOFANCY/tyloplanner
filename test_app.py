@@ -18,6 +18,7 @@ import os
 import tempfile
 import unittest
 import warnings
+from datetime import datetime, timezone
 
 # app.py opens SQLite connections via "with db() as con:", which commits but
 # does not close the connection — harmless here, but it spams ResourceWarning
@@ -324,12 +325,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         j = r.get_json()
         self.assertEqual(j["accent_color"], "#4f8cff")
+        self.assertEqual(j["persist_active_tab"], "1")
 
     def test_settings_update(self):
-        r = self.c.post("/api/settings", json={"accent_color": "#ff0000"})
+        r = self.c.post("/api/settings", json={"accent_color": "#ff0000", "persist_active_tab": "0"})
         self.assertEqual(r.status_code, 200)
         j = self.c.get("/api/settings").get_json()
         self.assertEqual(j["accent_color"], "#ff0000")
+        self.assertEqual(j["persist_active_tab"], "0")
 
 
 class BackupTests(unittest.TestCase):
@@ -404,6 +407,293 @@ class BackupTests(unittest.TestCase):
         self.assertEqual(r4.status_code, 400)
 
 
+class FolderAndPreviewTests(unittest.TestCase):
+    """Folders and media view endpoints."""
+
+    def setUp(self):
+        reset_db()
+        with helpers.db() as con:
+            con.execute("DELETE FROM files")
+            con.execute("DELETE FROM folders")
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_create_and_list_folders(self):
+        # Create folder
+        r = self.c.post("/api/folders", json={"name": "My Folder", "parent_id": None})
+        self.assertEqual(r.status_code, 200)
+        fid = r.get_json()["id"]
+
+        # Check in state
+        state = self.c.get("/api/state").get_json()
+        self.assertIn("folders", state)
+        self.assertEqual(len(state["folders"]), 1)
+        self.assertEqual(state["folders"][0]["id"], fid)
+        self.assertEqual(state["folders"][0]["name"], "My Folder")
+        self.assertIsNone(state["folders"][0]["parent_id"])
+
+    def test_folder_custom_icon(self):
+        # Create folder with custom icon
+        r = self.c.post("/api/folders", json={"name": "My Folder", "parent_id": None, "icon": "📓"})
+        self.assertEqual(r.status_code, 200)
+        fid = r.get_json()["id"]
+
+        # Verify icon in state
+        state = self.c.get("/api/state").get_json()
+        self.assertEqual(state["folders"][0]["icon"], "📓")
+
+        # Update folder icon
+        r_update = self.c.put("/api/folders/%s" % fid, json={"icon": "💻"})
+        self.assertEqual(r_update.status_code, 200)
+
+        # Verify updated icon in state
+        state = self.c.get("/api/state").get_json()
+        self.assertEqual(state["folders"][0]["icon"], "💻")
+
+    def test_upload_file_with_folder_id(self):
+        # Create folder first
+        r_f = self.c.post("/api/folders", json={"name": "Docs", "parent_id": None})
+        fid = r_f.get_json()["id"]
+
+        # Upload file with folder_id
+        data = {
+            "file": (io.BytesIO(b"my pdf content"), "doc.pdf"),
+            "folder_id": fid
+        }
+        r = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data)
+        self.assertEqual(r.status_code, 200)
+        file_id = r.get_json()["id"]
+
+        # Verify folder_id is set in DB via state
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0]["id"], file_id)
+        self.assertEqual(files[0]["folder_id"], fid)
+
+    def test_view_file_returns_correct_mime_and_bytes(self):
+        # Upload an image file
+        data = {"file": (io.BytesIO(b"PNG-DATA"), "image.png")}
+        fid = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
+
+        # Request it via the view endpoint
+        r = self.c.get("/api/files/%s/view" % fid)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data, b"PNG-DATA")
+        self.assertEqual(r.mimetype, "image/png")
+        self.assertNotIn("attachment", r.headers.get("Content-Disposition", ""))
+
+    def test_delete_folder_relocates_contents(self):
+        # Create parent folder A and child folder B
+        fid_a = self.c.post("/api/folders", json={"name": "A", "parent_id": None}).get_json()["id"]
+        fid_b = self.c.post("/api/folders", json={"name": "B", "parent_id": fid_a}).get_json()["id"]
+
+        # Upload file to B
+        data = {"file": (io.BytesIO(b"file in B"), "fileB.txt"), "folder_id": fid_b}
+        file_id = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
+
+        # Delete folder B
+        r_del = self.c.delete("/api/folders/%s" % fid_b)
+        self.assertEqual(r_del.status_code, 200)
+
+        # Check state:
+        state = self.c.get("/api/state").get_json()
+        
+        # Folder B should be deleted
+        folders = state["folders"]
+        self.assertEqual(len(folders), 1)
+        self.assertEqual(folders[0]["id"], fid_a)
+
+        # File should now be in Folder A (relocated to B's parent)
+        files = state["files"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0]["id"], file_id)
+        self.assertEqual(files[0]["folder_id"], fid_a)
+
+    def test_batch_move_files(self):
+        # Create folder
+        fid = self.c.post("/api/folders", json={"name": "Target Folder", "parent_id": None}).get_json()["id"]
+
+        # Upload two files at root
+        fid1 = self.c.post("/api/files/upload", content_type="multipart/form-data", data={"file": (io.BytesIO(b"file 1"), "f1.txt")}).get_json()["id"]
+        fid2 = self.c.post("/api/files/upload", content_type="multipart/form-data", data={"file": (io.BytesIO(b"file 2"), "f2.txt")}).get_json()["id"]
+
+        # Verify they are at root
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertEqual(len(files), 2)
+        self.assertIsNone(files[0]["folder_id"])
+        self.assertIsNone(files[1]["folder_id"])
+
+        # Batch move them to Target Folder
+        r_move = self.c.post("/api/files/move", json={"file_ids": [fid1, fid2], "folder_id": fid})
+        self.assertEqual(r_move.status_code, 200)
+
+        # Verify they are now in the folder
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertEqual(files[0]["folder_id"], fid)
+        self.assertEqual(files[1]["folder_id"], fid)
+
+        # Batch move them back to root (None/NULL)
+        r_move_back = self.c.post("/api/files/move", json={"file_ids": [fid1, fid2], "folder_id": None})
+        self.assertEqual(r_move_back.status_code, 200)
+
+        # Verify they are back at root
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertIsNone(files[0]["folder_id"])
+        self.assertIsNone(files[1]["folder_id"])
+
+
+class CalendarSyncTests(unittest.TestCase):
+    """Calendar ICS importing and syncing tests (timezone, location, description)."""
+
+    def setUp(self):
+        reset_db()
+        with helpers.db() as con:
+            con.execute("DELETE FROM events")
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_import_floating_time(self):
+        ics_data = (
+            "BEGIN:VCALENDAR\n"
+            "BEGIN:VEVENT\n"
+            "DTSTART:20260613T120000\n"
+            "DTEND:20260613T133000\n"
+            "SUMMARY:Floating Event\\, Test\\; Escape\\nNewline\n"
+            "LOCATION:Office 404\\, Floor 4\n"
+            "DESCRIPTION:Meeting with team\\; discuss things\\nand coding\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR"
+        )
+        r = self.c.post("/api/ics/import", data={"file": (io.BytesIO(ics_data.encode("utf-8")), "test.ics")})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["added"], 1)
+
+        events = self.c.get("/api/state").get_json()["events"]
+        self.assertEqual(len(events), 1)
+        e = events[0]
+        self.assertEqual(e["date"], "2026-06-13")
+        self.assertEqual(e["start"], "12:00")
+        self.assertEqual(e["end"], "13:30")
+        self.assertEqual(e["title"], "Floating Event, Test; Escape Newline")
+        self.assertEqual(e["location"], "Office 404, Floor 4")
+        self.assertEqual(e["description"], "Meeting with team; discuss things\nand coding")
+
+    def test_import_utc_time(self):
+        # 12:00:00 UTC
+        ics_data = (
+            "BEGIN:VCALENDAR\n"
+            "BEGIN:VEVENT\n"
+            "DTSTART:20260613T120000Z\n"
+            "DTEND:20260613T133000Z\n"
+            "SUMMARY:UTC Event\n"
+            "LOCATION:Online\n"
+            "DESCRIPTION:Remote call\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR"
+        )
+        r = self.c.post("/api/ics/import", data={"file": (io.BytesIO(ics_data.encode("utf-8")), "test.ics")})
+        self.assertEqual(r.status_code, 200)
+
+        dt_start = datetime(2026, 6, 13, 12, 0, 0, tzinfo=timezone.utc).astimezone()
+        dt_end = datetime(2026, 6, 13, 13, 30, 0, tzinfo=timezone.utc).astimezone()
+
+        events = self.c.get("/api/state").get_json()["events"]
+        self.assertEqual(len(events), 1)
+        e = events[0]
+        self.assertEqual(e["date"], dt_start.strftime("%Y-%m-%d"))
+        self.assertEqual(e["start"], dt_start.strftime("%H:%M"))
+        if dt_end.strftime("%Y-%m-%d") == dt_start.strftime("%Y-%m-%d"):
+            self.assertEqual(e["end"], dt_end.strftime("%H:%M"))
+
+    def test_import_tzid_time(self):
+        # 12:00:00 New York Time
+        ics_data = (
+            "BEGIN:VCALENDAR\n"
+            "BEGIN:VEVENT\n"
+            "DTSTART;TZID=America/New_York:20260613T120000\n"
+            "DTEND;TZID=America/New_York:20260613T133000\n"
+            "SUMMARY:New York Event\n"
+            "LOCATION:New York Office\n"
+            "DESCRIPTION:In person\n"
+            "END:VEVENT\n"
+            "END:VCALENDAR"
+        )
+        r = self.c.post("/api/ics/import", data={"file": (io.BytesIO(ics_data.encode("utf-8")), "test.ics")})
+        self.assertEqual(r.status_code, 200)
+
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("America/New_York")
+        dt_start = datetime(2026, 6, 13, 12, 0, 0, tzinfo=tz).astimezone()
+        dt_end = datetime(2026, 6, 13, 13, 30, 0, tzinfo=tz).astimezone()
+
+        events = self.c.get("/api/state").get_json()["events"]
+        self.assertEqual(len(events), 1)
+        e = events[0]
+        self.assertEqual(e["date"], dt_start.strftime("%Y-%m-%d"))
+        self.assertEqual(e["start"], dt_start.strftime("%H:%M"))
+        if dt_end.strftime("%Y-%m-%d") == dt_start.strftime("%Y-%m-%d"):
+            self.assertEqual(e["end"], dt_end.strftime("%H:%M"))
+
+
+class AdvancedTaskManagementTests(unittest.TestCase):
+    """Tests for tags, sorting, due dates/times, and subtasks in tasks."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_task_crud_with_advanced_columns(self):
+        # Create a task with category, order_index, due_date
+        r = self.c.post("/api/tasks", json={
+            "name": "Math Homework",
+            "category": "School",
+            "order_index": 5,
+            "due_date": "2026-06-15T10:00",
+            "due": "2026-06-15"
+        })
+        self.assertEqual(r.status_code, 200)
+        tid = r.get_json()["id"]
+
+        # Verify columns are set in state
+        tasks = self.c.get("/api/state").get_json()["tasks"]
+        self.assertEqual(len(tasks), 1)
+        t = tasks[0]
+        self.assertEqual(t["name"], "Math Homework")
+        self.assertEqual(t["category"], "School")
+        self.assertEqual(t["order_index"], 5)
+        self.assertEqual(t["due_date"], "2026-06-15T10:00")
+        self.assertIsNone(t["parent_id"])
+
+        # Update order_index and category
+        r_update = self.c.put("/api/tasks/%s" % tid, json={
+            "order_index": 2,
+            "category": "Work"
+        })
+        self.assertEqual(r_update.status_code, 200)
+
+        # Create a subtask
+        r_sub = self.c.post("/api/tasks", json={
+            "name": "Part 1",
+            "parent_id": tid
+        })
+        self.assertEqual(r_sub.status_code, 200)
+        sub_id = r_sub.get_json()["id"]
+
+        # Verify state includes subtask
+        tasks = self.c.get("/api/state").get_json()["tasks"]
+        self.assertEqual(len(tasks), 2)
+        
+        parent = next(x for x in tasks if x["id"] == tid)
+        sub = next(x for x in tasks if x["id"] == sub_id)
+        
+        self.assertEqual(parent["category"], "Work")
+        self.assertEqual(parent["order_index"], 2)
+        self.assertEqual(sub["name"], "Part 1")
+        self.assertEqual(sub["parent_id"], tid)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
 
