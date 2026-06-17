@@ -11,6 +11,7 @@ import uuid
 import secrets
 import sqlite3
 from datetime import datetime
+from contextlib import contextmanager
 
 import requests
 
@@ -59,7 +60,10 @@ CREATE TABLE IF NOT EXISTS folders(
   id TEXT PRIMARY KEY, name TEXT, parent_id TEXT, icon TEXT);
 CREATE TABLE IF NOT EXISTS shortcuts(
   id TEXT PRIMARY KEY, name TEXT, url TEXT, icon TEXT);
+CREATE TABLE IF NOT EXISTS study_sessions(
+  id TEXT PRIMARY KEY, subject TEXT, "date" TEXT, duration REAL, completed INTEGER);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS push_subscriptions(id TEXT PRIMARY KEY, subscription_json TEXT, created_at INTEGER);
 """
 
 # whitelisted writable columns per table (id is managed by the server)
@@ -73,14 +77,21 @@ TABLES = {
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
     "folders":  ["name", "parent_id", "icon"],
     "shortcuts":["name", "url", "icon"],
+    "study_sessions": ["subject", "date", "duration", "completed"],
 }
 
 
 # ---------------- database ----------------
+@contextmanager
 def db():
     con = sqlite3.connect(DB_PATH)
+    con.execute("PRAGMA journal_mode=WAL;")
     con.row_factory = sqlite3.Row
-    return con
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
 
 
 def _ensure_column(con, table, col, decl):
@@ -130,6 +141,11 @@ SETTING_DEFAULTS = {
     "disabled_shortcuts": "",
     "persist_active_tab": "1",
     "task_categories": "School,Work,Personal",
+    "app_theme_style": "default",
+    "dashboard_style": "glass",
+    "dashboard_desktop_layout": "",
+    "dashboard_mobile_layout": "",
+    "dashboard_widgets_data": "{}",
 }
 
 
@@ -238,3 +254,91 @@ def check_version(force=False):
         "update_available": update_available
     }
 
+
+# ---------------- native web push & general notifications ----------------
+def vapid_keys():
+    """Get or generate VAPID private and public keys."""
+    priv_key_pem = kv_get("vapid_private_pem")
+    pub_key_b64 = kv_get("vapid_public_b64")
+    if not priv_key_pem or not pub_key_b64:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+        import base64
+        
+        # Generate SECP256R1 keys
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        public_key = private_key.public_key()
+        
+        # PEM formatted private key
+        priv_key_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode('utf-8')
+        
+        # Uncompressed SEC1 public key point (65 bytes)
+        public_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint
+        )
+        pub_key_b64 = base64.urlsafe_b64encode(public_bytes).decode('utf-8').rstrip('=')
+        
+        kv_set("vapid_private_pem", priv_key_pem)
+        kv_set("vapid_public_b64", pub_key_b64)
+    return priv_key_pem, pub_key_b64
+
+
+def webpush_send(title, msg, tags=""):
+    """Encrypt and send a Web Push notification to all active browser subscriptions."""
+    from pywebpush import webpush, WebPushException
+    from py_vapid import Vapid
+    
+    priv_key_pem, _ = vapid_keys()
+    vapid_key = Vapid.from_pem(priv_key_pem.encode('utf-8'))
+    
+    with db() as con:
+        subs = [dict(r) for r in con.execute("SELECT * FROM push_subscriptions")]
+        
+    if not subs:
+        return True
+        
+    payload = json.dumps({
+        "title": title,
+        "body": msg,
+        "tags": tags
+    })
+    
+    expired_ids = []
+    success = True
+    for s in subs:
+        try:
+            sub_info = json.loads(s["subscription_json"])
+            webpush(
+                subscription_info=sub_info,
+                data=payload,
+                vapid_private_key=vapid_key,
+                vapid_claims={"sub": "mailto:admin@tyloplanner.local"}
+            )
+        except WebPushException as ex:
+            if ex.response is not None and ex.response.status_code in (410, 404):
+                expired_ids.append(s["id"])
+            else:
+                print(f"Web Push delivery failed for subscription {s['id']}: {ex}")
+                success = False
+        except Exception as ex:
+            print(f"Web Push error for subscription {s['id']}: {ex}")
+            success = False
+            
+    if expired_ids:
+        with db() as con:
+            for eid in expired_ids:
+                con.execute("DELETE FROM push_subscriptions WHERE id=?", (eid,))
+                
+    return success
+
+
+def send_notification(title, msg, tags=""):
+    """Unified helper to send a notification to both ntfy and registered Native Web Push clients."""
+    ntfy_ok = ntfy_send(title, msg, tags)
+    webpush_ok = webpush_send(title, msg, tags)
+    return ntfy_ok or webpush_ok

@@ -30,9 +30,11 @@ def get_state():
     out = {}
     with db() as con:
         for t in TABLES:
-            out[t] = [dict(r) for r in con.execute("SELECT * FROM %s" % t)]
+            if t == "files":
+                out[t] = [dict(r) for r in con.execute("SELECT * FROM files ORDER BY uploaded DESC")]
+            else:
+                out[t] = [dict(r) for r in con.execute("SELECT * FROM %s" % t)]
         out["habit_log"] = [dict(r) for r in con.execute("SELECT * FROM habit_log")]
-        out["files"] = [dict(r) for r in con.execute("SELECT * FROM files ORDER BY uploaded DESC")]
     out["strava"] = {
         "configured": bool(_strava_client_id() and _strava_client_secret()),
         "from_env": bool(helpers.STRAVA_CLIENT_ID),
@@ -43,6 +45,45 @@ def get_state():
     out["app_url"] = APP_URL
     out["feed_url"] = APP_URL + "/calendar.ics" + ("?key=" + feed_key() if helpers.AUTH_ENABLED else "")
     return jsonify(out)
+
+
+
+def sync_exam_to_event(rid):
+    with db() as con:
+        exam = con.execute("SELECT name, date FROM exams WHERE id=?", (rid,)).fetchone()
+        if exam:
+            event = con.execute("SELECT 1 FROM events WHERE id=?", (rid,)).fetchone()
+            if event:
+                con.execute(
+                    'UPDATE events SET title=?, "date"=?, "start"=\'\', "end"=\'\', type=\'deadline\' WHERE id=?',
+                    (exam["name"], exam["date"], rid)
+                )
+            else:
+                con.execute(
+                    'INSERT INTO events (id, title, "date", "start", "end", type, source) VALUES (?, ?, ?, \'\', \'\', \'deadline\', \'local\')',
+                    (rid, exam["name"], exam["date"])
+                )
+        else:
+            con.execute("DELETE FROM events WHERE id=? AND type='deadline'", (rid,))
+
+
+def sync_event_to_exam(rid):
+    with db() as con:
+        event = con.execute("SELECT title, \"date\", type FROM events WHERE id=?", (rid,)).fetchone()
+        if event and event["type"] == "deadline":
+            exam = con.execute("SELECT 1 FROM exams WHERE id=?", (rid,)).fetchone()
+            if exam:
+                con.execute(
+                    'UPDATE exams SET name=?, "date"=? WHERE id=?',
+                    (event["title"], event["date"], rid)
+                )
+            else:
+                con.execute(
+                    'INSERT INTO exams (id, name, "date") VALUES (?, ?, ?)',
+                    (rid, event["title"], event["date"])
+                )
+        else:
+            con.execute("DELETE FROM exams WHERE id=?", (rid,))
 
 
 @bp.post("/api/<table>")
@@ -59,6 +100,12 @@ def create_row(table):
     )
     with db() as con:
         con.execute(sql, [rid] + [data[c] for c in cols])
+    
+    if table == "exams":
+        sync_exam_to_event(rid)
+    elif table == "events":
+        sync_event_to_exam(rid)
+        
     return jsonify({"id": rid})
 
 
@@ -73,6 +120,12 @@ def update_row(table, rid):
     sql = "UPDATE %s SET %s WHERE id=?" % (table, ",".join(q(c) + "=?" for c in cols))
     with db() as con:
         con.execute(sql, [data[c] for c in cols] + [rid])
+        
+    if table == "exams":
+        sync_exam_to_event(rid)
+    elif table == "events":
+        sync_event_to_exam(rid)
+        
     return jsonify({"ok": True})
 
 
@@ -84,7 +137,14 @@ def delete_row(table, rid):
         con.execute("DELETE FROM %s WHERE id=?" % table, (rid,))
         if table == "habits":
             con.execute("DELETE FROM habit_log WHERE habit_id=?", (rid,))
+            
+    if table == "exams":
+        sync_exam_to_event(rid)
+    elif table == "events":
+        sync_event_to_exam(rid)
+        
     return jsonify({"ok": True})
+
 
 
 @bp.post("/api/habits/<hid>/toggle")

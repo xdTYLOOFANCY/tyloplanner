@@ -41,7 +41,7 @@ User settings live in the `kv` table with a `set_` prefix.
 ## Hard rules
 
 - **No new dependencies** without strong justification; keep the stack
-  Flask + stdlib + the six packages in requirements.txt.
+  Flask + stdlib + the eight packages in requirements.txt.
 - **Frontend stays vanilla JS**, using ES modules in `static/js/` without any bundler
   or framework. `static/app.js` wires everything together for the HTML templates.
 - **All SQL parameterized**; table/column names only from the hard-coded

@@ -59,7 +59,7 @@ add an endpoint or table, add a case here.
 
 All endpoints return JSON and require a session cookie when auth is enabled
 (401 otherwise). CRUD is generic over the tables
-`events, exams, habits, workouts, tasks, notes`:
+`events, exams, habits, workouts, tasks, notes, study_sessions`:
 
 | Method & path | Purpose |
 |---|---|
@@ -69,7 +69,10 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `DELETE /api/<table>/<id>` | Delete a row. |
 | `POST /api/habits/<id>/toggle` | Toggle a habit for `{date}`. |
 | `GET/POST /api/settings` | Read / write user settings (ntfy, sync, …). |
-| `POST /api/notify/test` | Send a test ntfy push. |
+| `POST /api/notify/test` | Send a test notification (via ntfy and Web Push). |
+| `GET /api/push/public-key` | Get the VAPID public key for Web Push. |
+| `POST /api/push/subscribe` | Register browser subscription for Web Push. |
+| `POST /api/push/unsubscribe` | Unsubscribe browser subscription from Web Push. |
 | `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore (JSON payload). |
 | `GET /api/backups` | List all available automatic nightly backups. |
 | `POST /api/backups/<filename>/restore` | Restore database data from an automatic nightly backup. |
@@ -111,7 +114,7 @@ fire once per day even across restarts. Add your own job by appending a block to
 
 ## Conventions
 
-- Keep dependencies minimal — the stdlib and the six packages in
+- Keep dependencies minimal — the stdlib and the eight packages in
   `requirements.txt` go a long way.
 - Frontend stays framework-free ES5-ish JavaScript; escape user content
   with the `esc()` helper when injecting HTML.

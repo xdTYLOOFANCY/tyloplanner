@@ -2,7 +2,7 @@
 
 import { S, SET } from './state.js';
 import { esc, api, toast } from './utils.js';
-import { applyAccent, applyAccentFromSettings } from './theme.js';
+import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
 
 
@@ -48,45 +48,14 @@ export function renderSettings(refresh) {
   renderNotifySettings();
   renderSecurity();
   if (SET) {
+    setVal("appThemeStyle", SET.app_theme_style || "default");
     setVal("accentColor", SET.accent_color);
   }
+  applyThemeStyleFromSettings(SET);
   applyAccentFromSettings(SET);
-  var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
-  var toggleEl = document.getElementById("showShortcutsToggle");
-  if (toggleEl) toggleEl.checked = showShortcuts;
-
   var persistTab = SET ? SET.persist_active_tab !== "0" : true;
   var tabToggleEl = document.getElementById("tabPersistenceToggle");
   if (tabToggleEl) tabToggleEl.checked = persistTab;
-
-  if (S.shortcuts && S.shortcuts.length) {
-    var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
-    var sorted = S.shortcuts.slice().sort(function(a, b) {
-      var ia = order.indexOf(a.id);
-      var ib = order.indexOf(b.id);
-      if (ia === -1) ia = 999;
-      if (ib === -1) ib = 999;
-      return ia - ib;
-    });
-
-    var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
-    
-    var sh = '';
-    sorted.forEach(function(s) {
-      var isOff = disabled.indexOf(s.id) !== -1;
-      var toggleInput = '<input type="checkbox" class="ios-toggle" style="margin-right:8px" ' + (isOff ? '' : 'checked') + ' onchange="toggleItem(\'' + s.id + '\')">';
-      
-      sh += '<div class="list-item" draggable="true" ondragstart="dragShortcutStart(event,\'' + s.id + '\')" ondragover="dragShortcutOver(event)" ondrop="dropShortcut(event,\'' + s.id + '\')" ondragend="dragShortcutEnd(event)" style="cursor:grab">';
-      sh += '<span class="muted" style="cursor:grab;padding-right:4px">☰</span>';
-      sh += '<div class="grow">' + esc(s.name) + ' <span class="muted">(' + esc(s.url) + ')</span></div>';
-      sh += toggleInput;
-      sh += '<button class="btn danger small" onclick="delRow(\'shortcuts\', \'' + s.id + '\')">Remove</button>';
-      sh += '</div>';
-    });
-    document.getElementById("settingsShortcuts").innerHTML = sh;
-  } else {
-    document.getElementById("settingsShortcuts").innerHTML = '<div class="muted">No shortcuts added yet.</div>';
-  }
   var statusBox = document.getElementById("backupStatus");
   if (statusBox && SET) {
     statusBox.innerHTML = '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot is written to <b>data/backups/</b> every night (newest 14 kept).' +
@@ -114,12 +83,6 @@ export function renderSettings(refresh) {
   checkForUpdates(false).catch(function() {});
 }
 
-export async function toggleShowShortcuts(refresh) {
-  var show = document.getElementById("showShortcutsToggle").checked;
-  await api("POST", "/api/settings", { show_shortcuts: show ? "1" : "0" });
-  await refresh();
-}
-
 export async function toggleTabPersistence(refresh) {
   var toggle = document.getElementById("tabPersistenceToggle");
   var persist = toggle ? toggle.checked : true;
@@ -136,26 +99,13 @@ export async function toggleTabPersistence(refresh) {
   await refresh();
 }
 
-export async function toggleItem(id, refresh) {
-  var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',').filter(Boolean) : [];
-  var idx = disabled.indexOf(id);
-  if (idx === -1) disabled.push(id);
-  else disabled.splice(idx, 1);
-  await api("POST", "/api/settings", { disabled_shortcuts: disabled.join(',') });
-  await refresh();
-}
-
-export async function reorderShortcut(dragId, dropId, refresh) {
-  if (dragId === dropId) return;
-  var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',').filter(Boolean) : S.shortcuts.map(function(s) { return s.id; });
-  S.shortcuts.forEach(function(s) { if (order.indexOf(s.id) === -1) order.push(s.id); });
-  
-  var dragIdx = order.indexOf(dragId);
-  if (dragIdx > -1) order.splice(dragIdx, 1);
-  var dropIdx = order.indexOf(dropId);
-  if (dropIdx > -1) order.splice(dropIdx, 0, dragId);
-  
-  await api("POST", "/api/settings", { shortcut_order: order.join(',') });
+export async function saveAppThemeStyle(refresh) {
+  var value = document.getElementById("appThemeStyle").value;
+  await api("POST", "/api/settings", {
+    app_theme_style: value
+  });
+  applyThemeStyle(value);
+  toast("Theme style saved");
   await refresh();
 }
 
@@ -179,7 +129,7 @@ export async function resetAccentColor(refresh) {
   await refresh();
 }
 
-function renderNotifySettings() {
+async function renderNotifySettings() {
   if (!SET) return;
   setVal("ntfyServer", SET.ntfy_server);
   setVal("ntfyTopic", SET.ntfy_topic);
@@ -189,7 +139,142 @@ function renderNotifySettings() {
   setVal("calSyncUrls", SET.cal_sync_urls);
   setVal("calSyncHours", SET.cal_sync_hours);
   document.getElementById("calSyncMeta").textContent = SET.cal_last_sync ? ("Last sync: " + SET.cal_last_sync) : "";
+
+  const container = document.getElementById("webPushContainer");
+  if (!container) return;
+
+  if (!window.isSecureContext) {
+    container.innerHTML = `
+      <div style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.2); padding: 10px; border-radius: 6px; font-size: 13px; color: #ff6b6b; line-height: 1.4">
+        ⚠️ Native Web Push is disabled because the application is accessed over insecure HTTP. For local network access, please use Option 2 (ntfy) instead, or configure HTTPS.
+      </div>
+    `;
+    return;
+  }
+
+  const hasSupport = 'serviceWorker' in navigator && 'PushManager' in window;
+  if (!hasSupport) {
+    container.innerHTML = `
+      <div style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.2); padding: 10px; border-radius: 6px; font-size: 13px; color: #ff6b6b; line-height: 1.4">
+        ⚠️ Native Web Push is not supported by your browser or device. Please use Option 2 (ntfy) instead.
+      </div>
+    `;
+    return;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      container.innerHTML = `
+        <div style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.2); padding: 10px; border-radius: 6px; font-size: 13px; color: #ff6b6b; line-height: 1.4">
+          ⚠️ Service Worker registration not found yet. Please reload the page.
+        </div>
+      `;
+      return;
+    }
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(40,167,69,0.1); border: 1px solid rgba(40,167,69,0.2); padding: 10px; border-radius: 6px; gap: 8px;">
+          <span style="font-size:13px; color: #28a745;">✓ Web Push notifications are active on this device.</span>
+          <button class="btn danger small" onclick="disableWebPush()">Disable</button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--panel); border: 1px solid var(--border); padding: 10px; border-radius: 6px; gap: 8px;">
+          <span class="muted" style="font-size:13px;">Web Push is not configured for this device yet.</span>
+          <button class="btn small" onclick="enableWebPush()">Enable on this device</button>
+        </div>
+      `;
+    }
+  } catch (err) {
+    container.innerHTML = `
+      <div style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.2); padding: 10px; border-radius: 6px; font-size: 13px; color: #ff6b6b; line-height: 1.4">
+        ⚠️ Failed to check subscription status: ${err.message || err}
+      </div>
+    `;
+  }
 }
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+export async function enableWebPush(refresh) {
+  console.log("enableWebPush called");
+  try {
+    let permission;
+    try {
+      permission = await Notification.requestPermission();
+    } catch (e) {
+      permission = await new Promise((resolve) => {
+        Notification.requestPermission(resolve);
+      });
+    }
+
+    console.log("Notification permission state:", permission);
+    if (permission !== "granted") {
+      alert("Permission for notifications was denied. Please update your browser settings.");
+      return;
+    }
+
+    console.log("Fetching VAPID public key...");
+    const res = await api("GET", "/api/push/public-key");
+    console.log("VAPID public key fetched:", res.public_key);
+
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      alert("Service Worker registration not found. Please reload the page.");
+      return;
+    }
+
+    console.log("Subscribing to push manager...");
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(res.public_key)
+    });
+
+    console.log("Saving push subscription on backend...", sub.toJSON());
+    await api("POST", "/api/push/subscribe", sub.toJSON());
+    toast("Web Push enabled successfully!");
+    if (refresh) await refresh();
+  } catch (err) {
+    console.error("Error enabling Web Push:", err);
+    alert("Error enabling Web Push: " + (err.message || err));
+  }
+}
+
+export async function disableWebPush(refresh) {
+  console.log("disableWebPush called");
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) {
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        console.log("Unsubscribing from push manager...");
+        await sub.unsubscribe();
+        console.log("Removing push subscription from backend...");
+        await api("POST", "/api/push/unsubscribe", { endpoint: sub.endpoint });
+      }
+    }
+    toast("Web Push disabled.");
+    if (refresh) await refresh();
+  } catch (err) {
+    console.error("Error disabling Web Push:", err);
+    alert("Error disabling Web Push: " + (err.message || err));
+  }
+}
+
 
 export async function saveNotifySettings(refresh) {
   await api("POST", "/api/settings", {
@@ -287,7 +372,7 @@ export async function importIcsFile(refresh) {
   var f = document.getElementById("icsFile").files[0];
   if (!f) { alert("Choose an .ics file first."); return; }
   var fd = new FormData(); fd.append("file", f);
-  var r = await fetch("/api/ics/import", { method: "POST", body: fd });
+  var r = await fetch("/api/ics/import", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
   var j = await r.json();
   if (j.error) alert(j.error); else toast("Imported " + j.added + " of " + j.found + " events");
   await refresh();

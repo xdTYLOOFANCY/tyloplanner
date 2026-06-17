@@ -7,7 +7,7 @@ nightly backup, and periodic calendar auto-sync.
 import time
 from datetime import datetime, timedelta
 
-from helpers import setting, kv_get, kv_set, ntfy_send, db, do_backup
+from helpers import setting, kv_get, kv_set, send_notification, db, do_backup
 from blueprints.calendar import cal_auto_sync
 
 
@@ -81,7 +81,7 @@ def send_agenda(today):
         msg += ("\n\n" if msg else "") + "Exams:\n- " + "\n- ".join(exl)
     if task_lines:
         msg += ("\n\n" if msg else "") + "Tasks:\n" + "\n".join(task_lines)
-    ntfy_send("Your day — TyloPlanner", msg, "calendar")
+    send_notification("Your day — TyloPlanner", msg, "calendar")
 
 
 def send_habit_nudge(today):
@@ -92,7 +92,7 @@ def send_habit_nudge(today):
             'SELECT habit_id FROM habit_log WHERE "date"=?', (today,))}
     open_ = [h["name"] for h in habits if h["id"] not in done]
     if open_:
-        ntfy_send("Habit check-in", "Still open today:\n- " + "\n- ".join(open_), "white_check_mark")
+        send_notification("Habit check-in", "Still open today:\n- " + "\n- ".join(open_), "white_check_mark")
 
 
 def get_instances(e, target_date_str):
@@ -172,7 +172,7 @@ def check_event_reminders(now):
                                     msg += f" (in {hours}h)"
                                 else:
                                     msg += f" (in {offset}m)"
-                            ntfy_send(title, msg, "alarm_clock")
+                            send_notification(title, msg, "alarm_clock")
 
 
 def scheduler_tick():

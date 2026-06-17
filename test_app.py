@@ -17,6 +17,7 @@ import io
 import os
 import tempfile
 import unittest
+import unittest.mock
 import warnings
 from datetime import datetime, timezone
 
@@ -42,7 +43,7 @@ import helpers  # noqa: E402
 def reset_db():
     """Empty every data table so each test starts from a clean slate."""
     with helpers.db() as con:
-        for t in list(helpers.TABLES) + ["habit_log"]:
+        for t in list(helpers.TABLES) + ["habit_log", "push_subscriptions"]:
             con.execute("DELETE FROM %s" % t)
 
 
@@ -157,6 +158,112 @@ class CrudTests(unittest.TestCase):
         self.c.put("/api/notes/%s" % nid, json={"is_pinned": 0})
         row = self._rows("notes")[0]
         self.assertEqual(row["is_pinned"], 0)
+
+    # ---- deadlines & events sync ----
+    def test_sync_exam_to_event(self):
+        # 1. Create an exam
+        r = self.c.post("/api/exams", json={"name": "Math Exam", "date": "2026-06-20", "ects": 5.0})
+        self.assertEqual(r.status_code, 200)
+        exam_id = r.get_json()["id"]
+
+        # Check corresponding event exists
+        events = self._rows("events")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["id"], exam_id)
+        self.assertEqual(events[0]["title"], "Math Exam")
+        self.assertEqual(events[0]["date"], "2026-06-20")
+        self.assertEqual(events[0]["start"], "")
+        self.assertEqual(events[0]["end"], "")
+        self.assertEqual(events[0]["type"], "deadline")
+
+        # 2. Update the exam
+        self.c.put("/api/exams/%s" % exam_id, json={"name": "Advanced Math Exam", "date": "2026-06-22"})
+        events = self._rows("events")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["title"], "Advanced Math Exam")
+        self.assertEqual(events[0]["date"], "2026-06-22")
+
+        # 3. Delete the exam
+        self.c.delete("/api/exams/%s" % exam_id)
+        events = self._rows("events")
+        self.assertEqual(len(events), 0)
+
+    def test_sync_event_to_exam(self):
+        # 1. Create an event of type 'deadline'
+        r = self.c.post("/api/events", json={"title": "Chemistry Project", "date": "2026-06-25", "type": "deadline"})
+        self.assertEqual(r.status_code, 200)
+        event_id = r.get_json()["id"]
+
+        # Check corresponding exam exists
+        exams = self._rows("exams")
+        self.assertEqual(len(exams), 1)
+        self.assertEqual(exams[0]["id"], event_id)
+        self.assertEqual(exams[0]["name"], "Chemistry Project")
+        self.assertEqual(exams[0]["date"], "2026-06-25")
+
+        # 2. Update the event
+        self.c.put("/api/events/%s" % event_id, json={"title": "Advanced Chemistry Project", "date": "2026-06-26"})
+        exams = self._rows("exams")
+        self.assertEqual(len(exams), 1)
+        self.assertEqual(exams[0]["name"], "Advanced Chemistry Project")
+        self.assertEqual(exams[0]["date"], "2026-06-26")
+
+        # 3. Update event type to something else (e.g. 'study') -> exam should be deleted
+        self.c.put("/api/events/%s" % event_id, json={"type": "study"})
+        exams = self._rows("exams")
+        self.assertEqual(len(exams), 0)
+
+        # Re-create a deadline event
+        r = self.c.post("/api/events", json={"title": "Physics Lab", "date": "2026-06-28", "type": "deadline"})
+        self.assertEqual(r.status_code, 200)
+        event_id = r.get_json()["id"]
+        exams = self._rows("exams")
+        self.assertEqual(len(exams), 1)
+
+        # 4. Delete the event -> exam should be deleted
+        self.c.delete("/api/events/%s" % event_id)
+        exams = self._rows("exams")
+        self.assertEqual(len(exams), 0)
+
+    def test_study_sessions_crud(self):
+        # 1. Create a study session
+        r = self.c.post("/api/study_sessions", json={
+            "subject": "Chemistry",
+            "date": "2026-06-17",
+            "duration": 50.0,
+            "completed": 1
+        })
+        self.assertEqual(r.status_code, 200)
+        session_id = r.get_json()["id"]
+        self.assertTrue(session_id)
+
+        # Verify it exists in state
+        sessions = self._rows("study_sessions")
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["id"], session_id)
+        self.assertEqual(sessions[0]["subject"], "Chemistry")
+        self.assertEqual(sessions[0]["duration"], 50.0)
+        self.assertEqual(sessions[0]["completed"], 1)
+
+        # 2. Update study session subject and duration
+        r = self.c.put("/api/study_sessions/%s" % session_id, json={
+            "subject": "Advanced Chemistry",
+            "duration": 60.0
+        })
+        self.assertEqual(r.status_code, 200)
+
+        # Verify update
+        sessions = self._rows("study_sessions")
+        self.assertEqual(sessions[0]["subject"], "Advanced Chemistry")
+        self.assertEqual(sessions[0]["duration"], 60.0)
+
+        # 3. Delete study session
+        r = self.c.delete("/api/study_sessions/%s" % session_id)
+        self.assertEqual(r.status_code, 200)
+
+        # Verify it was deleted
+        sessions = self._rows("study_sessions")
+        self.assertEqual(len(sessions), 0)
 
 
 class GuardAuthDisabledTests(unittest.TestCase):
@@ -724,6 +831,75 @@ class VersionCheckTests(unittest.TestCase):
             self.assertEqual(res["current"], "1.1.0")
         finally:
             helpers.VERSION = original_version
+
+
+class NotificationTests(unittest.TestCase):
+    def setUp(self):
+        self.app = appmod.create_app()
+        self.c = self.app.test_client()
+        reset_db()
+
+    def test_public_key(self):
+        # Clean VAPID keys if any existed
+        helpers.kv_del("vapid_private_pem")
+        helpers.kv_del("vapid_public_b64")
+
+        r = self.c.get("/api/push/public-key")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertIn("public_key", data)
+        self.assertTrue(len(data["public_key"]) > 0)
+        
+        # Verify it was saved in kv
+        self.assertIsNotNone(helpers.kv_get("vapid_private_pem"))
+        self.assertEqual(helpers.kv_get("vapid_public_b64"), data["public_key"])
+
+    def test_subscribe_unsubscribe(self):
+        # Subscribe endpoint testing
+        sub_payload = {
+            "endpoint": "https://fcm.googleapis.com/fcm/send/some-token",
+            "keys": {
+                "p256dh": "some-dh-key",
+                "auth": "some-auth-key"
+            }
+        }
+        # Post to subscribe
+        r = self.c.post("/api/push/subscribe", json=sub_payload)
+        self.assertEqual(r.status_code, 200)
+        
+        # Verify in DB
+        with helpers.db() as con:
+            rows = [dict(row) for row in con.execute("SELECT * FROM push_subscriptions")]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("some-token", rows[0]["subscription_json"])
+        
+        # Unsubscribe testing
+        r2 = self.c.post("/api/push/unsubscribe", json={"endpoint": "https://fcm.googleapis.com/fcm/send/some-token"})
+        self.assertEqual(r2.status_code, 200)
+        
+        # Verify removed from DB
+        with helpers.db() as con:
+            rows = [dict(row) for row in con.execute("SELECT * FROM push_subscriptions")]
+        self.assertEqual(len(rows), 0)
+
+    @unittest.mock.patch("pywebpush.webpush")
+    def test_notify_test_endpoint(self, mock_webpush):
+        # 1. No configuration -> 400
+        helpers.kv_del("set_ntfy_topic")
+        r = self.c.post("/api/notify/test")
+        self.assertEqual(r.status_code, 400)
+
+        # 2. Subscribe a mock device
+        sub_payload = {
+            "endpoint": "https://updates.push.services.mozilla.com/wpush/v2/token",
+            "keys": {"p256dh": "dh", "auth": "auth"}
+        }
+        self.c.post("/api/push/subscribe", json=sub_payload)
+
+        # 3. Test send -> 200 (since mock_webpush won't raise errors)
+        r2 = self.c.post("/api/notify/test")
+        self.assertEqual(r2.status_code, 200)
+        self.assertTrue(mock_webpush.called)
 
 
 if __name__ == "__main__":

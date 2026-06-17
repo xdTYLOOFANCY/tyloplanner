@@ -95,6 +95,7 @@ export function renderFiles() {
     }
     actionsHtml += '<button class="btn small" onclick="createFolderPrompt()">+ Folder</button>';
     actionsHtml += '<button class="btn small" onclick="document.getElementById(\'fileInput\').click()">📤 Upload</button>';
+    actionsHtml += '<button class="btn small mobile-only" onclick="document.getElementById(\'cameraInput\').click()">📸 Camera</button>';
     if (activeFolderId) {
       var currentFolder = folders.find(function(f) { return f.id === activeFolderId; });
       var parentId = currentFolder ? currentFolder.parent_id : null;
@@ -319,7 +320,7 @@ export function renderFiles() {
         if (activeFolderId) {
           fd.append("folder_id", activeFolderId);
         }
-        var r = await fetch("/api/files/upload", { method: "POST", body: fd });
+        var r = await fetch("/api/files/upload", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
         if (!r.ok) {
           var err = await r.json().catch(function() { return { error: r.statusText }; });
           alert("Upload failed: " + (err.error || "unknown error"));
@@ -344,7 +345,7 @@ export async function uploadFile(refresh) {
     if (activeFolderId) {
       fd.append("folder_id", activeFolderId);
     }
-    var r = await fetch("/api/files/upload", { method: "POST", body: fd });
+    var r = await fetch("/api/files/upload", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
     if (!r.ok) {
       var e = await r.json().catch(function() { return { error: r.statusText }; });
       alert("Upload failed: " + (e.error || "unknown error"));
@@ -354,6 +355,29 @@ export async function uploadFile(refresh) {
   }
   input.value = "";
   toast("Uploaded " + files.length + " file" + (files.length > 1 ? "s" : ""));
+  await refresh();
+}
+
+export async function uploadCameraFile(refresh) {
+  var input = document.getElementById("cameraInput");
+  var files = input.files;
+  if (!files || !files.length) return;
+  for (var i = 0; i < files.length; i++) {
+    var fd = new FormData();
+    fd.append("file", files[i]);
+    if (activeFolderId) {
+      fd.append("folder_id", activeFolderId);
+    }
+    var r = await fetch("/api/files/upload", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
+    if (!r.ok) {
+      var e = await r.json().catch(function() { return { error: r.statusText }; });
+      alert("Upload failed: " + (e.error || "unknown error"));
+      input.value = "";
+      return;
+    }
+  }
+  input.value = "";
+  toast("Uploaded camera capture");
   await refresh();
 }
 
@@ -500,15 +524,9 @@ export function previewFile(id) {
     container.innerHTML = '<div class="muted">No preview available for this file type.</div>';
   }
   
-  modal.style.display = "flex";
+  window.dispatchEvent(new CustomEvent('open-media-preview-modal'));
 }
 
-export function closeMediaPreviewModal() {
-  var modal = document.getElementById("mediaPreviewModal");
-  var container = document.getElementById("mediaPreviewContainer");
-  if (modal) modal.style.display = "none";
-  if (container) container.innerHTML = "";
-}
 
 // DRAG-AND-DROP FILE MOVING FOR INTERNAL FILES
 export function onFileDragStart(e, fileId) {

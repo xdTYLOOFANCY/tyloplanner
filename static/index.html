@@ -8,7 +8,20 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=70">
+<script defer src="js/alpine.min.js"></script>
+<script src="js/marked.min.js"></script>
+<script type="module" src="app.js?v=70"></script>
+<script src="js/bottom_nav.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+      for (let r of registrations) {
+        r.unregister();
+      }
+    });
+  }
+</script>
 </head>
 <body>
 <div id="offline-banner" class="offline-banner" style="display: none;"></div>
@@ -41,9 +54,13 @@
 </nav>
 <main>
   <section id="tab-dashboard" class="active">
-    <h2 class="pagetitle" id="greeting"></h2>
+    <div class="dash-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 class="pagetitle" id="greeting" style="margin-bottom: 0;"></h2>
+      <button class="customization-toggle-btn" id="customizeBtn" onclick="toggleEditMode()">⚙️ Customize</button>
+    </div>
+    <div id="customizerPanel" style="display: none; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px;"></div>
     <div id="dashShortcuts" class="shortcuts-row"></div>
-    <div class="cards" id="dashCards"></div>
+    <div class="dashboard-grid" id="dashCards"></div>
   </section>
 
   <section id="tab-analytics">
@@ -66,10 +83,15 @@
       <div class="chart" id="aStudy"></div><div class="chartlabels" id="aStudyL"></div>
     </div>
     <div class="card">
+      <h3>Study hours per month (actual logged sessions)</h3>
+      <div class="chart" id="aStudyActual"></div><div class="chartlabels" id="aStudyActualL"></div>
+    </div>
+    <div class="card">
       <h3>Habit check-ins per month</h3>
       <div class="chart" id="aHabits"></div><div class="chartlabels" id="aHabitsL"></div>
     </div>
     <div class="card"><h3>Grades</h3><div id="aGrades"></div></div>
+    <div class="card"><h3>Recent Study Sessions</h3><div id="aStudySessionsList"></div></div>
   </section>
 
   <section id="tab-planner">
@@ -82,10 +104,12 @@
         <option value="7" selected>Week</option>
         <option value="month">Month</option>
       </select>
-      <button class="btn ghost small" onclick="moveWeek(-1)">‹</button>
-      <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
-      <button class="btn ghost small" onclick="moveWeek(1)">›</button>
-      <button class="btn ghost small" onclick="openShortcutsModal()" style="margin-left:8px;">⌨️ Shortcuts</button>
+      <div x-data class="row" style="display:inline-block; align-items:center;">
+        <button class="btn ghost small" onclick="moveWeek(-1)">‹</button>
+        <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
+        <button class="btn ghost small" onclick="moveWeek(1)">›</button>
+        <button class="btn ghost small" @click="$dispatch('open-shortcuts-modal')" style="margin-left:8px;">⌨️ Shortcuts</button>
+      </div>
       <div style="position:relative; display:inline-block; vertical-align:middle;">
         <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
         <div id="plannerSearchResults" style="display:none; position:absolute; top:28px; left:8px; width:300px; max-height:250px; overflow-y:auto; background:var(--panel); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; padding:4px 0; text-align:left;"></div>
@@ -150,7 +174,9 @@
       <div class="formrow">
         <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
         <select id="taskCategory" style="min-width:120px;"></select>
-        <button class="btn ghost" onclick="openCategoriesModal()" style="padding:4px 8px; line-height:1; font-size:14px;" title="Manage categories">🏷️</button>
+        <div x-data>
+          <button class="btn ghost" @click="$dispatch('open-categories-modal')" style="padding:4px 8px; line-height:1; font-size:14px;" title="Manage categories">🏷️</button>
+        </div>
         <input id="taskDue" type="datetime-local" onkeydown="if(event.key==='Enter')addTask()">
         <button class="btn" onclick="addTask()">Add</button>
       </div>
@@ -232,6 +258,9 @@
         <!-- Hidden input triggered by header upload button -->
         <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFile()">
 
+        <!-- Hidden input for direct phone camera capture -->
+        <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none" onchange="uploadCameraFile()">
+
         <div id="fileSelectionBar"></div>
 
         <!-- Clean Toolbar -->
@@ -255,19 +284,6 @@
 
   <section id="tab-settings">
     <h2 class="pagetitle">Settings &amp; integrations</h2>
-    <div class="card">
-      <h3>🔗 Dashboard shortcuts</h3>
-      <p style="font-size:14px;margin-bottom:10px">Manage the quick links displayed on your dashboard.</p>
-      <div style="display:flex;align-items:center;gap:10px;padding:0 10px 0 0;margin-bottom:8px">
-        <button class="btn" onclick="addShortcut()">Add new shortcut</button>
-        <div class="grow" style="flex:1;text-align:right">
-          <label for="showShortcutsToggle" class="muted" style="cursor:pointer">Show on dashboard</label>
-        </div>
-        <input type="checkbox" id="showShortcutsToggle" class="ios-toggle" style="margin-right:8px" onchange="toggleShowShortcuts()">
-        <button class="btn danger small" style="visibility:hidden;pointer-events:none">Remove</button>
-      </div>
-      <div id="settingsShortcuts" style="margin-top:14px"></div>
-    </div>
     <div class="card">
       <h3>📅 Calendar — export</h3>
       <p style="font-size:14px;margin-bottom:8px">Subscribe to your TyloPlanner agenda + exams from Google/Apple/Outlook Calendar with this feed URL (it contains a secret key — treat it like a password):</p>
@@ -305,21 +321,55 @@
     </div>
     <div class="card">
       <h3>🔔 Notifications &amp; reminders</h3>
-      <p style="font-size:14px;margin-bottom:10px">Free push notifications on your phone via <b>ntfy</b>: install the ntfy app (or open ntfy.sh), subscribe to a secret topic name of your choosing, and enter that topic here. You'll get a morning agenda (events + exam alerts) and an evening habit nudge.</p>
-      <div class="formrow">
-        <input id="ntfyServer" placeholder="https://ntfy.sh" style="width:180px">
-        <input id="ntfyTopic" placeholder="your-secret-topic-name" style="flex:1;min-width:180px">
+      <p style="font-size:14px;margin-bottom:10px">Configure how you receive push notifications (morning agenda, habit nudge, and event reminders).</p>
+      
+      <div style="margin-bottom:16px">
+        <h4 style="margin: 0 0 6px 0; font-size:15px; color: var(--text-heading)">Option 1: Native Web Push</h4>
+        <p style="font-size:13px; margin: 0 0 10px 0" class="muted">Receive notifications directly in this browser/device without any extra apps. (Requires HTTPS or localhost, and iOS users must Add to Home Screen first).</p>
+        <div id="webPushContainer">
+          <span class="muted" style="font-size:13px">Checking browser support...</span>
+        </div>
       </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <div style="margin-bottom:16px">
+        <h4 style="margin: 0 0 6px 0; font-size:15px; color: var(--text-heading)">Option 2: External App (ntfy)</h4>
+        <p style="font-size:13px; margin: 0 0 10px 0" class="muted">Free notifications via the ntfy app (Android/iOS). Enter a secret topic name you subscribe to in the app. Works over local HTTP/Tailscale.</p>
+        <div class="formrow">
+          <input id="ntfyServer" placeholder="https://ntfy.sh" style="width:180px">
+          <input id="ntfyTopic" placeholder="your-secret-topic-name" style="flex:1;min-width:180px">
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
       <div class="formrow">
         <label class="muted">Agenda</label> <input id="agendaTime" type="time">
         <label class="muted">Habit nudge</label> <input id="habitTime" type="time">
         <label class="muted">Exam alerts (days before)</label> <input id="examDays" placeholder="7,3,1" style="width:90px">
       </div>
-      <button class="btn" onclick="saveNotifySettings()">Save</button>
-      <button class="btn ghost" onclick="testNotify()">Send test notification</button>
+      
+      <div style="display:flex; gap: 8px; margin-top:12px">
+        <button class="btn" onclick="saveNotifySettings()">Save settings</button>
+        <button class="btn ghost" onclick="testNotify()">Send test notification</button>
+      </div>
     </div>
     <div class="card">
       <h3>🎨 Appearance</h3>
+      <div style="margin-bottom:16px;">
+        <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">App Theme Style</label>
+        <div style="display:flex;gap:8px;">
+          <select id="appThemeStyle" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
+            <option value="default">Default</option>
+            <option value="glass">Glass</option>
+            <option value="cyberpunk">Cyberpunk</option>
+            <option value="material">Material</option>
+          </select>
+          <button class="btn" onclick="saveAppThemeStyle()">Save style</button>
+        </div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
       <p style="font-size:14px;margin-bottom:10px">Customize the theme accent color:</p>
       <div class="formrow">
         <input type="color" id="accentColor" style="width:60px;height:36px;padding:0;border:none;background:none;cursor:pointer">
@@ -350,16 +400,17 @@
     </div>
     <div class="card">
       <h3>🔄 Software Updates</h3>
-      <p style="font-size:14px;margin-bottom:8px">Check if there is a new version of TyloPlanner available on GitHub.</p>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div x-data class="card" style="text-align:center; padding:30px;">
+        <h3 style="margin-bottom:10px;">About TyloPlanner</h3>
+        <p style="margin-bottom:15px; font-size:14px; opacity:0.8;">Local-first planner & organizer.</p>
         <span id="versionCheckStatus" style="font-size:14px" class="muted">Checking for updates...</span>
         <button class="btn small" id="checkUpdateBtn" onclick="checkForUpdates(true)">Check now</button>
-        <button class="btn small" id="updateServerBtn" style="display:none" onclick="document.getElementById('updateModal').style.display='flex'">How to update</button>
+        <button class="btn small" id="updateServerBtn" style="display:none" @click="$dispatch('open-update-modal')">How to update</button>
       </div>
     </div>
   </section>
 
-  <div id="updateModal" class="modal" style="display:none">
+  <div id="updateModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-update-modal.window="open = true">
     <div class="modal-content" style="max-width: 450px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Update TyloPlanner</h3>
       <p style="font-size:14px; margin-bottom:12px; line-height:1.5;">To update TyloPlanner to the latest version, run the following commands on your server:</p>
@@ -377,12 +428,12 @@
       </div>
       
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button class="btn" onclick="document.getElementById('updateModal').style.display='none'">Close</button>
+        <button class="btn" @click="open = false">Close</button>
       </div>
     </div>
   </div>
 
-  <div id="taskModal" class="modal" style="display:none">
+  <div id="taskModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-task-modal.window="open = true" @close-task-modal.window="open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>
       <input type="hidden" id="editTaskId">
@@ -403,13 +454,13 @@
       </div>
       
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px;">
-        <button class="btn ghost" onclick="closeTaskModal()">Cancel</button>
+        <button class="btn ghost" @click="open = false">Cancel</button>
         <button class="btn" onclick="saveTaskModal()">Save</button>
       </div>
     </div>
   </div>
 
-  <div id="categoriesModal" class="modal" style="display:none">
+  <div id="categoriesModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-categories-modal.window="open = true" @close-categories-modal.window="open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Manage Categories</h3>
       
@@ -422,12 +473,12 @@
       <div id="modalCategoriesList" class="card-scroll" style="max-height:200px; margin-bottom:16px;"></div>
       
       <div style="display:flex; justify-content:flex-end;">
-        <button class="btn" onclick="closeCategoriesModal()">Close</button>
+        <button class="btn" @click="open = false">Close</button>
       </div>
     </div>
   </div>
 
-  <div id="eventModal" class="modal" style="display:none">
+  <div id="eventModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-event-modal.window="open = true" @close-event-modal.window="open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 id="evModalTitleText" style="margin-bottom:16px; font-size:16px; font-weight:700;">Event Details</h3>
       <input type="hidden" id="evModalId">
@@ -441,6 +492,7 @@
             <option value="work">Work</option>
             <option value="personal">Personal</option>
             <option value="workout">Workout</option>
+            <option value="deadline">Deadline</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -541,13 +593,13 @@
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button class="btn" style="flex:1; padding:10px; font-size:14px;" onclick="saveEventModal()">Save</button>
           <button class="btn danger" id="evModalDelBtn" style="display:none; padding:10px; font-size:14px;" onclick="delEventModal()">Delete</button>
-          <button class="btn ghost" style="padding:10px; font-size:14px;" onclick="closeEventModal()">Cancel</button>
+          <button class="btn ghost" style="padding:10px; font-size:14px;" @click="open = false">Cancel</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="shortcutsModal" class="modal" style="display:none">
+  <div id="shortcutsModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-shortcuts-modal.window="open = true" @close-shortcuts-modal.window="open = false">
     <div class="modal-content" style="max-width: 420px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Keyboard Shortcuts</h3>
       <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
@@ -586,29 +638,76 @@
       <div style="display:flex; gap:8px;">
         <button class="btn" style="flex:1;" onclick="saveShortcuts()">Save</button>
         <button class="btn ghost" style="padding:10px;" onclick="resetShortcutsToDefault()">Reset Defaults</button>
-        <button class="btn ghost" style="padding:10px;" onclick="closeShortcutsModal()">Cancel</button>
+        <button class="btn ghost" style="padding:10px;" @click="open = false">Cancel</button>
       </div>
     </div>
   </div>
 
-  <div id="mediaPreviewModal" class="modal" style="display:none">
+  <div id="mediaPreviewModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-media-preview-modal.window="open = true" @close-media-preview-modal.window="open = false">
     <div class="modal-content" style="max-width: 800px; width: 95%; height: 85%; display: flex; flex-direction: column; box-sizing: border-box;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 id="mediaPreviewTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">File Preview</h3>
-        <button class="btn ghost small" onclick="closeMediaPreviewModal()" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+        <button class="btn ghost small" @click="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
       </div>
       <div id="mediaPreviewContainer" style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto; background:#121212; border-radius:4px; min-height:0; padding:10px;">
         <!-- Embedded preview will go here -->
       </div>
       <div style="margin-top:12px; display:flex; justify-content:flex-end;">
-        <button class="btn ghost" onclick="closeMediaPreviewModal()">Close</button>
+        <button class="btn ghost" @click="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboardEventDetailsModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-dashboard-event-modal.window="open = true" @close-dashboard-event-modal.window="open = false" @click="if($event.target === $el) open = false">
+    <div class="modal-content" style="max-width: 400px; width: 90%;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 id="dbEvModalTitle" style="font-size:16px; font-weight:700; margin:0;">Event Details</h3>
+        <button class="btn ghost small" @click="open = false" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
+        <div>
+          <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Title</span>
+          <div id="dbEvTitleVal" style="font-size:15px; font-weight:600; margin-top:2px;"></div>
+        </div>
+        <div style="display:flex; gap:16px;">
+          <div style="flex:1;">
+            <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Date</span>
+            <div id="dbEvDateVal" style="font-size:13px; margin-top:2px; font-weight:500;"></div>
+          </div>
+          <div style="flex:1;">
+            <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Time</span>
+            <div id="dbEvTimeVal" style="font-size:13px; margin-top:2px; font-weight:500;"></div>
+          </div>
+        </div>
+        <div style="display:flex; gap:16px;">
+          <div style="flex:1;">
+            <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Type</span>
+            <div id="dbEvTypeVal" style="font-size:13px; margin-top:2px; display:inline-block; padding:2px 8px; border-radius:4px; text-transform:capitalize;"></div>
+          </div>
+          <div style="flex:1;" id="dbEvRecGroup">
+            <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Repeats</span>
+            <div id="dbEvRecVal" style="font-size:13px; margin-top:2px; text-transform:capitalize;"></div>
+          </div>
+        </div>
+        <div id="dbEvDescGroup">
+          <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Description</span>
+          <div id="dbEvDescVal" style="font-size:13px; margin-top:2px; background:var(--panel2); padding:8px; border-radius:6px; white-space:pre-wrap; max-height:120px; overflow-y:auto; border:1px solid var(--border);"></div>
+        </div>
+        <div id="dbEvLocGroup">
+          <span class="muted" style="font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Location</span>
+          <div id="dbEvLocVal" style="font-size:13px; margin-top:2px;"></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="dbEvEditBtn" class="btn" style="flex:1;">✏️ Edit in Calendar</button>
+        <button class="btn ghost" style="flex:1;" @click="open = false">Close</button>
       </div>
     </div>
   </div>
 </main>
 <footer>TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</footer>
 <script src="js/marked.min.js"></script>
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=2"></script>
 <nav id="bottomNav">
   <button data-tab="dashboard">
     <span class="nav-icon">🏠</span>
@@ -631,52 +730,13 @@
     <span class="nav-label">To-do</span>
   </button>
 </nav>
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const bottomNav = document.getElementById("bottomNav");
-    const tabsNav = document.getElementById("tabs");
-    if (!bottomNav || !tabsNav) return;
-
-    // Handle clicks on bottom navigation buttons
-    bottomNav.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      const tab = btn.dataset.tab;
-      const targetBtn = tabsNav.querySelector(`button[data-tab="${tab}"]`);
-      if (targetBtn) {
-        targetBtn.click();
-      }
-    });
-
-    // Observe active states on desktop tabs to keep bottom-nav in sync
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "attributes" && mutation.attributeName === "class") {
-          const target = mutation.target;
-          if (target.classList.contains("active")) {
-            const tabName = target.dataset.tab;
-            const bottomBtn = bottomNav.querySelector(`button[data-tab="${tabName}"]`);
-            bottomNav.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
-            if (bottomBtn) {
-              bottomBtn.classList.add("active");
-            }
-          }
-        }
-      });
-    });
-
-    // Setup observer for each desktop tab button and sync initial state
-    tabsNav.querySelectorAll("button").forEach((btn) => {
-      observer.observe(btn, { attributes: true });
-      if (btn.classList.contains("active")) {
-        const tabName = btn.dataset.tab;
-        const bottomBtn = bottomNav.querySelector(`button[data-tab="${tabName}"]`);
-        if (bottomBtn) {
-          bottomBtn.classList.add("active");
-        }
-      }
-    });
-  });
-</script>
+<script src="js/bottom_nav.js"></script>
+<!-- Global Floating Action Button (FAB) -->
+<div id="globalFab" class="fab-container" style="display: none;">
+  <div class="fab-menu" id="fabMenu"></div>
+  <button class="fab-btn" id="fabBtn" onclick="handleFabClick(event)">
+    <span class="fab-icon" id="fabIcon">+</span>
+  </button>
+</div>
 </body>
 </html>

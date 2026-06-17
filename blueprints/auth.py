@@ -4,6 +4,7 @@ Auth blueprint — login, logout, TOTP 2FA, and the before_request guard.
 import io
 import hmac
 import time
+from collections import defaultdict
 
 import pyotp
 import qrcode
@@ -13,6 +14,17 @@ import helpers
 from helpers import feed_key, totp_enabled, kv_get, kv_set, kv_del
 
 bp = Blueprint("auth", __name__)
+
+# In-memory rate limiting for failed logins (prevents thread-blocking DoS)
+failed_attempts = defaultdict(list)
+
+def check_rate_limit(ip):
+    now = time.time()
+    failed_attempts[ip] = [t for t in failed_attempts[ip] if now - t < 60]
+    return len(failed_attempts[ip]) >= 5
+
+def record_failed(ip):
+    failed_attempts[ip].append(time.time())
 
 # Files the login page / PWA need before sign-in:
 LOGIN_ASSETS = {"/login", "/login/2fa", "/style.css", "/logo.svg", "/favicon.ico",
@@ -30,6 +42,12 @@ def guard():
         if hmac.compare_digest(request.args.get("key", ""), feed_key()):
             return None
         return Response("Invalid or missing key. Get your feed URL from Settings.", 403)
+        
+    # Simple anti-CSRF check for mutating API calls
+    if p.startswith("/api/") and request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+            return jsonify({"error": "csrf validation failed"}), 403
+            
     if session.get("auth"):
         return None
     if p.startswith("/api/"):
@@ -46,12 +64,16 @@ def login_page():
 
 @bp.post("/login")
 def login_submit():
+    ip = request.remote_addr
+    if check_rate_limit(ip):
+        return redirect("/login?error=1")
+    
     u = request.form.get("username", "")
     pw = request.form.get("password", "")
     ok = (hmac.compare_digest(u, helpers.AUTH_USERNAME)
           and hmac.compare_digest(pw, helpers.AUTH_PASSWORD))
     if not ok:
-        time.sleep(1)  # slow down brute force
+        record_failed(ip)
         return redirect("/login?error=1")
     if totp_enabled():
         session["pre2fa"] = True
@@ -65,10 +87,15 @@ def login_submit():
 def login_2fa():
     if not session.get("pre2fa"):
         return redirect("/login")
+        
+    ip = request.remote_addr
+    if check_rate_limit(ip):
+        return redirect("/login?step=2fa&error=1")
+        
     code = request.form.get("code", "")
     secret = kv_get("totp_secret")
     if not secret or not pyotp.TOTP(secret).verify(code, valid_window=1):
-        time.sleep(1)
+        record_failed(ip)
         return redirect("/login?step=2fa&error=1")
     session.pop("pre2fa", None)
     session["auth"] = True

@@ -111,13 +111,7 @@ async function reorderTasks(dragId, dropId, refresh) {
 }
 
 // --- Categories Modal ---
-export function openCategoriesModal() {
-  document.getElementById("categoriesModal").style.display = "flex";
-}
-
-export function closeCategoriesModal() {
-  document.getElementById("categoriesModal").style.display = "none";
-}
+// (Modals now use Alpine.js)
 
 export async function addModalCategory(refresh) {
   var input = document.getElementById("modalCategoryInput");
@@ -214,11 +208,7 @@ export function openTaskModal(id) {
   document.getElementById("editTaskCategory").value = t.category || "";
   document.getElementById("editTaskDue").value = t.due_date || "";
   
-  document.getElementById("taskModal").style.display = "flex";
-}
-
-export function closeTaskModal() {
-  document.getElementById("taskModal").style.display = "none";
+  window.dispatchEvent(new CustomEvent('open-task-modal'));
 }
 
 export async function saveTaskModal(refresh) {
@@ -237,7 +227,7 @@ export async function saveTaskModal(refresh) {
     due: due
   });
   
-  closeTaskModal();
+  window.dispatchEvent(new CustomEvent('close-task-modal'));
   await refresh();
 }
 
@@ -349,7 +339,7 @@ var taskModalEl = document.getElementById("taskModal");
 if (taskModalEl) {
   taskModalEl.addEventListener("click", function(e) {
     if (e.target === this) {
-      closeTaskModal();
+      window.dispatchEvent(new CustomEvent('close-task-modal'));
     }
   });
   taskModalEl.addEventListener("keydown", function(e) {
@@ -369,7 +359,7 @@ var categoriesModalEl = document.getElementById("categoriesModal");
 if (categoriesModalEl) {
   categoriesModalEl.addEventListener("click", function(e) {
     if (e.target === this) {
-      closeCategoriesModal();
+      window.dispatchEvent(new CustomEvent('close-categories-modal'));
     }
   });
 }
@@ -378,11 +368,11 @@ document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") {
     var taskModal = document.getElementById("taskModal");
     if (taskModal && taskModal.style.display === "flex") {
-      closeTaskModal();
+      window.dispatchEvent(new CustomEvent('close-task-modal'));
     }
     var catsModal = document.getElementById("categoriesModal");
-    if (catsModal && catsModal.style.display === "flex") {
-      closeCategoriesModal();
+    if (catsModal && catsModal.style.display !== "none") {
+      window.dispatchEvent(new CustomEvent('close-categories-modal'));
     }
   }
 });

@@ -5,6 +5,7 @@ import { renderDashboard } from './dashboard.js';
 
 var dateOffset = 0, plannerRefresh = null, currentView = '7', scrolledToCurrentTimeThisSession = false, isResizing = false, lastScrollTop = null, activeReminders = [], isRendering = false;
 var draggingEventId = null, draggingOffsetY = 0, currentUndoAction = null, undoToastTimeout = null, dragPreviewEl = null;
+var isTouchDragging = false, touchDragPointerId = null, touchDragStartClientX = 0, touchDragStartClientY = 0, touchDragLongPressTimer = null, justTouchDragged = false, lastTouchTime = 0;
 
 var defaultShortcuts = {
   today: 't',
@@ -251,6 +252,13 @@ export function renderPlanner() {
 
   document.getElementById("weekGrid").innerHTML = html;
 
+  if (currentView === 'month') {
+    document.querySelectorAll('.month-cell').forEach(function(col) {
+      var iso = col.getAttribute("data-iso");
+      attachCellTouchInteractivity(col, iso, false);
+    });
+  }
+
   var newWrapper = document.querySelector('.time-grid-wrapper');
   if (newWrapper) {
     newWrapper.addEventListener('scroll', function() {
@@ -444,6 +452,96 @@ export function renderPlanner() {
         el.classList.remove('dragging');
         document.body.classList.remove('dragging-move-active');
         renderPlanner();
+      });
+
+      // custom touch drag-and-drop pointer listeners
+      el.addEventListener("pointerdown", function(ev) {
+        if (ev.pointerType !== 'touch') return;
+        if (isResizing) return;
+        lastTouchTime = Date.now();
+        
+        var eventId = el.getAttribute("data-id");
+        if (!eventId) return;
+        
+        touchDragPointerId = ev.pointerId;
+        touchDragStartClientX = ev.clientX;
+        touchDragStartClientY = ev.clientY;
+        isTouchDragging = false;
+        
+        clearTimeout(touchDragLongPressTimer);
+        touchDragLongPressTimer = setTimeout(function() {
+          isTouchDragging = true;
+          draggingEventId = eventId;
+          el.setPointerCapture(ev.pointerId);
+          
+          var rect = el.getBoundingClientRect();
+          draggingOffsetY = ev.clientY - rect.top;
+          
+          if (navigator.vibrate) navigator.vibrate(20);
+          
+          el.classList.add('dragging');
+          var height = parseFloat(el.style.height) || el.offsetHeight;
+          el.style.setProperty('--drag-height', height + 'px');
+          document.body.classList.add('dragging-move-active');
+          
+          window.addEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+        }, 250);
+      });
+
+      el.addEventListener("pointermove", function(ev) {
+        if (ev.pointerId !== touchDragPointerId) return;
+        lastTouchTime = Date.now();
+        
+        if (!isTouchDragging) {
+          var dx = ev.clientX - touchDragStartClientX;
+          var dy = ev.clientY - touchDragStartClientY;
+          if (Math.sqrt(dx*dx + dy*dy) > 10) {
+            clearTimeout(touchDragLongPressTimer);
+          }
+          return;
+        }
+        
+        updateTouchDrag(ev);
+      });
+
+      el.addEventListener("pointerup", function(ev) {
+        if (ev.pointerId !== touchDragPointerId) return;
+        clearTimeout(touchDragLongPressTimer);
+        lastTouchTime = Date.now();
+        
+        if (isTouchDragging) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          el.releasePointerCapture(ev.pointerId);
+          handleTouchDrop(ev);
+        }
+        
+        touchDragPointerId = null;
+        isTouchDragging = false;
+        window.removeEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+      });
+
+      el.addEventListener("pointercancel", function(ev) {
+        if (ev.pointerId !== touchDragPointerId) return;
+        clearTimeout(touchDragLongPressTimer);
+        lastTouchTime = Date.now();
+        
+        if (isTouchDragging) {
+          el.releasePointerCapture(ev.pointerId);
+          if (dragPreviewEl) {
+            dragPreviewEl.remove();
+            dragPreviewEl = null;
+          }
+          el.classList.remove('dragging');
+          document.body.classList.remove('dragging-move-active');
+          document.querySelectorAll('.day-col, .month-cell').forEach(function(c) {
+            c.classList.remove('drag-over');
+          });
+        }
+        
+        touchDragPointerId = null;
+        isTouchDragging = false;
+        window.removeEventListener('touchmove', preventDefaultTouchMove, { passive: false });
       });
     }
   });
@@ -725,6 +823,49 @@ function initTabListener() {
       openAdd(todayStr());
     }
   });
+
+  // Swipe Navigation
+  var weekGrid = document.getElementById("weekGrid");
+  if (weekGrid) {
+    var swipeStartX = 0;
+    var swipeStartY = 0;
+    var swipeStartTime = 0;
+    var swipePointerId = null;
+    
+    weekGrid.addEventListener("pointerdown", function(e) {
+      if (e.pointerType !== "touch") return;
+      if (isTouchDragging || isResizing || draggingEventId) return;
+      
+      swipeStartX = e.clientX;
+      swipeStartY = e.clientY;
+      swipeStartTime = Date.now();
+      swipePointerId = e.pointerId;
+    });
+    
+    weekGrid.addEventListener("pointerup", function(e) {
+      if (e.pointerId !== swipePointerId) return;
+      
+      var dX = e.clientX - swipeStartX;
+      var dY = e.clientY - swipeStartY;
+      var dT = Date.now() - swipeStartTime;
+      
+      swipePointerId = null;
+      
+      if (dT < 400 && Math.abs(dX) > 50 && Math.abs(dX) > 2 * Math.abs(dY)) {
+        if (dX > 50) {
+          moveWeek(-1);
+        } else if (dX < -50) {
+          moveWeek(1);
+        }
+      }
+    });
+    
+    weekGrid.addEventListener("pointercancel", function(e) {
+      if (e.pointerId === swipePointerId) {
+        swipePointerId = null;
+      }
+    });
+  }
 }
 
 if (document.readyState === "loading") {
@@ -735,11 +876,14 @@ if (document.readyState === "loading") {
 
 function attachTimeGridInteractivity() {
   document.querySelectorAll('.time-grid-content').forEach(function(node) {
+    var iso = node.getAttribute('data-iso');
+    attachCellTouchInteractivity(node, iso, true);
+
     node.addEventListener('mousedown', function(e) {
+      if (Date.now() - lastTouchTime < 1000) return;
       if (e.target.closest('.event')) return;
       e.preventDefault();
       
-      var iso = node.getAttribute('data-iso');
       var rect = node.getBoundingClientRect();
       var startY = e.clientY - rect.top;
       var startMin = Math.max(0, Math.round(startY / 15) * 15);
@@ -823,10 +967,13 @@ function attachTimeGridInteractivity() {
       handle.addEventListener('click', function(e) {
         e.stopPropagation();
       });
-      handle.addEventListener('mousedown', function(e) {
+      handle.addEventListener('pointerdown', function(e) {
         e.stopPropagation();
         e.preventDefault();
         isResizing = true;
+        
+        handle.setPointerCapture(e.pointerId);
+        
         var evObj = S.events.find(function(x) { return x.id == id; });
         var originalStart = evObj ? evObj.start : null;
         var originalEnd = evObj ? evObj.end : null;
@@ -838,7 +985,7 @@ function attachTimeGridInteractivity() {
         el.classList.add('dragging');
         el.style.setProperty('--drag-height', startHeight + 'px');
         
-        function onMouseMove(moveEvent) {
+        function onPointerMove(moveEvent) {
           var dy = moveEvent.clientY - startY;
           var newTop = startTop;
           var newHeight = startHeight;
@@ -872,9 +1019,11 @@ function attachTimeGridInteractivity() {
           }
         }
         
-        function onMouseUp(upEvent) {
-          document.removeEventListener('mousemove', onMouseMove);
-          document.removeEventListener('mouseup', onMouseUp);
+        function onPointerUp(upEvent) {
+          handle.releasePointerCapture(upEvent.pointerId);
+          document.removeEventListener('pointermove', onPointerMove);
+          document.removeEventListener('pointerup', onPointerUp);
+          document.removeEventListener('pointercancel', onPointerUp);
           document.body.classList.remove('dragging-active');
           el.classList.remove('dragging');
           
@@ -942,8 +1091,9 @@ function attachTimeGridInteractivity() {
           }
         }
         
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
+        document.addEventListener('pointercancel', onPointerUp);
       });
     });
   });
@@ -1058,7 +1208,7 @@ function renderReminderPills() {
 }
 
 export function openAdd(iso, defaultStart, defaultEnd) {
-  document.getElementById('eventModal').style.display = 'flex';
+  window.dispatchEvent(new CustomEvent('open-event-modal'));
   document.getElementById('evModalTitleText').textContent = 'Add Event';
   document.getElementById('evModalId').value = '';
   document.getElementById('evModalTitle').value = '';
@@ -1082,10 +1232,10 @@ export function openAdd(iso, defaultStart, defaultEnd) {
 }
 
 export function editEvent(id) {
-  if (isResizing) return;
+  if (isResizing || justTouchDragged) return;
   var e = S.events.find(function(x) { return x.id === id; });
   if (!e) return;
-  document.getElementById('eventModal').style.display = 'flex';
+  window.dispatchEvent(new CustomEvent('open-event-modal'));
   document.getElementById('evModalTitleText').textContent = 'Edit Event';
   document.getElementById('evModalId').value = e.id;
   document.getElementById('evModalTitle').value = e.title || '';
@@ -1114,9 +1264,7 @@ export function editEvent(id) {
   document.getElementById('evModalTitle').focus();
 }
 
-export function closeEventModal() {
-  document.getElementById('eventModal').style.display = 'none';
-}
+
 
 export async function saveEventModal(refresh) {
   var id = document.getElementById("evModalId").value;
@@ -1136,7 +1284,7 @@ export async function saveEventModal(refresh) {
     source: "local"
   };
   
-  closeEventModal();
+  window.dispatchEvent(new CustomEvent('close-event-modal'));
 
   var tempId = null;
   if (id) {
@@ -1178,7 +1326,7 @@ export async function saveEventModal(refresh) {
 export async function delEventModal(refresh) {
   var id = document.getElementById("evModalId").value;
   if (!id) return;
-  closeEventModal();
+  window.dispatchEvent(new CustomEvent('close-event-modal'));
 
   var eventToDelete = S.events.find(function(x) { return x.id == id; });
   if (eventToDelete) {
@@ -1222,23 +1370,14 @@ export async function delEventModal(refresh) {
   }
 }
 
-export function openShortcutsModal() {
-  var modal = document.getElementById('shortcutsModal');
-  if (!modal) return;
-  modal.style.display = 'flex';
-  
+window.addEventListener('open-shortcuts-modal', function() {
   document.querySelectorAll('.shortcut-input').forEach(function(input) {
     var action = input.getAttribute('data-action');
     if (action && shortcuts[action] !== undefined) {
       input.value = shortcuts[action];
     }
   });
-}
-
-export function closeShortcutsModal() {
-  var modal = document.getElementById('shortcutsModal');
-  if (modal) modal.style.display = 'none';
-}
+});
 
 export function saveShortcuts() {
   var newShortcuts = {};
@@ -1267,7 +1406,7 @@ export function saveShortcuts() {
     localStorage.setItem('tylo_shortcuts', JSON.stringify(shortcuts));
   } catch(e) {}
   
-  closeShortcutsModal();
+  window.dispatchEvent(new CustomEvent('close-shortcuts-modal'));
 }
 
 export function resetShortcutsToDefault() {
@@ -1398,6 +1537,11 @@ export function hideSearchSoon() {
 }
 
 export function navigateToAndEditEvent(id, date) {
+  var tabBtn = document.querySelector('#tabs button[data-tab="planner"]');
+  if (tabBtn) {
+    tabBtn.click();
+  }
+  
   var now = new Date();
   var target = new Date(date + 'T00:00:00');
   if (isNaN(target.getTime())) {
@@ -1437,4 +1581,295 @@ export function navigateToAndEditEvent(id, date) {
   if (resultsDiv) resultsDiv.style.display = "none";
   var searchInput = document.getElementById("plannerSearch");
   if (searchInput) searchInput.value = "";
+}
+
+function preventDefaultTouchMove(e) {
+  e.preventDefault();
+}
+
+function updateTouchDrag(ev) {
+  if (!isTouchDragging || !draggingEventId) return;
+  
+  var targetEl = document.elementFromPoint(ev.clientX, ev.clientY);
+  if (!targetEl) return;
+  
+  var col = targetEl.closest(currentView === 'month' ? ".month-cell" : ".day-col");
+  
+  document.querySelectorAll('.day-col, .month-cell').forEach(function(c) {
+    if (c !== col) c.classList.remove('drag-over');
+  });
+  
+  if (col) {
+    col.classList.add('drag-over');
+    var e = S.events.find(function(x) { return x.id == draggingEventId; });
+    if (e) {
+      if (e.start && e.end && currentView !== 'month') {
+        var tgc = col.querySelector('.time-grid-content');
+        if (tgc) {
+          var rect = tgc.getBoundingClientRect();
+          var y = ev.clientY - rect.top - draggingOffsetY;
+          var dur = parseTime(e.end) - parseTime(e.start);
+          var startMin = Math.max(0, Math.round(y / 15) * 15);
+          var endMin = startMin + dur;
+          var sh = Math.floor(startMin / 60); var sm = startMin % 60;
+          var eh = Math.floor(endMin / 60); var em = endMin % 60;
+          if (eh >= 24) { eh = 23; em = 59; }
+          var startStr = (sh < 10 ? '0'+sh : sh) + ':' + (sm < 10 ? '0'+sm : sm);
+          var endStr = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
+          
+          if (!dragPreviewEl) {
+            var sourceEl = document.querySelector('.event[data-id="' + draggingEventId + '"]');
+            dragPreviewEl = document.createElement('div');
+            dragPreviewEl.className = sourceEl ? sourceEl.className : 'event absolute';
+            dragPreviewEl.classList.add('dragging-preview');
+            dragPreviewEl.classList.remove('drag-source');
+            dragPreviewEl.classList.remove('dragging');
+            dragPreviewEl.style.height = dur + 'px';
+            dragPreviewEl.style.position = 'absolute';
+            dragPreviewEl.style.pointerEvents = 'none';
+            dragPreviewEl.style.zIndex = '50';
+            dragPreviewEl.style.opacity = '0.8';
+            
+            var title = e.title || '';
+            var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
+            var locHtml = '';
+            if (e.location && e.location.trim() !== '') {
+              locHtml = '<div class="muted" style="font-size:9.5px; color:inherit; opacity:0.75; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + esc(e.location.trim()) + '</div>';
+            }
+            dragPreviewEl.innerHTML = '<div style="font-weight:bold; pointer-events:none;">' + esc(title) + repeatIcon + '</div>' +
+                                      '<div class="muted" style="font-size:10px; color:inherit; opacity:0.8; pointer-events:none;">' + startStr + ' – ' + endStr + '</div>' +
+                                      locHtml;
+            tgc.appendChild(dragPreviewEl);
+          }
+          
+          if (dragPreviewEl.parentNode !== tgc) {
+            dragPreviewEl.remove();
+            tgc.appendChild(dragPreviewEl);
+          }
+          dragPreviewEl.style.top = startMin + 'px';
+          dragPreviewEl.style.left = '0%';
+          dragPreviewEl.style.width = 'calc(100% - 2px)';
+          
+          var timeDiv = dragPreviewEl.querySelector('.muted');
+          if (timeDiv) {
+            timeDiv.textContent = startStr + ' – ' + endStr;
+          }
+        }
+      } else {
+        var targetContainer = currentView === 'month' ? col : col.querySelector('.all-day-bar');
+        if (targetContainer) {
+          if (!dragPreviewEl) {
+            var sourceEl = document.querySelector('.event[data-id="' + draggingEventId + '"]');
+            dragPreviewEl = document.createElement('div');
+            dragPreviewEl.className = sourceEl ? sourceEl.className : 'event';
+            dragPreviewEl.classList.add('dragging-preview');
+            dragPreviewEl.classList.remove('drag-source');
+            dragPreviewEl.classList.remove('dragging');
+            dragPreviewEl.style.pointerEvents = 'none';
+            dragPreviewEl.style.opacity = '0.8';
+            dragPreviewEl.innerHTML = sourceEl ? sourceEl.innerHTML : esc(e.title);
+            targetContainer.appendChild(dragPreviewEl);
+          }
+          if (dragPreviewEl.parentNode !== targetContainer) {
+            dragPreviewEl.remove();
+            targetContainer.appendChild(dragPreviewEl);
+          }
+        }
+      }
+    }
+  }
+  
+  var wrapper = document.querySelector('.time-grid-wrapper');
+  if (wrapper) {
+    var wRect = wrapper.getBoundingClientRect();
+    if (ev.clientY < wRect.top + 40) {
+      wrapper.scrollTop -= 10;
+    } else if (ev.clientY > wRect.bottom - 40) {
+      wrapper.scrollTop += 10;
+    }
+  }
+}
+
+async function handleTouchDrop(ev) {
+  var targetEl = document.elementFromPoint(ev.clientX, ev.clientY);
+  var col = targetEl ? targetEl.closest(currentView === 'month' ? ".month-cell" : ".day-col") : null;
+  
+  document.querySelectorAll('.day-col, .month-cell').forEach(function(c) {
+    c.classList.remove('drag-over');
+  });
+  
+  var id = draggingEventId;
+  var iso = col ? col.getAttribute("data-iso") : null;
+  
+  if (col && id && iso) {
+    justTouchDragged = true;
+    setTimeout(function() { justTouchDragged = false; }, 100);
+    
+    var data = { date: iso };
+    var e = S.events.find(function(x) { return x.id == id; });
+    var originalDate = e ? e.date : null;
+    var originalStart = e ? e.start : null;
+    var originalEnd = e ? e.end : null;
+    
+    if (e && e.start && e.end && currentView !== 'month') {
+      var tgc = col.querySelector('.time-grid-content');
+      if (tgc) {
+        var rect = tgc.getBoundingClientRect();
+        var y = ev.clientY - rect.top - draggingOffsetY;
+        var dur = parseTime(e.end) - parseTime(e.start);
+        var startMin = Math.max(0, Math.round(y / 15) * 15);
+        var endMin = startMin + dur;
+        var sh = Math.floor(startMin / 60); var sm = startMin % 60;
+        var eh = Math.floor(endMin / 60); var em = endMin % 60;
+        if (eh >= 24) { eh = 23; em = 59; }
+        data.start = (sh < 10 ? '0'+sh : sh) + ':' + (sm < 10 ? '0'+sm : sm);
+        data.end = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
+      }
+    }
+    
+    if (e) {
+      Object.assign(e, data);
+    }
+    
+    if (dragPreviewEl) {
+      dragPreviewEl.remove();
+      dragPreviewEl = null;
+    }
+    
+    renderPlanner();
+    renderDashboard();
+    
+    if (e) {
+      var undoCallback = async function() {
+        var eventToRestore = S.events.find(function(x) { return x.id == id; });
+        if (eventToRestore) {
+          eventToRestore.date = originalDate;
+          eventToRestore.start = originalStart;
+          eventToRestore.end = originalEnd;
+          renderPlanner();
+          renderDashboard();
+          try {
+            await api("PUT", "/api/events/" + id, { date: originalDate, start: originalStart, end: originalEnd });
+            if (plannerRefresh) plannerRefresh();
+          } catch(err) {
+            console.error("Undo move failed:", err);
+            if (plannerRefresh) plannerRefresh();
+          }
+        }
+      };
+      showUndoToast("Event moved", undoCallback);
+    }
+
+    try {
+      await api("PUT", "/api/events/" + id, data);
+      if (plannerRefresh) plannerRefresh();
+    } catch(err) {
+      console.error(err);
+      if (plannerRefresh) await plannerRefresh();
+    }
+  } else {
+    if (dragPreviewEl) {
+      dragPreviewEl.remove();
+      dragPreviewEl = null;
+    }
+    renderPlanner();
+  }
+  
+  var sourceEl = document.querySelector('.event[data-id="' + id + '"]');
+  if (sourceEl) sourceEl.classList.remove('dragging');
+  document.body.classList.remove('dragging-move-active');
+  draggingEventId = null;
+  draggingOffsetY = 0;
+}
+
+function attachCellTouchInteractivity(el, iso, isTimeGrid) {
+  var lastTapTime = 0;
+  var longPressTimer = null;
+  var touchStartClientX = 0;
+  var touchStartClientY = 0;
+  var touchPointerId = null;
+
+  el.addEventListener("pointerdown", function(ev) {
+    if (ev.pointerType !== "touch") return;
+    if (ev.target.closest('.event')) return;
+    
+    touchPointerId = ev.pointerId;
+    touchStartClientX = ev.clientX;
+    touchStartClientY = ev.clientY;
+    
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(function() {
+      if (navigator.vibrate) navigator.vibrate(20);
+      
+      var targetTime = null;
+      if (isTimeGrid) {
+        var rect = el.getBoundingClientRect();
+        var y = ev.clientY - rect.top;
+        var startMin = Math.max(0, Math.round(y / 15) * 15);
+        targetTime = startMin;
+      }
+      triggerAddEventAt(iso, targetTime);
+      cleanup();
+    }, 500);
+  });
+
+  el.addEventListener("pointermove", function(ev) {
+    if (ev.pointerId !== touchPointerId) return;
+    
+    var dx = ev.clientX - touchStartClientX;
+    var dy = ev.clientY - touchStartClientY;
+    if (Math.sqrt(dx*dx + dy*dy) > 10) {
+      cleanup();
+    }
+  });
+
+  el.addEventListener("pointerup", function(ev) {
+    if (ev.pointerId !== touchPointerId) return;
+    
+    clearTimeout(longPressTimer);
+    
+    var currentTime = Date.now();
+    var tapDelay = currentTime - lastTapTime;
+    
+    if (tapDelay < 300) {
+      var targetTime = null;
+      if (isTimeGrid) {
+        var rect = el.getBoundingClientRect();
+        var y = ev.clientY - rect.top;
+        var startMin = Math.max(0, Math.round(y / 15) * 15);
+        targetTime = startMin;
+      }
+      triggerAddEventAt(iso, targetTime);
+      cleanup();
+    } else {
+      lastTapTime = currentTime;
+    }
+    
+    touchPointerId = null;
+  });
+
+  el.addEventListener("pointercancel", function(ev) {
+    if (ev.pointerId === touchPointerId) {
+      cleanup();
+    }
+  });
+
+  function cleanup() {
+    clearTimeout(longPressTimer);
+    touchPointerId = null;
+  }
+}
+
+function triggerAddEventAt(iso, startMin) {
+  if (startMin !== null && startMin !== undefined) {
+    var endMin = startMin + 60;
+    var sh = Math.floor(startMin / 60); var sm = startMin % 60;
+    var eh = Math.floor(endMin / 60); var em = endMin % 60;
+    if (eh >= 24) { eh = 23; em = 59; }
+    var startStr = (sh < 10 ? '0'+sh : sh) + ':' + (sm < 10 ? '0'+sm : sm);
+    var endStr = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
+    openAdd(iso, startStr, endStr);
+  } else {
+    openAdd(iso);
+  }
 }

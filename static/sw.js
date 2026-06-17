@@ -1,17 +1,19 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v52";
+const CACHE = "tylo-v76";
 const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",
                 "/js/planner.js", "/js/exams.js", "/js/habits.js",
                 "/js/workouts.js", "/js/tasks.js", "/js/notes.js",
                 "/js/analytics.js", "/js/dashboard.js", "/js/backup.js",
-                "/js/files.js", "/js/settings.js", "/js/marked.min.js",
-                "/js/offline.js"];
+                "/js/files.js", "/js/settings.js", "/js/marked.min.js", "/js/alpine.min.js",
+                "/js/offline.js", "/js/bottom_nav.js", "/js/login.js", "/js/study_timer.js",
+                "/js/swipe.js"];
 
 self.addEventListener("install", function (e) {
+  self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }));
 });
 
@@ -45,3 +47,43 @@ self.addEventListener("fetch", function (e) {
     );
   }
 });
+
+self.addEventListener("push", function (e) {
+  if (!e.data) return;
+  try {
+    const data = e.data.json();
+    const options = {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      vibrate: [100, 50, 100],
+      data: {
+        url: "/"
+      }
+    };
+    e.waitUntil(
+      self.registration.showNotification(data.title, options)
+    );
+  } catch (err) {
+    console.error("Error displaying push notification:", err);
+  }
+});
+
+self.addEventListener("notificationclick", function (e) {
+  e.notification.close();
+  const urlToOpen = (e.notification.data && e.notification.data.url) || "/";
+  e.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clList) {
+      for (let i = 0; i < clList.length; i++) {
+        let client = clList[i];
+        if (client.url.endsWith(urlToOpen) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
+});
+

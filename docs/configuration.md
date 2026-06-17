@@ -21,8 +21,8 @@ Apply changes with `docker compose up -d --build`.
 
 ## Authentication
 
-- Credentials are checked with constant-time comparison and a 1-second delay
-  on failure to slow brute-forcing.
+- Credentials are checked with constant-time comparison and a non-blocking in-memory
+  IP rate limiter (blocks after 5 failed attempts in 60 seconds) on failure to slow brute-forcing.
 - Sessions are signed cookies; **Log out** in the header clears them.
 - **Two-factor authentication (TOTP):** enable under **Settings → Security**.
   Scan the QR code with any authenticator app (Google Authenticator, Aegis,

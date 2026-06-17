@@ -133,6 +133,27 @@ with db() as con:
 # ---------------- app factory ----------------
 def create_app():
     application = Flask(__name__, static_folder="static", static_url_path="")
+    application.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
+    from flask import request
+
+    @application.after_request
+    def add_header(r):
+        if request.path in ('/sw.js', '/index.html', '/'):
+            r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            r.headers["Pragma"] = "no-cache"
+            r.headers["Expires"] = "0"
+            r.headers['Cache-Control'] = 'public, max-age=0'
+        return r
+
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    application.wsgi_app = ProxyFix(application.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+    # Secure session cookies
+    application.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax'
+    )
 
     # Session secret: from env, else generated once and stored in the database
     # so logins survive restarts.
@@ -159,6 +180,13 @@ def create_app():
     application.register_blueprint(calendar_bp)
     application.register_blueprint(strava_bp)
     application.register_blueprint(notifications_bp)
+
+    @application.after_request
+    def add_security_headers(response):
+        response.headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data: blob: https://www.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval';"
+        response.headers['X-Content-Type-Options'] = "nosniff"
+        response.headers['X-Frame-Options'] = "DENY"
+        return response
 
     return application
 

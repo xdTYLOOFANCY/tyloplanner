@@ -21,5 +21,5 @@ possible; please allow reasonable time for a fix before disclosing.
   signing key are stored unencrypted in the SQLite database — protect the
   `data/` directory and your backups accordingly.
 - **Brute-force resistance:** constant-time credential comparison and a
-  1-second delay on failed logins. There is no lockout; use a strong
-  password, especially when internet-exposed.
+  non-blocking in-memory IP rate limiter (locks after 5 failed attempts in 60 seconds).
+  There is no lockout; use a strong password, especially when internet-exposed.

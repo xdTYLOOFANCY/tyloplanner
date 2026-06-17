@@ -436,7 +436,7 @@ function renderNoteList() {
         highlightText((n.body || "").slice(start, end), q) + (end < (n.body || "").length ? "\u2026" : "") + '</div>';
     }
     var pinned = n.is_pinned ? 'note-pinned' : '';
-    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" onclick="selectNote(\'' + n.id + '\')">' +
+    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" data-id="' + n.id + '" onclick="selectNote(\'' + n.id + '\')">' +
       '<button class="btn-pin" onclick="toggleNotePin(\'' + n.id + '\',event)" title="' + (n.is_pinned ? 'Unpin' : 'Pin') + '">\u2605</button>' +
       '<div class="grow"><div>' + title + '</div>' + snippet +
       '<div class="muted">' + new Date(n.updated || 0).toLocaleDateString() + '</div></div></div>';

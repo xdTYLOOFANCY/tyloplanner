@@ -184,6 +184,10 @@ def ics_export():
             d = (x["date"] or "").replace("-", "")
             if not d:
                 continue
+            # Skip if this exam is already synced as a calendar event to avoid duplicates
+            dup = con.execute("SELECT 1 FROM events WHERE id=?", (x["id"],)).fetchone()
+            if dup:
+                continue
             lines += ["BEGIN:VEVENT", "UID:%s@tyloplanner" % x["id"], "DTSTAMP:" + now,
                       "DTSTART;VALUE=DATE:" + d,
                       "SUMMARY:" + ics_escape("EXAM: " + (x["name"] or "")), "END:VEVENT"]

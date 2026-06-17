@@ -8,19 +8,32 @@ import { todayStr, esc, delRow as _delRow } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js';
 import { exportData, importData } from './js/backup.js';
-import { renderDashboard, addShortcut as _addShortcut } from './js/dashboard.js';
+import { 
+  renderDashboard, 
+  addShortcut as _addShortcut,
+  toggleEditMode,
+  cancelCustomize,
+  saveCustomize,
+  applyPreset,
+  toggleWidgetPresence,
+  startCardDrag,
+  startResize,
+  toggleShowShortcuts as _toggleShowShortcuts,
+  reorderShortcut as _reorderShortcut,
+  toggleItem as _toggleItem,
+  showDashboardEventDetails
+} from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, editEvent, closeEventModal, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, openShortcutsModal, closeShortcutsModal, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, handlePlannerSearchKeydown } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, handlePlannerSearchKeydown } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
 import {
   addTask as _addTask, toggleTask as _toggleTask, renderTasks, addSubtask as _addSubtask,
   dragTaskStart, dragTaskOver, dragTaskEnd, dropTask,
-  openCategoriesModal, closeCategoriesModal,
   addModalCategory as _addModalCategory, deleteModalCategory as _deleteModalCategory,
   updateModalCategoryColor as _updateModalCategoryColor, renameModalCategory as _renameModalCategory,
-  openTaskModal, closeTaskModal, saveTaskModal as _saveTaskModal
+  openTaskModal, saveTaskModal as _saveTaskModal
 } from './js/tasks.js';
 import {
   renderNotes, newNote as _newNote, selectNote, openNote, noteChanged, deleteNote as _deleteNote,
@@ -29,9 +42,9 @@ import {
   handleNoteSearchKeydown, handleNoteBodySearchKeydown
 } from './js/notes.js';
 import {
-  renderFiles, uploadFile as _uploadFile, delFile as _delFile, toggleFilePin, setFileSort,
+  renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort,
   navigateToFolder, createFolderPrompt, renameFolderPrompt, changeFolderIconPrompt, deleteFolderConfirm,
-  previewFile, closeMediaPreviewModal, renameFilePrompt,
+  previewFile, renameFilePrompt,
   onFileDragStart, onFileDragEnd, onFolderDragOver, onFolderDragLeave, onFolderDrop,
   toggleSelectAllFiles, onFileSelectChange, moveSelectedFilesToFolder, deleteSelectedFiles,
   clearFileSelection, handleFileSearchKeydown
@@ -44,12 +57,14 @@ import {
   importIcsFile as _importIcsFile, clearIcs as _clearIcs,
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
-  saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
-  toggleShowShortcuts as _toggleShowShortcuts, reorderShortcut as _reorderShortcut,
-  toggleItem as _toggleItem, toggleTabPersistence as _toggleTabPersistence,
+  saveAppThemeStyle as _saveAppThemeStyle, saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
+  toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
-  updateCategoryColor as _updateCategoryColor, checkForUpdates
+  updateCategoryColor as _updateCategoryColor, checkForUpdates,
+  enableWebPush, disableWebPush
 } from './js/settings.js';
+import './js/study_timer.js';
+import { initSwipeGestures } from './js/swipe.js';
 
 // ---- renderAll used by refresh() ----
 function renderAll() {
@@ -59,6 +74,7 @@ function renderAll() {
 
 // ---- wrappers that bind refresh ----
 var R = function() { return refresh(renderAll); };
+window.refreshApp = R;
 window.delRow = function(t, id) { _delRow(t, id, R); };
 window.addShortcut = function() { _addShortcut(R); };
 window.saveEventModal = function() { _saveEventModal(R); };
@@ -77,19 +93,17 @@ window.dragTaskOver = dragTaskOver;
 window.dragTaskEnd = dragTaskEnd;
 window.dropTask = function(e, dropId) { dropTask(e, dropId, R); };
 
-window.openCategoriesModal = openCategoriesModal;
-window.closeCategoriesModal = closeCategoriesModal;
 window.addModalCategory = function() { _addModalCategory(R); };
 window.deleteModalCategory = function(catName) { _deleteModalCategory(catName, R); };
 window.updateModalCategoryColor = function(name, color) { _updateModalCategoryColor(name, color, R); };
 window.renameModalCategory = function(oldName, newName) { _renameModalCategory(oldName, newName, R); };
 
 window.openTaskModal = openTaskModal;
-window.closeTaskModal = closeTaskModal;
 window.saveTaskModal = function() { _saveTaskModal(R); };
 window.newNote = function() { _newNote(R); };
 window.deleteNote = function() { _deleteNote(R); };
 window.uploadFile = function() { _uploadFile(R); };
+window.uploadCameraFile = function() { _uploadCameraFile(R); };
 window.delFile = function(id) { _delFile(id, R); };
 window.navigateToFolder = navigateToFolder;
 window.createFolderPrompt = function() { createFolderPrompt(R); };
@@ -98,7 +112,6 @@ window.changeFolderIconPrompt = function(id, oldIcon) { changeFolderIconPrompt(i
 window.deleteFolderConfirm = function(id) { deleteFolderConfirm(id, R); };
 window.renameFilePrompt = function(id, oldName) { renameFilePrompt(id, oldName, R); };
 window.previewFile = previewFile;
-window.closeMediaPreviewModal = closeMediaPreviewModal;
 window.onFileDragStart = onFileDragStart;
 window.onFileDragEnd = onFileDragEnd;
 window.onFolderDragOver = onFolderDragOver;
@@ -112,6 +125,8 @@ window.clearFileSelection = clearFileSelection;
 window.refreshApp = R;
 window.importData = function(ev) { importData(ev, R); };
 window.saveNotifySettings = function() { _saveNotifySettings(R); };
+window.enableWebPush = function() { enableWebPush(R); };
+window.disableWebPush = function() { disableWebPush(R); };
 window.saveCalSync = function() { _saveCalSync(R); };
 window.calSyncNow = function() { _calSyncNow(R); };
 window.importIcsFile = function() { _importIcsFile(R); };
@@ -123,6 +138,7 @@ window.stravaDisconnect = function() { _stravaDisconnect(R); };
 window.tfaConfirm = function() { _tfaConfirm(R); };
 window.tfaDisable = function() { _tfaDisable(R); };
 window.backupNow = function() { _backupNow(R); };
+window.saveAppThemeStyle = function() { _saveAppThemeStyle(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
 window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
@@ -158,9 +174,6 @@ window.moveWeek = moveWeek;
 window.changePlannerView = changePlannerView;
 window.openAdd = openAdd;
 window.editEvent = editEvent;
-window.closeEventModal = closeEventModal;
-window.openShortcutsModal = openShortcutsModal;
-window.closeShortcutsModal = closeShortcutsModal;
 window.saveShortcuts = saveShortcuts;
 window.resetShortcutsToDefault = resetShortcutsToDefault;
 window.selectNote = selectNote;
@@ -188,6 +201,16 @@ window.copyIcs = copyIcs;
 window.renderSettings = function(refresh) { renderSettings(refresh || R); };
 window.checkForUpdates = checkForUpdates;
 
+// Dashboard customization bindings
+window.toggleEditMode = toggleEditMode;
+window.cancelCustomize = cancelCustomize;
+window.saveCustomize = saveCustomize;
+window.applyPreset = applyPreset;
+window.toggleWidgetPresence = toggleWidgetPresence;
+window.startCardDrag = startCardDrag;
+window.startResize = startResize;
+window.showDashboardEventDetails = showDashboardEventDetails;
+
 // ---------- tabs ----------
 var tabsNav = document.getElementById("tabs");
 tabsNav.addEventListener("click", function(e) {
@@ -201,9 +224,118 @@ tabsNav.addEventListener("click", function(e) {
   } else {
     localStorage.removeItem("active_tab");
   }
+  if (typeof window.updateFAB === "function") {
+    window.updateFAB(b.dataset.tab);
+  }
 });
 
+// ---------- Floating Action Button (FAB) ----------
+let currentActiveTab = "dashboard";
+
+window.updateFAB = function(tab) {
+  currentActiveTab = tab;
+  const fabContainer = document.getElementById("globalFab");
+  const fabBtn = document.getElementById("fabBtn");
+  const fabIcon = document.getElementById("fabIcon");
+  const fabMenu = document.getElementById("fabMenu");
+  
+  if (!fabContainer || !fabBtn || !fabIcon || !fabMenu) return;
+
+  // Close menu if open
+  fabMenu.classList.remove("open");
+  fabBtn.style.transform = "";
+
+  // Set FAB display and icon depending on tab
+  if (tab === "dashboard") {
+    fabContainer.style.display = "flex";
+    fabIcon.textContent = "+";
+  } else if (tab === "planner") {
+    fabContainer.style.display = "flex";
+    fabIcon.textContent = "📅";
+  } else if (tab === "tasks") {
+    fabContainer.style.display = "flex";
+    fabIcon.textContent = "☑️";
+  } else if (tab === "notes") {
+    fabContainer.style.display = "flex";
+    fabIcon.textContent = "📝";
+  } else if (tab === "files") {
+    fabContainer.style.display = "flex";
+    fabIcon.textContent = "📁";
+  } else {
+    fabContainer.style.display = "none";
+  }
+};
+
+window.handleFabClick = function(event) {
+  event.stopPropagation();
+  const fabMenu = document.getElementById("fabMenu");
+  const fabBtn = document.getElementById("fabBtn");
+
+  if (currentActiveTab === "planner") {
+    if (typeof window.openAdd === "function") window.openAdd();
+  } else if (currentActiveTab === "tasks") {
+    if (typeof window.openTaskModal === "function") window.openTaskModal();
+  } else if (currentActiveTab === "notes") {
+    if (typeof window.newNote === "function") window.newNote();
+  } else if (currentActiveTab === "files" || currentActiveTab === "dashboard") {
+    // Toggle speed dial menu
+    const isOpen = fabMenu.classList.toggle("open");
+    if (isOpen) {
+      fabBtn.style.transform = "rotate(45deg)";
+      renderFabMenu();
+    } else {
+      fabBtn.style.transform = "";
+    }
+  }
+};
+
+// Close FAB menu when clicking outside
+document.addEventListener("click", () => {
+  const fabMenu = document.getElementById("fabMenu");
+  const fabBtn = document.getElementById("fabBtn");
+  if (fabMenu && fabMenu.classList.contains("open")) {
+    fabMenu.classList.remove("open");
+    if (fabBtn) fabBtn.style.transform = "";
+  }
+});
+
+function renderFabMenu() {
+  const fabMenu = document.getElementById("fabMenu");
+  if (!fabMenu) return;
+
+  let html = "";
+  if (currentActiveTab === "files") {
+    html = `
+      <div class="fab-menu-item" onclick="document.getElementById('fileInput').click();">
+        <span class="item-icon">📤</span> Upload File
+      </div>
+      <div class="fab-menu-item" onclick="document.getElementById('cameraInput').click();">
+        <span class="item-icon">📸</span> Take Photo
+      </div>
+    `;
+  } else if (currentActiveTab === "dashboard") {
+    html = `
+      <div class="fab-menu-item" onclick="if(typeof window.openAdd === 'function') window.openAdd();">
+        <span class="item-icon">📅</span> Add Event
+      </div>
+      <div class="fab-menu-item" onclick="if(typeof window.openTaskModal === 'function') window.openTaskModal();">
+        <span class="item-icon">☑️</span> Add Task
+      </div>
+      <div class="fab-menu-item" onclick="if(typeof window.newNote === 'function') window.newNote();">
+        <span class="item-icon">📝</span> New Note
+      </div>
+    `;
+  }
+  fabMenu.innerHTML = html;
+}
+
 // ---------- boot ----------
+document.addEventListener('alpine:init', () => {
+  import('./js/state.js').then(({ S }) => {
+    Alpine.store('state', S || {});
+  });
+});
+
 document.getElementById("wDate").value = todayStr();
 applyTheme();
 
@@ -218,7 +350,13 @@ if (savedTab) {
     var sect = document.getElementById("tab-" + savedTab);
     if (sect) sect.classList.add("active");
   }
+  window.updateFAB(savedTab);
+} else {
+  var activeBtn = document.querySelector("#tabs button.active");
+  window.updateFAB(activeBtn ? activeBtn.dataset.tab : "dashboard");
 }
+
+initSwipeGestures();
 
 function showPwaUpdateBanner(worker) {
   var banner = document.getElementById("update-banner");

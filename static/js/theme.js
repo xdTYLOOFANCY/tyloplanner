@@ -70,3 +70,12 @@ export function applyAccentFromSettings(set) {
   }
 }
 
+export function applyThemeStyle(style) {
+  document.documentElement.setAttribute("data-theme-style", style || "default");
+}
+
+export function applyThemeStyleFromSettings(set) {
+  var style = (set && set.app_theme_style) ? set.app_theme_style : "default";
+  applyThemeStyle(style);
+}
+

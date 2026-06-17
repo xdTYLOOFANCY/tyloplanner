@@ -33,13 +33,14 @@ codebase is small enough to read in an afternoon and make your own.
 - **Exams & grades** — countdowns to every exam, ECTS-weighted grade point average tracking, and task/exam reminders.
 - **Habits** — check off daily habits, track completion streaks, and receive automated evening nudges for incomplete items.
 - **Workouts** — log runs, rides, and gym sessions manually or sync them automatically with **Strava** integration.
+- **Study Timer & Pomodoro Tracker** — Alpine.js circular countdown timer and stopwatch, customizable study/break intervals, active subject tracking, audio chime alerts, state persistence, and logs.
 - **Advanced Task Management** — organize tasks using custom categories with styled color tags, drag-and-drop prioritization, subtask checklists, and datetime-local due date/time fields.
 - **Notes Editor** — compose rich notes with `marked.js` markdown rendering, wiki-style cross-links (`[[Note Title]]`), a dual-pane split editor layout, real-time word/character count, per-note layout persistence, and debounced background autosaving.
 - **File Manager** — upload documents/images via a full-screen drag-and-drop upload zone, preview media inline, organize with nested directories and breadcrumb navigation, and manage files in bulk.
-- **Analytics** — 12-month visual history of workouts, distance, study hours, and habit consistency, plus all-time totals.
+- **Analytics** — 12-month visual history of workouts, distance, study hours (from actual logged sessions), and habit consistency, plus all-time totals.
 - **Keyboard shortcuts** — navigate swiftly across tabs and weeks with customizable global hotkeys (`t`, `w`, `d`, `m`, `n`, `p`, `c`) and a visual key customization modal.
 - **Theming & Customization** — toggle dark/light modes and personalize the UI with a persistent custom accent color picker.
-- **Notifications** — morning agendas (including overdue/upcoming tasks), evening habit nudges, and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) (completely free, no account required).
+- **Notifications** — morning agendas (including overdue/upcoming tasks), evening habit nudges, and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) or natively through browser **Web Push notifications**.
 - **Mobile app (PWA) & Offline Sync** — install as a PWA for a fullscreen mobile app. IndexedDB offline sync queues your actions (creating/editing/deleting notes, tasks, events) while offline and replays them automatically when your connection is restored.
 
 - **Secure & Resilient** — session-based authentication, optional TOTP two-factor authentication (2FA), nightly automated database backups, and one-click restore directly from the settings panel.
