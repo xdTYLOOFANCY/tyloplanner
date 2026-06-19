@@ -39,7 +39,7 @@ import {
   renderNotes, newNote as _newNote, selectNote, openNote, noteChanged, deleteNote as _deleteNote,
   toggleNotePin, noteSearchInput, noteBodySearchInput, noteBodySearchNav,
   toggleNoteMode, noteInsert, toggleNoteReadMode, toggleNoteSplitOnly,
-  handleNoteSearchKeydown, handleNoteBodySearchKeydown
+  handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack
 } from './js/notes.js';
 import {
   renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort,
@@ -178,6 +178,7 @@ window.saveShortcuts = saveShortcuts;
 window.resetShortcutsToDefault = resetShortcutsToDefault;
 window.selectNote = selectNote;
 window.openNote = openNote;
+window.notesGoBack = notesGoBack;
 window.noteChanged = noteChanged;
 window.noteSearchInput = noteSearchInput;
 window.noteBodySearchInput = noteBodySearchInput;
@@ -371,6 +372,8 @@ function showPwaUpdateBanner(worker) {
 }
 
 if ("serviceWorker" in navigator) {
+  var _swRefreshing = false;
+
   navigator.serviceWorker.register("/sw.js").then(function (reg) {
     if (reg.waiting) {
       showPwaUpdateBanner(reg.waiting);
@@ -387,7 +390,11 @@ if ("serviceWorker" in navigator) {
     });
   }).catch(function() {});
 
+  // Only reload after a user-initiated SKIP_WAITING message.
+  // The _swRefreshing flag is set inside showPwaUpdateBanner's click handler.
   navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (_swRefreshing) return;
+    _swRefreshing = true;
     window.location.reload();
   });
 }

@@ -8,10 +8,10 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=70">
+<link rel="stylesheet" href="style.css?v=71">
 <script defer src="js/alpine.min.js"></script>
 <script src="js/marked.min.js"></script>
-<script type="module" src="app.js?v=70"></script>
+<script type="module" src="app.js?v=71"></script>
 <script src="js/bottom_nav.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
@@ -34,10 +34,10 @@
   <h1>TyloPlanner</h1>
   <span class="date" id="headerDate"></span>
   <span class="spacer"></span>
-  <button class="btn ghost small" onclick="toggleTheme()">☀/☾</button>
-  <button class="btn ghost small" onclick="exportData()">Backup</button>
-  <button class="btn ghost small" onclick="document.getElementById('importFile').click()">Restore</button>
-  <a class="btn ghost small" id="logoutBtn" href="/logout" style="display:none;text-decoration:none">Log out</a>
+  <button class="btn ghost small" onclick="toggleTheme()" title="Toggle theme">☀/☾</button>
+  <button class="btn ghost small header-desktop-only" onclick="exportData()">Backup</button>
+  <button class="btn ghost small header-desktop-only" onclick="document.getElementById('importFile').click()">Restore</button>
+  <a class="btn ghost small header-desktop-only" id="logoutBtn" href="/logout" style="display:none;text-decoration:none">Log out</a>
   <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
 </header>
 <nav id="tabs">
@@ -104,13 +104,13 @@
         <option value="7" selected>Week</option>
         <option value="month">Month</option>
       </select>
-      <div x-data class="row" style="display:inline-block; align-items:center;">
-        <button class="btn ghost small" onclick="moveWeek(-1)">‹</button>
+      <div x-data class="row" style="display:inline-flex; align-items:center; gap:4px;">
+        <button class="btn ghost small" onclick="moveWeek(-1)">&#8249;</button>
         <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
-        <button class="btn ghost small" onclick="moveWeek(1)">›</button>
-        <button class="btn ghost small" @click="$dispatch('open-shortcuts-modal')" style="margin-left:8px;">⌨️ Shortcuts</button>
+        <button class="btn ghost small" onclick="moveWeek(1)">&#8250;</button>
+        <button class="btn ghost small header-desktop-only" @click="$dispatch('open-shortcuts-modal')" style="margin-left:4px;">⌨️ Shortcuts</button>
       </div>
-      <div style="position:relative; display:inline-block; vertical-align:middle;">
+      <div style="position:relative; display:inline-block; vertical-align:middle;" class="header-desktop-only">
         <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
         <div id="plannerSearchResults" style="display:none; position:absolute; top:28px; left:8px; width:300px; max-height:250px; overflow-y:auto; background:var(--panel); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; padding:4px 0; text-align:left;"></div>
       </div>
@@ -193,6 +193,8 @@
         <div id="noteList"></div>
       </div>
       <div class="card" id="noteEditor" style="display:none">
+        <!-- Mobile back button: returns to note list on small screens -->
+        <button class="mobile-only" id="noteBackBtn" onclick="notesGoBack()" style="display:flex;align-items:center;gap:6px;background:transparent;border:none;color:var(--accent);font-size:15px;font-weight:600;cursor:pointer;padding:0 0 10px 0;-webkit-tap-highlight-color:transparent;">&#8592; Notes</button>
         <input id="noteTitle" placeholder="Title" oninput="noteChanged()">
         <div class="note-header-bar">
           <div class="note-stats">
@@ -393,8 +395,13 @@
     </div>
     <div class="card">
       <h3>💾 Data</h3>
-      <p style="font-size:14px;margin-bottom:8px">Your data lives in <b>data/tyloplanner.db</b> (SQLite) on your server. Use Backup/Restore in the header for JSON snapshots, or copy the .db file directly. Login credentials are set in <b>.env</b> (AUTH_USERNAME / AUTH_PASSWORD).</p>
-      <div id="backupStatus" style="margin-top:14px"></div>
+      <p style="font-size:14px;margin-bottom:8px">Your data lives in <b>data/tyloplanner.db</b> (SQLite) on your server. Use Backup/Restore for JSON snapshots, or copy the .db file directly. Login credentials are set in <b>.env</b> (AUTH_USERNAME / AUTH_PASSWORD).</p>
+      <!-- Backup/Restore buttons: always visible on mobile (header buttons hidden), desktop-only in header -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        <button class="btn ghost small" onclick="exportData()">⬇️ Backup (download)</button>
+        <button class="btn ghost small" onclick="document.getElementById('importFile').click()">⬆️ Restore (upload)</button>
+      </div>
+      <div id="backupStatus" style="margin-top:4px"></div>
       <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Available backups</h4>
       <div id="backupList" class="card-scroll"><span class="muted">Loading…</span></div>
     </div>
@@ -711,7 +718,7 @@
 <nav id="bottomNav">
   <button data-tab="dashboard">
     <span class="nav-icon">🏠</span>
-    <span class="nav-label">Dashboard</span>
+    <span class="nav-label">Home</span>
   </button>
   <button data-tab="planner">
     <span class="nav-icon">📅</span>
@@ -721,13 +728,13 @@
     <span class="nav-icon">✅</span>
     <span class="nav-label">Habits</span>
   </button>
-  <button data-tab="notes">
-    <span class="nav-icon">📝</span>
-    <span class="nav-label">Notes</span>
-  </button>
   <button data-tab="tasks">
     <span class="nav-icon">☑️</span>
     <span class="nav-label">To-do</span>
+  </button>
+  <button data-tab="settings">
+    <span class="nav-icon">⚙️</span>
+    <span class="nav-label">More</span>
   </button>
 </nav>
 <script src="js/bottom_nav.js"></script>

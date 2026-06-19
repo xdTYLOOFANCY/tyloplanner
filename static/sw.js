@@ -1,7 +1,7 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v76";
+const CACHE = "tylo-v78";
 const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",
@@ -13,7 +13,8 @@ const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/mani
                 "/js/swipe.js"];
 
 self.addEventListener("install", function (e) {
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here — it causes infinite reload loops on iOS
+  // standalone PWA mode. The new SW waits until the user clicks "Update now".
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }));
 });
 

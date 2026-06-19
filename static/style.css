@@ -12,14 +12,14 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh}
-header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap}
-header h1{font-size:18px;font-weight:700;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-header .date{color:var(--muted);font-size:13px}
+header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:nowrap;min-height:52px}
+header h1{font-size:18px;font-weight:700;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap}
+header .date{color:var(--muted);font-size:13px;white-space:nowrap}
 header .spacer{flex:1}
-nav{display:flex;gap:4px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid var(--border);justify-content:center}
-nav button{background:transparent;border:none;color:var(--muted);padding:10px 18px;border-radius:8px;cursor:pointer;font-size:15.5px;font-weight:600}
-nav button.active{background:var(--panel2);color:var(--text)}
-nav button:hover{color:var(--text)}
+nav#tabs{display:flex;gap:4px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid var(--border);justify-content:center}
+nav#tabs button{background:transparent;border:none;color:var(--muted);padding:10px 18px;border-radius:8px;cursor:pointer;font-size:15.5px;font-weight:600}
+nav#tabs button.active{background:var(--panel2);color:var(--text)}
+nav#tabs button:hover{color:var(--text)}
 main{padding:20px;max-width:1200px;margin:0 auto}
 section{display:none}
 section.active{display:block}
@@ -379,6 +379,36 @@ header .headlogo{width:26px;height:26px}
 
 
 @media (max-width: 640px) {
+  /* Hide the desktop top nav — bottom nav takes over */
+  nav#tabs {
+    display: none !important;
+  }
+
+  /* Compact header: hide non-essential actions */
+  header {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  header .date {
+    display: none;
+  }
+
+  .header-desktop-only {
+    display: none !important;
+  }
+
+  main {
+    padding: 14px 12px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  h2.pagetitle {
+    font-size: 17px;
+    margin-bottom: 12px;
+  }
+
+  /* Bottom navigation */
   #bottomNav {
     display: flex;
     position: fixed;
@@ -387,14 +417,14 @@ header .headlogo{width:26px;height:26px}
     right: 0;
     width: 100%;
     z-index: 100;
-    background: color-mix(in srgb, var(--panel) 85%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--panel) 90%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
     justify-content: space-around;
     align-items: center;
-    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.2);
   }
 
   #bottomNav button {
@@ -404,36 +434,86 @@ header .headlogo{width:26px;height:26px}
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    font-size: 11px;
+    gap: 3px;
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
     flex: 1;
-    padding: 6px 0;
-    transition: color 0.2s ease, transform 0.2s ease;
+    padding: 6px 2px;
+    min-height: 52px;
+    transition: color 0.2s ease;
     position: relative;
     -webkit-tap-highlight-color: transparent;
+    border-radius: 0;
+    letter-spacing: 0.01em;
   }
 
-  #bottomNav button:hover {
-    color: var(--text);
+  #bottomNav button:active {
+    opacity: 0.7;
   }
 
   #bottomNav button.active {
     color: var(--accent);
   }
 
+  /* Active indicator pill above the icon */
+  #bottomNav button.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 0 0 3px 3px;
+  }
+
   #bottomNav button .nav-icon {
-    font-size: 20px;
-    transition: transform 0.2s ease;
+    font-size: 22px;
+    line-height: 1;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   #bottomNav button.active .nav-icon {
-    transform: scale(1.15);
+    transform: scale(1.12);
   }
 
-  main {
-    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  /* Improve touch target sizes for inputs and buttons */
+  input, select, textarea {
+    font-size: 16px !important; /* prevents iOS zoom */
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    border-radius: 10px;
+    min-height: 44px;
+  }
+
+  .btn.small {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 38px;
+    border-radius: 8px;
+  }
+
+  .list-item {
+    padding: 12px 12px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .card h3 {
+    font-size: 11px;
+    margin-bottom: 10px;
   }
 }
 
@@ -994,14 +1074,8 @@ body.dark .drop-overlay {
   to { transform: translateY(0); opacity: 1; }
 }
 
-@media (max-width: 640px) {
-  .update-banner {
-    left: 16px;
-    right: 16px;
-    bottom: calc(72px + env(safe-area-inset-bottom)); /* above bottom navigation bar */
-    justify-content: space-between;
-  }
-}
+
+
 
 /* Dashboard Grid Layout */
 .dashboard-grid {
@@ -1031,15 +1105,96 @@ body.dark .drop-overlay {
   overflow-y: auto;
 }
 
+/* Tablet: switch to 6-col mobile grid with fixed row heights */
 @media (max-width: 768px) {
   .dashboard-grid {
     grid-template-columns: repeat(6, 1fr);
-    grid-auto-rows: 150px;
+    grid-auto-rows: 160px;
     gap: 12px;
   }
   .dashboard-grid .card {
     grid-column: var(--mx, auto) / span var(--mw, auto);
     grid-row: var(--my, auto) / span var(--mh, auto);
+  }
+}
+
+/* Mobile: single-column auto-height cards — no clipping, natural content height */
+@media (max-width: 640px) {
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .dashboard-grid .card {
+    /* Reset all grid positioning — cards flow vertically */
+    grid-column: unset !important;
+    grid-row: unset !important;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* Cards get natural height; card-scroll has a comfortable max */
+  .dashboard-grid .card .card-scroll {
+    max-height: 280px !important;
+    overflow-y: auto;
+  }
+
+  /* Greeting / clock widget looks better taller */
+  .dashboard-grid .card:has(.greeting-time) {
+    min-height: 160px;
+  }
+
+  /* Study timer needs room for the circle */
+  .dashboard-grid .card:has(.study-timer-widget) {
+    min-height: 200px;
+  }
+
+  /* Quick-add and notepad benefit from more height */
+  .dashboard-grid .card:has(.quick-add-form),
+  .dashboard-grid .card:has(.note-textarea) {
+    min-height: 220px;
+  }
+
+  /* Dashboard header row */
+  .dash-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .customization-toggle-btn {
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+
+  /* Shortcuts row — smaller tiles, more compact */
+  .shortcuts-row {
+    gap: 10px;
+    margin-bottom: 16px;
+    justify-content: flex-start;
+  }
+
+  .shortcut-btn {
+    width: 72px;
+    height: 72px;
+    gap: 6px;
+  }
+
+  .shortcut-btn img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .shortcut-btn .name {
+    font-size: 10px;
+  }
+
+  /* wstats in workout widget — 2-col grid on mobile */
+  .wstats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
   }
 }
 
@@ -1944,7 +2099,200 @@ body.dark .drop-overlay {
   }
 }
 
+/* =========================================================
+   Mobile-first polish — all breakpoints ≤ 640px
+   ========================================================= */
+@media (max-width: 640px) {
 
+  /* Modals: slide up as a bottom sheet on mobile */
+  .modal {
+    align-items: flex-end;
+    padding: 0;
+  }
 
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0;
+    padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+
+  /* Toast: move above bottom nav */
+  .toast {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    font-size: 13px;
+    padding: 10px 16px;
+    max-width: calc(100vw - 32px);
+    text-align: center;
+  }
+
+  /* Footer: hide on mobile */
+  footer {
+    display: none;
+  }
+
+  /* Planner: smaller controls */
+  .weeknav {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  /* Time grid: reduce height for mobile */
+  .time-grid-wrapper {
+    height: 480px;
+  }
+
+  /* Month calendar: reduce min cell height */
+  .month-cell {
+    min-height: 60px;
+    padding: 2px;
+  }
+
+  .month-event {
+    font-size: 9px;
+    padding: 2px 3px;
+  }
+
+  /* Formrow: full-width stacked inputs */
+  .formrow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .formrow input,
+  .formrow select,
+  .formrow textarea {
+    width: 100%;
+  }
+
+  /* Cards: reduce gap */
+  .cards {
+    gap: 10px;
+  }
+
+  /* Habits table: scrollable */
+  .tab-habits .card {
+    overflow-x: auto;
+  }
+
+  table.habits {
+    min-width: 480px;
+  }
+
+  /* Analytics: hide chart labels that overflow */
+  .chartlabels div {
+    font-size: 9px;
+  }
+
+  /* File toolbar: stack on mobile */
+  .file-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .file-search-container {
+    min-width: 0;
+  }
+
+  .file-sort-group {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Settings: better section layout */
+  .settings-section {
+    padding: 14px;
+  }
+
+  /* Update banner: ensure stays above bottom nav */
+  .update-banner {
+    left: 12px;
+    right: 12px;
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* Compact page titles */
+  h2.pagetitle {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  /* Analytics wstats: 2 per row */
+  .wstats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Notes: panel-switching on mobile */
+  .noteslayout {
+    grid-template-columns: 1fr;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Default: show list, hide editor */
+  .noteslayout .notelist {
+    display: block;
+  }
+
+  .noteslayout #noteEditor {
+    /* Editor is shown via JS (style="display:block"), 
+       but on mobile we also need it full-viewport */
+  }
+
+  /* When a note is selected (note-editing class set by JS) */
+  .noteslayout.note-editing .notelist {
+    display: none !important;
+  }
+
+  .noteslayout.note-editing #noteEditor {
+    display: block !important;
+  }
+
+  /* Mobile noteEditor: remove max-height constraint, scroll naturally */
+  #noteEditor .note-split-pane {
+    grid-template-columns: 1fr !important;
+  }
+
+  #noteEditor #noteView {
+    display: none !important;  /* hide preview in mobile edit mode — too cramped */
+  }
+
+  #noteEditor .note-toolbar .note-control-grid {
+    display: none; /* hide split view toggle on mobile */
+  }
+
+  /* Subtasks container: less indent */
+  .subtasks-container {
+    margin-left: 16px;
+  }
+
+  /* Drag handles in edit mode: larger touch target */
+  .card-drag-handle {
+    min-height: 44px;
+  }
+
+  /* Greeting widget text sizes */
+  .greeting-time {
+    font-size: 40px !important;
+  }
+
+  .greeting-text {
+    font-size: 18px !important;
+  }
+}
+
+/* Tablet-only adjustments (641px – 768px) */
+@media (min-width: 641px) and (max-width: 768px) {
+  main {
+    padding: 16px;
+  }
+
+  nav#tabs button {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+}
 
 

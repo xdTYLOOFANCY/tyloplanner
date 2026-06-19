@@ -285,6 +285,9 @@ export function selectNote(id) {
   currentNote = id;
   localStorage.setItem("active_note_id", id);
   renderNotes();
+  // On mobile: activate editor-panel mode so the editor fills the screen
+  var layout = document.querySelector(".noteslayout");
+  if (layout) layout.classList.add("note-editing");
 }
 
 export function noteChanged() {
@@ -462,6 +465,9 @@ export function renderNotes() {
   if (!n) {
     currentNote = null;
     localStorage.removeItem("active_note_id");
+    // On mobile: exit editor-panel mode
+    var layout = document.querySelector(".noteslayout");
+    if (layout) layout.classList.remove("note-editing");
     if (ed) ed.style.display = "none";
     return;
   }
@@ -502,4 +508,15 @@ export function renderNotes() {
   
   noteBodySearch.idx = 0;
   applyNoteMode();
+}
+
+// Mobile panel navigation: go back from editor to note list
+export function notesGoBack() {
+  currentNote = null;
+  localStorage.removeItem("active_note_id");
+  var layout = document.querySelector(".noteslayout");
+  if (layout) layout.classList.remove("note-editing");
+  var ed = document.getElementById("noteEditor");
+  if (ed) ed.style.display = "none";
+  renderNoteList();
 }

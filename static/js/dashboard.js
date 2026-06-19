@@ -1214,8 +1214,17 @@ export function renderDashboard() {
   }
 
   // Render cards based on currentLayout configuration
+  // On mobile (flex-column), sort by mobile y-position so visual order matches the layout intent
+  var isMobileRender = window.innerWidth <= 640;
+  var renderLayout = isMobileRender
+    ? currentLayout.slice().sort(function(a, b) {
+        if (a.my !== b.my) return a.my - b.my;
+        return a.mx - b.mx;
+      })
+    : currentLayout;
+
   var html = "";
-  currentLayout.forEach(function(item) {
+  renderLayout.forEach(function(item) {
     var cardContent = getCardHTML(item.type || item.id, item.id);
     if (!cardContent) return;
     
