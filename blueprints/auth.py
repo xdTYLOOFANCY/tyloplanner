@@ -28,7 +28,7 @@ def record_failed(ip):
 
 # Files the login page / PWA need before sign-in:
 LOGIN_ASSETS = {"/login", "/login/2fa", "/style.css", "/logo.svg", "/favicon.ico",
-                "/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png"}
+                "/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png", "/js/login.js"}
 
 
 @bp.before_app_request
