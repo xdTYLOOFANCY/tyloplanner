@@ -27,7 +27,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -247,6 +247,15 @@ def check_version(force=False):
         update_available = latest_parsed > current_parsed
     except Exception:
         update_available = latest != VERSION
+
+    # If the running VERSION has caught up with (or exceeded) the cached latest,
+    # invalidate the cache so a fresh check runs on the next request.
+    # This prevents a stale "update available" banner after a server upgrade.
+    if not update_available:
+        cached = kv_get("latest_version_cached")
+        if cached and cached != VERSION:
+            kv_del("last_version_check")
+            kv_del("latest_version_cached")
 
     return {
         "current": VERSION,
