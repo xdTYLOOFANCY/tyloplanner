@@ -18,6 +18,39 @@
 
 ---
 
+## Preview
+
+### 🎨 Modular Dashboard (Dark Theme / Glassmorphism Style)
+<p align="center">
+  <img src="docs/images/dashboard_dark_glass.png" width="100%" alt="TyloPlanner Dashboard (Dark / Glassmorphism)">
+</p>
+
+### 📅 Week Planner (Dark / Default Style) & 📊 Analytics Dashboard (Dark / Glass Style)
+<p align="center">
+  <img src="docs/images/planner_dark_default.png" width="49%" alt="TyloPlanner Week Planner (Dark / Default)">
+  <img src="docs/images/analytics_dark_glass.png" width="49%" alt="TyloPlanner Analytics (Dark / Glassmorphism)">
+</p>
+
+### 📝 Notes Split-Editor (Light / Default Style) & 📁 File Manager (Light / Cyberpunk Style)
+<p align="center">
+  <img src="docs/images/notes_light_default.png" width="49%" alt="TyloPlanner Notes Split Editor (Light / Default)">
+  <img src="docs/images/files_light_cyberpunk.png" width="49%" alt="TyloPlanner File Manager (Light / Cyberpunk)">
+</p>
+
+### 🎓 Exams & Grades (Light / Material Style) & ⚡ Habit Tracker (Dark / Cyberpunk Style)
+<p align="center">
+  <img src="docs/images/exams_light_material.png" width="49%" alt="TyloPlanner Exams (Light / Material)">
+  <img src="docs/images/habits_dark_cyberpunk.png" width="49%" alt="TyloPlanner Habits (Dark / Cyberpunk)">
+</p>
+
+### 📋 To-Do & Task List (Dark / Material Style) & 🏃 Workout Log (Light / Glass Style)
+<p align="center">
+  <img src="docs/images/tasks_dark_material.png" width="49%" alt="TyloPlanner Tasks (Dark / Material)">
+  <img src="docs/images/workouts_light_glass.png" width="49%" alt="TyloPlanner Workouts (Light / Glass)">
+</p>
+
+---
+
 ## Why TyloPlanner?
 
 Most planner apps want a subscription, your data, or both. TyloPlanner is a
@@ -39,9 +72,9 @@ codebase is small enough to read in an afternoon and make your own.
 - **File Manager** — upload documents/images via a full-screen drag-and-drop upload zone, preview media inline, organize with nested directories and breadcrumb navigation, and manage files in bulk.
 - **Analytics** — 12-month visual history of workouts, distance, study hours (from actual logged sessions), and habit consistency, plus all-time totals.
 - **Keyboard shortcuts** — navigate swiftly across tabs and weeks with customizable global hotkeys (`t`, `w`, `d`, `m`, `n`, `p`, `c`) and a visual key customization modal.
-- **Theming & Customization** — toggle dark/light modes and personalize the UI with a persistent custom accent color picker.
-- **Notifications** — morning agendas (including overdue/upcoming tasks), evening habit nudges, and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) or natively through browser **Web Push notifications**.
-- **Mobile app (PWA) & Offline Sync** — install as a PWA for a fullscreen mobile app. IndexedDB offline sync queues your actions (creating/editing/deleting notes, tasks, events) while offline and replays them automatically when your connection is restored.
+- **Theming & Customization** — toggle dark/light modes, choose from Glassmorphism, Flat, or a polished Cyberpunk retro-neon aesthetic (with a retro-grid Light Mode overhaul), and personalize the UI with a persistent custom accent color picker.
+- **Notifications** — morning agendas (including overdue/upcoming tasks), evening habit nudges, and exam alerts pushed directly to your phone via [ntfy](https://ntfy.sh) or natively through browser **Web Push notifications** (using programmatic VAPID keys).
+- **Mobile app (PWA) & Offline Sync** — install as a PWA for a fullscreen mobile experience. Touch-friendly swipe gestures let you archive notes or complete tasks, floating action buttons (FABs) provide quick entry shortcuts, and a phone camera capture option lets you upload photos directly to the File Manager. IndexedDB offline sync queues your actions while offline and replays them automatically when your connection is restored.
 
 - **Secure & Resilient** — session-based authentication, optional TOTP two-factor authentication (2FA), nightly automated database backups, and one-click restore directly from the settings panel.
 
