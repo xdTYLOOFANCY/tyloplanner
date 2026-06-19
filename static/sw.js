@@ -1,7 +1,7 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v79";
+const CACHE = "tylo-v80";
 const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",
@@ -51,23 +51,28 @@ self.addEventListener("fetch", function (e) {
 
 self.addEventListener("push", function (e) {
   if (!e.data) return;
+  var title = "TyloPlanner";
+  var body = "";
   try {
-    const data = e.data.json();
-    const options = {
-      body: data.body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      vibrate: [100, 50, 100],
-      data: {
-        url: "/"
-      }
-    };
-    e.waitUntil(
-      self.registration.showNotification(data.title, options)
-    );
+    var data = e.data.json();
+    title = data.title || title;
+    body = data.body || "";
   } catch (err) {
-    console.error("Error displaying push notification:", err);
+    body = e.data.text();
   }
+  
+  var options = {
+    body: body,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    vibrate: [100, 50, 100],
+    data: {
+      url: "/"
+    }
+  };
+  e.waitUntil(
+    self.registration.showNotification(title, options)
+  );
 });
 
 self.addEventListener("notificationclick", function (e) {

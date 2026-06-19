@@ -19,7 +19,7 @@ def push_public_key():
 
 @bp.post("/api/push/subscribe")
 def push_subscribe():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     endpoint = data.get("endpoint")
     if not endpoint:
         return jsonify({"error": "endpoint required"}), 400
@@ -38,7 +38,7 @@ def push_subscribe():
 
 @bp.post("/api/push/unsubscribe")
 def push_unsubscribe():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True) or {}
     endpoint = data.get("endpoint")
     if not endpoint:
         return jsonify({"error": "endpoint required"}), 400

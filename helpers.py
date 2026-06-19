@@ -326,7 +326,7 @@ def webpush_send(title, msg, tags=""):
                 subscription_info=sub_info,
                 data=payload,
                 vapid_private_key=vapid_key,
-                vapid_claims={"sub": "mailto:admin@tyloplanner.local"}
+                vapid_claims={"sub": "mailto:admin@tyloplanner.com"}
             )
         except WebPushException as ex:
             if ex.response is not None and ex.response.status_code in (410, 404):

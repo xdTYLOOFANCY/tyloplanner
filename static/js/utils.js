@@ -188,12 +188,17 @@ export async function api(method, path, body) {
   if (body !== undefined) opt.body = JSON.stringify(body);
   var r = await fetch(path, opt);
   if (!r.ok) {
-    var e = await r.json().catch(function() { return { error: r.statusText }; });
+    var e;
+    try {
+      e = await r.json();
+    } catch (err) {
+      e = { error: "HTTP " + r.status + " " + (r.statusText || "Error") };
+    }
     if (e.error === "unauthorized") {
       window.location.href = "/login";
       return;
     }
-    throw new Error(e.error || "request failed");
+    throw new Error(e.error || "Request failed");
   }
   var res = await r.json();
 

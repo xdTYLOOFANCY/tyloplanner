@@ -18,10 +18,15 @@ def send_agenda(today):
     plus_24h_str = (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M")
 
     with db() as con:
-        evs = [dict(r) for r in con.execute(
-            'SELECT * FROM events WHERE "date"=? ORDER BY "start"', (today,))]
+        all_events = [dict(r) for r in con.execute('SELECT * FROM events')]
         exams = [dict(r) for r in con.execute("SELECT * FROM exams")]
         all_open_tasks = [dict(r) for r in con.execute("SELECT * FROM tasks WHERE done = 0")]
+
+    evs = []
+    for e in all_events:
+        if get_instances(e, today):
+            evs.append(e)
+    evs.sort(key=lambda x: x.get("start") or "")
 
     overdue_tasks = []
     upcoming_tasks = []
@@ -73,7 +78,7 @@ def send_agenda(today):
             task_lines.append(f"- {t['name']} (due {dt_display})")
 
     if not lines and not exl and not task_lines:
-        return
+        return False
     msg = ""
     if lines:
         msg += "Today:\n- " + "\n- ".join(lines)
@@ -82,6 +87,7 @@ def send_agenda(today):
     if task_lines:
         msg += ("\n\n" if msg else "") + "Tasks:\n" + "\n".join(task_lines)
     send_notification("Your day — TyloPlanner", msg, "calendar")
+    return True
 
 
 def send_habit_nudge(today):
@@ -93,6 +99,8 @@ def send_habit_nudge(today):
     open_ = [h["name"] for h in habits if h["id"] not in done]
     if open_:
         send_notification("Habit check-in", "Still open today:\n- " + "\n- ".join(open_), "white_check_mark")
+        return True
+    return False
 
 
 def get_instances(e, target_date_str):
@@ -182,11 +190,11 @@ def scheduler_tick():
     
     check_event_reminders(now)
     if hhmm >= setting("notify_agenda_time") and kv_get("done_agenda") != today:
-        kv_set("done_agenda", today)
-        send_agenda(today)
+        if send_agenda(today):
+            kv_set("done_agenda", today)
     if hhmm >= setting("notify_habit_time") and kv_get("done_habits") != today:
-        kv_set("done_habits", today)
-        send_habit_nudge(today)
+        if send_habit_nudge(today):
+            kv_set("done_habits", today)
     if hhmm >= "03:30" and kv_get("done_backup") != today:
         kv_set("done_backup", today)
         do_backup(today)

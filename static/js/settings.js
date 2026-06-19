@@ -162,7 +162,7 @@ async function renderNotifySettings() {
   }
 
   try {
-    const reg = await navigator.serviceWorker.getRegistration();
+    const reg = await navigator.serviceWorker.ready;
     if (!reg) {
       container.innerHTML = `
         <div style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.2); padding: 10px; border-radius: 6px; font-size: 13px; color: #ff6b6b; line-height: 1.4">
@@ -199,7 +199,7 @@ async function renderNotifySettings() {
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
+    .replace(/-/g, '+')
     .replace(/_/g, '/');
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
@@ -231,7 +231,7 @@ export async function enableWebPush(refresh) {
     const res = await api("GET", "/api/push/public-key");
     console.log("VAPID public key fetched:", res.public_key);
 
-    const reg = await navigator.serviceWorker.getRegistration();
+    const reg = await navigator.serviceWorker.ready;
     if (!reg) {
       alert("Service Worker registration not found. Please reload the page.");
       return;
@@ -256,7 +256,7 @@ export async function enableWebPush(refresh) {
 export async function disableWebPush(refresh) {
   console.log("disableWebPush called");
   try {
-    const reg = await navigator.serviceWorker.getRegistration();
+    const reg = await navigator.serviceWorker.ready;
     if (reg) {
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
