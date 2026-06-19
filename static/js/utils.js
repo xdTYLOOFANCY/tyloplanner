@@ -187,7 +187,14 @@ export async function api(method, path, body) {
   var opt = { method: method, headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" } };
   if (body !== undefined) opt.body = JSON.stringify(body);
   var r = await fetch(path, opt);
-  if (!r.ok) { var e = await r.json().catch(function() { return { error: r.statusText }; }); throw new Error(e.error || "request failed"); }
+  if (!r.ok) {
+    var e = await r.json().catch(function() { return { error: r.statusText }; });
+    if (e.error === "unauthorized") {
+      window.location.href = "/login";
+      return;
+    }
+    throw new Error(e.error || "request failed");
+  }
   var res = await r.json();
 
   if (method === "GET") {

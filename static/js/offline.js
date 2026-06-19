@@ -127,7 +127,7 @@ export async function syncQueue(refreshCallback) {
     try {
       var opt = {
         method: item.method,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" }
       };
       if (item.data !== undefined) {
         opt.body = JSON.stringify(item.data);

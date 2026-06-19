@@ -80,7 +80,6 @@ export function renderSettings(refresh) {
   }
 
   renderBackupList("backupList", refresh);
-  checkForUpdates(false).catch(function() {});
 }
 
 export async function toggleTabPersistence(refresh) {

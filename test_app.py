@@ -814,7 +814,7 @@ class VersionCheckTests(unittest.TestCase):
         self.assertIn("current", data)
         self.assertIn("latest", data)
         self.assertIn("update_available", data)
-        self.assertEqual(data["current"], "1.3.0")
+        self.assertEqual(data["current"], helpers.VERSION)
 
     def test_version_check_newer_logic(self):
         # Test helper logic by using a lower version and mock cached release

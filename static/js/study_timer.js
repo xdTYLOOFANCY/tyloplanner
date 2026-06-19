@@ -103,21 +103,46 @@ export function studyTimerWidget() {
     showLogDialog: false,
     logSubject: '',
     logDuration: 0,
+
+    // Pending mode transition after session complete (deferred until log dismissed)
+    _pendingMode: null,
+    
+    // Bound handler reference for cleanup
+    _visibilityHandler: null,
     
     init() {
+      // Clean up any pre-existing interval (guards against Alpine re-init on dashboard re-render)
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+      }
+      
       // Restore from localStorage
       this.restoreState();
       
       // Handle visibility change to refresh correct elapsed time when user leaves/returns to tab
-      document.addEventListener('visibilitychange', () => {
+      this._visibilityHandler = () => {
         if (!document.hidden && this.timerState === 'running') {
           this.recalculateElapsedTime();
         }
-      });
+      };
+      document.addEventListener('visibilitychange', this._visibilityHandler);
       
       // If was running, restart the interval check
       if (this.timerState === 'running') {
         this.startInterval();
+      }
+    },
+    
+    destroy() {
+      // Alpine lifecycle: clean up interval and event listener when component is torn down
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
+      }
+      if (this._visibilityHandler) {
+        document.removeEventListener('visibilitychange', this._visibilityHandler);
+        this._visibilityHandler = null;
       }
     },
     
@@ -287,12 +312,14 @@ export function studyTimerWidget() {
       this.playBell();
       
       if (this.mode === 'pomodoro') {
+        // Defer mode switch — setMode() calls reset() which wipes the log dialog.
+        // The switch to break mode happens in saveLog() or cancelLog() instead.
+        this._pendingMode = 'break';
         this.stopAndLogPrompt();
-        alert("Pomodoro Study session completed! Take a break.");
-        this.setMode('break');
       } else if (this.mode === 'break') {
-        alert("Break completed! Time to get back to work.");
-        this.setMode('pomodoro');
+        this._pendingMode = 'pomodoro';
+        this.mode = 'pomodoro';
+        this.reset();
       }
     },
     
@@ -346,6 +373,12 @@ export function studyTimerWidget() {
     
     cancelLog() {
       this.showLogDialog = false;
+      // Apply any deferred mode transition from completeSession
+      if (this._pendingMode) {
+        this.mode = this._pendingMode;
+        this._pendingMode = null;
+        this.reset();
+      }
     },
     
     async saveLog() {
@@ -365,6 +398,11 @@ export function studyTimerWidget() {
         await api("POST", "/api/study_sessions", payload);
         toast("Study session logged successfully!");
         this.showLogDialog = false;
+        // Apply any deferred mode transition from completeSession
+        if (this._pendingMode) {
+          this.mode = this._pendingMode;
+          this._pendingMode = null;
+        }
         this.reset();
         
         if (window.refreshApp) {
