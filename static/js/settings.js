@@ -137,6 +137,8 @@ async function renderNotifySettings() {
   setVal("examDays", SET.notify_exam_days);
   setVal("calSyncUrls", SET.cal_sync_urls);
   setVal("calSyncHours", SET.cal_sync_hours);
+  populateTimezones();
+  setVal("appTimezone", SET.app_timezone);
   document.getElementById("calSyncMeta").textContent = SET.cal_last_sync ? ("Last sync: " + SET.cal_last_sync) : "";
 
   const container = document.getElementById("webPushContainer");
@@ -308,6 +310,47 @@ export async function calSyncNow(refresh) {
     toast("Calendar sync done \u2014 " + j.added + " new events");
     await refresh();
   } catch(e) { alert(e.message); }
+}
+
+export async function saveAppTimezone(refresh) {
+  await api("POST", "/api/settings", {
+    app_timezone: document.getElementById("appTimezone").value.trim()
+  });
+  toast("Timezone saved");
+  await refresh();
+}
+
+export function populateTimezones() {
+  var tzSelect = document.getElementById("appTimezone");
+  if (!tzSelect || tzSelect.options.length > 1) return;
+  if (Intl && Intl.supportedValuesOf) {
+    try {
+      var tzs = Intl.supportedValuesOf('timeZone');
+      tzs.forEach(function(tz) {
+        var opt = document.createElement("option");
+        opt.value = tz;
+        opt.text = tz;
+        tzSelect.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn("Could not populate timezones:", e);
+    }
+  }
+}
+
+export async function autoSetTimezone(refresh) {
+  try {
+    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) {
+      populateTimezones(); // Ensure options exist so the value can be selected
+      document.getElementById("appTimezone").value = tz;
+      await saveAppTimezone(refresh);
+    } else {
+      alert("Could not automatically detect your time zone.");
+    }
+  } catch (e) {
+    alert("Error detecting time zone: " + e.message);
+  }
 }
 
 function renderSecurity() {

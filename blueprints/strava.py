@@ -10,7 +10,7 @@ from flask import Blueprint, request, jsonify, redirect
 
 import helpers
 from helpers import (
-    db, uid, kv_get, kv_set, kv_del, APP_URL,
+    db, uid, kv_get, kv_set, kv_del, APP_URL, local_now,
 )
 
 bp = Blueprint("strava", __name__)
@@ -146,7 +146,7 @@ def strava_sync():
             if len(acts) < 100:
                 break
             page += 1
-    kv_set("strava_last_sync", datetime.now().isoformat(timespec="seconds"))
+    kv_set("strava_last_sync", local_now().isoformat(timespec="seconds"))
     return jsonify({"added": added})
 
 

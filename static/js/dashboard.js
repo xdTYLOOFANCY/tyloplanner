@@ -1177,7 +1177,8 @@ function startClockUpdates() {
 export function renderDashboard() {
   var now = new Date(), hr = now.getHours();
   var g = hr < 6 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
-  document.getElementById("greeting").textContent = g + " \uD83D\uDC4B";
+  var greetEl = document.getElementById("greeting");
+  if (greetEl) greetEl.textContent = g + " \uD83D\uDC4B";
   document.getElementById("headerDate").textContent = fmtShort(now) + " " + now.getFullYear();
 
   // Load widgets data

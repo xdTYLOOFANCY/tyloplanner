@@ -8,7 +8,7 @@ import zoneinfo
 import requests
 from flask import Blueprint, request, jsonify, Response
 
-from helpers import db, uid, setting, kv_set
+from helpers import db, uid, setting, kv_set, app_tz, local_now
 
 bp = Blueprint("calendar", __name__)
 
@@ -68,7 +68,7 @@ def parse_ics_datetime(head, val):
     dt = datetime(y, mo, d, h, mi, s)
     if tz:
         dt = dt.replace(tzinfo=tz)
-        dt_local = dt.astimezone()
+        dt_local = dt.astimezone(app_tz())
     else:
         dt_local = dt
 
@@ -124,20 +124,22 @@ def parse_ics(text):
     return events
 
 
-def import_ics_text(text):
+def import_ics_text(text, source_id="ics"):
     evs = parse_ics(text)
     added = 0
     with db() as con:
         for e in evs:
             dup = con.execute(
-                'SELECT 1 FROM events WHERE "date"=? AND title=? AND "start"=?',
+                'SELECT id, source FROM events WHERE "date"=? AND title=? AND "start"=?',
                 (e["date"], e["title"], e["start"])).fetchone()
             if dup:
+                if dup["source"] != source_id:
+                    con.execute('UPDATE events SET source=? WHERE id=?', (source_id, dup["id"]))
                 continue
             con.execute(
                 'INSERT INTO events(id,"date","start","end",title,type,source,location,description) '
                 "VALUES(?,?,?,?,?,?,?,?,?)",
-                (uid(), e["date"], e["start"], e["end"], e["title"], "other", "ics", e["location"], e["description"]))
+                (uid(), e["date"], e["start"], e["end"], e["title"], "other", source_id, e["location"], e["description"]))
             added += 1
     return {"found": len(evs), "added": added}
 
@@ -146,17 +148,17 @@ def cal_auto_sync():
     """Fetch and import all configured calendar URLs."""
     urls = [u.strip() for u in setting("cal_sync_urls").splitlines() if u.strip()]
     total = 0
-    for url in urls:
+    for idx, url in enumerate(urls):
         if not url.lower().startswith(("http://", "https://")):
             continue
         try:
             r = requests.get(url, timeout=20)
             r.raise_for_status()
-            total += import_ics_text(r.text)["added"]
+            total += import_ics_text(r.text, source_id=f"ics_{idx}")["added"]
         except Exception as e:
             print("calendar sync error for %s: %s" % (url, e))
     if urls:
-        kv_set("cal_last_sync_human", datetime.now().isoformat(timespec="seconds"))
+        kv_set("cal_last_sync_human", local_now().isoformat(timespec="seconds"))
     return total
 
 
@@ -199,6 +201,7 @@ def ics_export():
 @bp.post("/api/ics/import")
 def ics_import():
     text = None
+    source_id = "ics"
     if "file" in request.files:
         text = request.files["file"].read().decode("utf-8", errors="replace")
     else:
@@ -208,6 +211,9 @@ def ics_import():
             if not url.lower().startswith(("http://", "https://")):
                 return jsonify({"error": "invalid url"}), 400
             try:
+                urls = [u.strip() for u in setting("cal_sync_urls").splitlines() if u.strip()]
+                if url in urls:
+                    source_id = f"ics_{urls.index(url)}"
                 r = requests.get(url, timeout=20)
                 r.raise_for_status()
                 text = r.text
@@ -215,7 +221,7 @@ def ics_import():
                 return jsonify({"error": "fetch failed: %s" % e}), 400
     if not text:
         return jsonify({"error": "provide an .ics file or a url"}), 400
-    return jsonify(import_ics_text(text))
+    return jsonify(import_ics_text(text, source_id=source_id))
 
 
 @bp.post("/api/ics/sync-now")

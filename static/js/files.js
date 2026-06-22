@@ -511,16 +511,22 @@ export function previewFile(id) {
   
   var url = "/api/files/" + f.id + "/view";
   var mt = f.mimetype || "";
+  var content = document.getElementById("mediaPreviewModalContent");
   
   if (mt.startsWith("image/")) {
+    if (content) content.style.cssText = "display: flex; flex-direction: column; box-sizing: border-box; max-width: 90vw; width: max-content; height: auto; max-height: 90vh;";
     container.innerHTML = '<img src="' + url + '" style="max-width:100%; max-height:100%; object-fit:contain;">';
   } else if (mt === "application/pdf") {
-    container.innerHTML = '<iframe src="' + url + '" style="width:100%; height:100%; border:none; background:white;"></iframe>';
+    if (content) content.style.cssText = "display: flex; flex-direction: column; box-sizing: border-box; max-width: 95vw; width: 95vw; height: 95vh;";
+    container.innerHTML = '<iframe src="' + url + '" style="width:100%; height:100%; border:none; background:white; border-radius: 4px;"></iframe>';
   } else if (mt.startsWith("audio/")) {
-    container.innerHTML = '<audio controls autoplay src="' + url + '" style="width:100%;"></audio>';
+    if (content) content.style.cssText = "display: flex; flex-direction: column; box-sizing: border-box; max-width: 400px; width: 90%; height: auto;";
+    container.innerHTML = '<audio controls autoplay src="' + url + '" style="width:100%; outline:none; border-radius: 8px; margin-top: 10px;"></audio>';
   } else if (mt.startsWith("video/")) {
-    container.innerHTML = '<video controls autoplay style="max-width:100%; max-height:100%;"><source src="' + url + '" type="' + mt + '"></video>';
+    if (content) content.style.cssText = "display: flex; flex-direction: column; box-sizing: border-box; max-width: 90vw; width: max-content; height: auto; max-height: 90vh;";
+    container.innerHTML = '<video controls autoplay style="max-width:100%; max-height:100%; outline:none; border-radius: 8px;"><source src="' + url + '" type="' + mt + '"></video>';
   } else {
+    if (content) content.style.cssText = "display: flex; flex-direction: column; box-sizing: border-box; max-width: 400px; width: 90%; height: auto;";
     container.innerHTML = '<div class="muted">No preview available for this file type.</div>';
   }
   

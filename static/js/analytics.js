@@ -3,30 +3,112 @@
 import { S } from './state.js';
 import { z, esc, MONTHS } from './utils.js';
 
-function barChart(elId, labelId, values, labels, cls, decimals) {
-  var max = Math.max.apply(null, values.concat([1]));
-  var ch = "", lb = "";
-  for (var i = 0; i < values.length; i++) {
-    var pc = Math.round(values[i] / max * 100);
-    var v = decimals ? Math.round(values[i] * Math.pow(10, decimals)) / Math.pow(10, decimals) : Math.round(values[i]);
-    ch += '<div class="bar ' + (cls || "") + '" style="height:' + pc + '%"><span>' + (values[i] ? v : "") + '</span></div>';
-    lb += '<div>' + labels[i] + '</div>';
-  }
-  document.getElementById(elId).innerHTML = ch;
-  document.getElementById(labelId).innerHTML = lb;
-}
+let chartInstances = {};
+let analyticsTimeRange = 12; // default: 12 months, 'all' for all time.
 
-function last12Months() {
+function getPastMonths(count) {
   var out = [], now = new Date();
-  for (var i = 11; i >= 0; i--) {
+  for (var i = count - 1; i >= 0; i--) {
     var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    out.push({ key: d.getFullYear() + "-" + z(d.getMonth() + 1), label: MONTHS[d.getMonth()] });
+    out.push({ key: d.getFullYear() + "-" + z(d.getMonth() + 1), label: MONTHS[d.getMonth()] + " '" + d.getFullYear().toString().substring(2) });
   }
   return out;
 }
 
+// Ensure global scope for the HTML select
+window.updateAnalyticsTimeRange = function(val) {
+  analyticsTimeRange = val === 'all' ? 'all' : parseInt(val, 10);
+  renderAnalytics();
+};
+
+function createChart(canvasId, type, labels, datasets, options = {}) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  
+  if (chartInstances[canvasId]) {
+    chartInstances[canvasId].destroy();
+  }
+
+  // Get computed theme variables
+  const style = getComputedStyle(document.body);
+  const textColor = style.getPropertyValue('--text').trim();
+  const gridColor = style.getPropertyValue('--border').trim();
+  const fontFamily = style.getPropertyValue('font-family').trim();
+  const panelColor = style.getPropertyValue('--panel').trim();
+
+  const defaultOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    color: textColor,
+    font: { family: fontFamily },
+    plugins: {
+      legend: {
+        labels: { color: textColor, font: { family: fontFamily, size: 13 } }
+      },
+      tooltip: {
+        backgroundColor: panelColor,
+        titleColor: textColor,
+        bodyColor: textColor,
+        borderColor: gridColor,
+        borderWidth: 1,
+        padding: 10,
+        cornerRadius: 8,
+        displayColors: true,
+        titleFont: { family: fontFamily, size: 13, weight: 'bold' },
+        bodyFont: { family: fontFamily, size: 13 },
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: gridColor, drawBorder: false },
+        ticks: { color: textColor, font: { family: fontFamily } }
+      },
+      y: {
+        grid: { color: gridColor, drawBorder: false },
+        ticks: { color: textColor, font: { family: fontFamily } },
+        beginAtZero: true
+      }
+    }
+  };
+
+  if (window.Chart) {
+    chartInstances[canvasId] = new window.Chart(ctx, {
+      type: type,
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: Object.assign({}, defaultOptions, options)
+    });
+  } else {
+    console.error("Chart.js not loaded.");
+  }
+}
+
 export function renderAnalytics() {
-  var months = last12Months();
+  // Determine time range
+  let allKeys = new Set();
+  S.workouts.forEach(w => allKeys.add((w.date || "").slice(0, 7)));
+  S.events.forEach(e => { if (e.type === "study") allKeys.add((e.date || "").slice(0, 7)); });
+  S.habit_log.forEach(l => allKeys.add((l.date || "").slice(0, 7)));
+  if (S.study_sessions) S.study_sessions.forEach(s => allKeys.add((s.date || "").slice(0, 7)));
+  
+  let sortedKeys = Array.from(allKeys).sort();
+  let months = [];
+  
+  if (analyticsTimeRange === 'all') {
+    if (sortedKeys.length > 0) {
+      let startD = new Date(sortedKeys[0] + "-01");
+      let now = new Date();
+      let diffMonths = (now.getFullYear() - startD.getFullYear()) * 12 + (now.getMonth() - startD.getMonth()) + 1;
+      months = getPastMonths(Math.max(diffMonths, 1));
+    } else {
+      months = getPastMonths(1);
+    }
+  } else {
+    months = getPastMonths(analyticsTimeRange);
+  }
+
   var sessions = {}, kmRun = {}, kmBike = {}, study = {}, habits = {}, studyActual = {};
   months.forEach(function(m) { sessions[m.key] = 0; kmRun[m.key] = 0; kmBike[m.key] = 0; study[m.key] = 0; habits[m.key] = 0; studyActual[m.key] = 0; });
 
@@ -74,24 +156,130 @@ export function renderAnalytics() {
     avg = Math.round(sum / wsum * 100) / 100;
   }
 
-  document.getElementById("aTotals").innerHTML =
-    '<div class="stat"><div class="v">' + totSessions + '</div><div class="l">workouts</div></div>' +
-    '<div class="stat"><div class="v">' + Math.round(totRunKm) + '</div><div class="l">run km</div></div>' +
-    '<div class="stat"><div class="v">' + Math.round(totBikeKm) + '</div><div class="l">bike km</div></div>' +
-    '<div class="stat"><div class="v">' + Math.round(totMin / 60) + '</div><div class="l">training hrs</div></div>' +
-    '<div class="stat"><div class="v">' + Math.round(totStudyH) + '</div><div class="l">study hrs planned</div></div>' +
-    '<div class="stat"><div class="v">' + Math.round(totStudyActualH) + '</div><div class="l">study hrs actual</div></div>' +
-    '<div class="stat"><div class="v">' + totChecks + '</div><div class="l">habit check-ins</div></div>' +
-    '<div class="stat"><div class="v">' + (avg != null ? avg : "\u2014") + '</div><div class="l">avg grade' + (graded.length ? " (" + graded.length + ")" : "") + '</div></div>';
+  // --- Populate Summary Items (Grid of 8 Stat Cards) ---
+  const stats = [
+    { label: "Workouts \uD83C\uDFC3", val: totSessions, icon: "\uD83C\uDFCD\uFE0F" },
+    { label: "Run KM \uD83D\uDC5F", val: Math.round(totRunKm), icon: "\uD83D\uDC5F" },
+    { label: "Bike KM \uD83D\uDEB4", val: Math.round(totBikeKm), icon: "\uD83D\uDEB4\u200D\u2642\uFE0F" },
+    { label: "Training Hrs \uD83D\uDD52", val: Math.round(totMin / 60), icon: "\uD83D\uDD52" },
+    { label: "Study Hrs Planned \uD83D\uDCDA", val: Math.round(totStudyH), icon: "\uD83D\uDCDA" },
+    { label: "Study Hrs Actual \u2705", val: Math.round(totStudyActualH), icon: "\u2611\uFE0F" },
+    { label: "Habit Check-ins \uD83D\uDD25", val: totChecks, icon: "\uD83D\uDD25" },
+    { label: "Avg Grade (" + graded.length + ")", val: avg != null ? avg : "\u2014", icon: "\uD83C\uDF93" }
+  ];
+  
+  let gridHtml = '';
+  stats.forEach(s => {
+    gridHtml += `
+      <div class="stat-card">
+        <div class="stat-card-top">
+          <div class="stat-card-val">${s.val}</div>
+          <div class="stat-card-icon">${s.icon}</div>
+        </div>
+        <div class="stat-card-label">${s.label}</div>
+      </div>
+    `;
+  });
+  document.getElementById("aTotalsGrid").innerHTML = gridHtml;
 
+  // --- Draw Charts ---
   var labels = months.map(function(m) { return m.label; });
-  barChart("aWorkouts", "aWorkoutsL", months.map(function(m) { return sessions[m.key]; }), labels, "", 0);
-  barChart("aKmRun", "aKmRunL", months.map(function(m) { return kmRun[m.key]; }), labels, "green", 1);
-  barChart("aKmBike", "aKmBikeL", months.map(function(m) { return kmBike[m.key]; }), labels, "green", 1);
-  barChart("aStudy", "aStudyL", months.map(function(m) { return study[m.key]; }), labels, "orange", 1);
-  barChart("aStudyActual", "aStudyActualL", months.map(function(m) { return studyActual[m.key]; }), labels, "orange", 1);
-  barChart("aHabits", "aHabitsL", months.map(function(m) { return habits[m.key]; }), labels, "", 0);
+  
+  const style = getComputedStyle(document.body);
+  const colorAccent = style.getPropertyValue('--accent').trim() || '#4f8cff';
+  const colorAccent2 = style.getPropertyValue('--accent2').trim() || '#7c5cff';
+  const colorGreen = style.getPropertyValue('--green').trim() || '#3ecf8e';
+  const colorOrange = style.getPropertyValue('--orange').trim() || '#f5a623';
+  const colorCyan = '#00f0ff'; // Neon cyan for running chart
 
+  // Helper function for bar gradients
+  function getBarGradient(ctx, c1, c2) {
+    if (!ctx) return c1;
+    var gradient = ctx.createLinearGradient(0, 0, 0, 400);
+    gradient.addColorStop(0, c1);
+    gradient.addColorStop(1, c2);
+    return gradient;
+  }
+  
+  // Update default options to remove grid lines
+  const noGridOptions = {
+    scales: {
+      x: { grid: { display: false }, ticks: { color: style.getPropertyValue('--text').trim() } },
+      y: { grid: { display: false }, ticks: { color: style.getPropertyValue('--text').trim(), stepSize: 1 }, beginAtZero: true }
+    }
+  };
+
+  const barCtxWorkouts = document.getElementById('chartWorkouts').getContext('2d');
+  createChart('chartWorkouts', 'bar', labels, [
+    {
+      label: 'Sessions',
+      data: months.map(m => sessions[m.key]),
+      backgroundColor: getBarGradient(barCtxWorkouts, colorAccent, colorAccent2),
+      borderRadius: 6,
+      borderSkipped: false,
+    }
+  ], noGridOptions);
+
+  const lineCtxDist = document.getElementById('chartDistance').getContext('2d');
+  createChart('chartDistance', 'line', labels, [
+    {
+      label: 'Run (km)',
+      data: months.map(m => kmRun[m.key]),
+      borderColor: colorCyan,
+      backgroundColor: getBarGradient(lineCtxDist, colorCyan + '44', colorCyan + '00'),
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      borderWidth: 2
+    },
+    {
+      label: 'Bike (km)',
+      data: months.map(m => kmBike[m.key]),
+      borderColor: colorAccent2,
+      backgroundColor: getBarGradient(lineCtxDist, colorAccent2 + '44', colorAccent2 + '00'),
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      borderWidth: 2
+    }
+  ], noGridOptions);
+
+  const barCtxStudy = document.getElementById('chartStudy').getContext('2d');
+  createChart('chartStudy', 'bar', labels, [
+    {
+      label: 'Planned (hrs)',
+      data: months.map(m => study[m.key]),
+      backgroundColor: colorOrange + '55',
+      borderRadius: 6,
+      borderSkipped: false,
+    },
+    {
+      label: 'Actual (hrs)',
+      data: months.map(m => studyActual[m.key]),
+      backgroundColor: getBarGradient(barCtxStudy, colorOrange, '#d68b00'),
+      borderRadius: 6,
+      borderSkipped: false,
+    }
+  ], noGridOptions);
+
+  const lineCtxHabits = document.getElementById('chartHabits').getContext('2d');
+  createChart('chartHabits', 'line', labels, [
+    {
+      label: 'Check-ins',
+      data: months.map(m => habits[m.key]),
+      borderColor: '#ff5c5c',
+      backgroundColor: getBarGradient(lineCtxHabits, '#ff5c5c44', '#ff5c5c00'),
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      borderWidth: 2
+    }
+  ], noGridOptions);
+
+  // --- Populate Tables ---
   var gh = "";
   if (graded.length) {
     gh = '<table class="grades"><tr><th>Exam</th><th>Date</th><th>ECTS</th><th>Grade</th></tr>';
@@ -101,7 +289,6 @@ export function renderAnalytics() {
         '<td><span class="badge ' + cls + '">' + e.grade + '</span></td></tr>';
     });
     gh += '</table>';
-    if (avg != null) gh += '<p style="margin-top:10px;font-size:14px">Weighted average (by ECTS): <b>' + avg + '</b></p>';
   } else gh = '<div class="muted">No grades entered yet \u2014 add them in the Exams &amp; grades tab.</div>';
   document.getElementById("aGrades").innerHTML = gh;
 

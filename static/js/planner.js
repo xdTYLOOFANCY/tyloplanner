@@ -1,4 +1,4 @@
-import { S } from './state.js';
+import { S, SET } from './state.js';
 import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
@@ -61,6 +61,112 @@ function getInstances(e, startIso, endIso) {
     if (match) instances.push(Object.assign({}, e, {virtualDate: curIso}));
   }
   return instances;
+}
+
+export function togglePlannerCalendarsPanel() {
+  var p = document.getElementById("plannerCalendarsPanel");
+  if (p.style.display === "none") {
+    p.style.display = "block";
+    renderPlannerCalendarsPanel();
+  } else {
+    p.style.display = "none";
+  }
+}
+
+export function renderPlannerCalendarsPanel() {
+  var p = document.getElementById("plannerCalendarsList");
+  if (!p || !SET) return;
+  
+  var hiddenTypes = [];
+  try { hiddenTypes = JSON.parse(SET.calendar_hidden_types || "[]"); } catch(e){}
+  
+  var customColors = {};
+  try { customColors = JSON.parse(SET.calendar_colors || "{}"); } catch(e){}
+  
+  var types = [
+    {id: "study", label: "Study", defaultColor: "#a371f7"},
+    {id: "work", label: "Work", defaultColor: "#f85149"},
+    {id: "personal", label: "Personal", defaultColor: "#ff7b72"},
+    {id: "workout", label: "Workout", defaultColor: "#3fb950"},
+    {id: "deadline", label: "Deadline", defaultColor: "#f85149"},
+    {id: "other", label: "Other", defaultColor: "#2f81f7"}
+  ];
+
+  var syncUrls = (SET.cal_sync_urls || "").split("\n").map(u => u.trim()).filter(Boolean);
+  syncUrls.forEach((url, idx) => {
+    var label = "Imported " + (idx + 1);
+    try {
+      var u = new URL(url);
+      label = "Sync: " + u.hostname.replace('www.','');
+    } catch(e){}
+    types.push({id: "ics_" + idx, label: label, defaultColor: "#8b949e"});
+  });
+  types.push({id: "ics", label: "Imported (Files)", defaultColor: "#8b949e"});
+  
+  var html = "";
+  types.forEach(function(t) {
+    var isHidden = hiddenTypes.indexOf(t.id) !== -1;
+    var cColor = customColors[t.id] || t.defaultColor;
+    html += `<div style="display:flex; justify-content:space-between; align-items:center; background:var(--panel); padding:10px 16px; border-radius:8px; border:1px solid var(--border); box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+      <div style="font-size:14px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:12px;">
+        <input type="color" value="${cColor}" title="Pick color" onchange="updateCalendarColor('${t.id}', this.value)" style="width:24px; height:24px; border:none; padding:0; cursor:pointer; background:none; border-radius:4px;">
+        ${t.label}
+      </div>
+      <label style="display:flex; align-items:center; cursor:pointer;">
+        <input type="checkbox" class="ios-toggle" onchange="toggleCalendarType('${t.id}', this.checked)" ${!isHidden ? "checked" : ""}>
+      </label>
+    </div>`;
+  });
+  p.innerHTML = html;
+}
+
+export async function toggleCalendarType(typeId, isChecked) {
+  var hiddenTypes = [];
+  try { hiddenTypes = JSON.parse(SET.calendar_hidden_types || "[]"); } catch(e){}
+  
+  if (isChecked) {
+    hiddenTypes = hiddenTypes.filter(id => id !== typeId);
+  } else {
+    if (!hiddenTypes.includes(typeId)) hiddenTypes.push(typeId);
+  }
+  
+  SET.calendar_hidden_types = JSON.stringify(hiddenTypes);
+  await api("POST", "/api/settings", { calendar_hidden_types: SET.calendar_hidden_types });
+  window.refreshApp();
+}
+
+export async function updateCalendarColor(typeId, color) {
+  var customColors = {};
+  try { customColors = JSON.parse(SET.calendar_colors || "{}"); } catch(e){}
+  
+  customColors[typeId] = color;
+  SET.calendar_colors = JSON.stringify(customColors);
+  await api("POST", "/api/settings", { calendar_colors: SET.calendar_colors });
+  applyCalendarColors();
+}
+
+export function applyCalendarColors() {
+  var customColors = {};
+  if (SET && SET.calendar_colors) {
+    try { customColors = JSON.parse(SET.calendar_colors); } catch(e){}
+  }
+  
+  var styleTag = document.getElementById("dynamicCalendarColors");
+  if (!styleTag) {
+    styleTag = document.createElement("style");
+    styleTag.id = "dynamicCalendarColors";
+    document.head.appendChild(styleTag);
+  }
+  
+  var css = "";
+  for (var typeId in customColors) {
+    var c = customColors[typeId];
+    if (c) {
+      css += `.event.${typeId} { background-color: ${c} !important; }\n`;
+      css += `.event.absolute.${typeId} { background-color: ${c} !important; }\n`;
+    }
+  }
+  styleTag.innerHTML = css;
 }
 
 function calculateOverlaps(events) {
@@ -142,7 +248,16 @@ export function renderPlanner() {
   
   var today = todayStr();
   var allInstances = [];
+  
+  var hiddenTypes = [];
+  if (SET && SET.calendar_hidden_types) {
+    try { hiddenTypes = JSON.parse(SET.calendar_hidden_types); } catch(e){}
+  }
+  applyCalendarColors();
+
   S.events.forEach(function(e) {
+    var eType = (e.source && e.source.startsWith("ics")) ? e.source : e.type;
+    if (hiddenTypes.indexOf(eType) !== -1) return;
     allInstances = allInstances.concat(getInstances(e, toISO(dates[0]), toISO(dates[dates.length - 1])));
   });
 
@@ -170,7 +285,7 @@ export function renderPlanner() {
       evs.forEach(function(e) {
         var rep = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
         var tstr = e.start ? e.start + ' ' : '';
-        html += '<div class="month-event ' + esc(e.source === "ics" ? "ics" : e.type) + '" onclick="editEvent(\'' + e.id + '\')">' + esc(tstr + e.title) + rep + '</div>';
+        html += '<div class="month-event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" onclick="editEvent(\'' + e.id + '\')">' + esc(tstr + e.title) + rep + '</div>';
       });
       html += '</div>';
     });
@@ -205,7 +320,7 @@ export function renderPlanner() {
       });
       allDayEvs.forEach(function(e) {
         var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-        html += '<div class="event ' + esc(e.source === "ics" ? "ics" : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')">' + esc(e.title) + repeatIcon + '</div>';
+        html += '<div class="event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')">' + esc(e.title) + repeatIcon + '</div>';
       });
       html += '</div>';
       
@@ -226,16 +341,22 @@ export function renderPlanner() {
         var height = endMin - startMin;
         if (height < 15) height = 15;
         var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-        var locHtml = '';
-        if (e.location && e.location.trim() !== '') {
-          locHtml = '<div class="muted" style="font-size:9.5px; color:inherit; opacity:0.75; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + esc(e.location.trim()) + '</div>';
+        var timeStr = esc(e.start) + ' - ' + esc(e.end);
+        var hasLoc = e.location && e.location.trim() !== '';
+        var locStr = hasLoc ? esc(e.location.trim()) : '';
+        var detailsHtml = '';
+        if (height >= 50 && hasLoc) {
+            detailsHtml = '<div class="event-time muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
+            detailsHtml += '<div class="event-loc muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>';
+        } else {
+            var combined = timeStr + (hasLoc ? ', ' + locStr : '');
+            detailsHtml = '<div class="event-details muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + combined + '</div>';
         }
-        html += '<div class="event absolute ' + esc(e.source === "ics" ? "ics" : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')" ';
+        html += '<div class="event absolute ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')" ';
         html += 'style="--original-height:' + height + 'px; top:' + startMin + 'px; height:' + height + 'px; left:' + e._left + '%; width:calc(' + e._width + '% - 2px);">';
         html += '<div class="resize-handle top"></div>';
-        html += '<div style="font-weight:bold; pointer-events:none;">' + esc(e.title) + repeatIcon + '</div>';
-        html += '<div class="muted" style="font-size:10px; color:inherit; opacity:0.8; pointer-events:none;">' + esc(e.start) + ' – ' + esc(e.end) + '</div>';
-        html += locHtml;
+        html += '<div class="event-title" style="font-weight:600; font-size:11.5px; margin-bottom:2px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(e.title) + repeatIcon + '</div>';
+        html += detailsHtml;
         html += '<div class="resize-handle bottom"></div>';
         html += '</div>';
       });
@@ -306,14 +427,19 @@ export function renderPlanner() {
                 
                 var title = e.title || '';
                 var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-                var locHtml = '';
-                if (e.location && e.location.trim() !== '') {
-                  locHtml = '<div class="muted" style="font-size:9.5px; color:inherit; opacity:0.75; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + esc(e.location.trim()) + '</div>';
+                var hasLoc = e.location && e.location.trim() !== '';
+                var locStr = hasLoc ? esc(e.location.trim()) : '';
+                var timeStr = startStr + ' - ' + endStr;
+                var detailsHtml = '';
+                if (dur >= 50 && hasLoc) {
+                    detailsHtml = '<div class="event-time muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
+                    detailsHtml += '<div class="event-loc muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>';
+                } else {
+                    var combined = timeStr + (hasLoc ? ', ' + locStr : '');
+                    detailsHtml = '<div class="event-details muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + combined + '</div>';
                 }
                 
-                dragPreviewEl.innerHTML = '<div style="font-weight:bold; pointer-events:none;">' + esc(title) + repeatIcon + '</div>' +
-                                          '<div class="muted" style="font-size:10px; color:inherit; opacity:0.8; pointer-events:none;">' + startStr + ' – ' + endStr + '</div>' +
-                                          locHtml;
+                dragPreviewEl.innerHTML = '<div class="event-title" style="font-weight:600; font-size:11.5px; margin-bottom:2px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>' + detailsHtml;
                 tgc.appendChild(dragPreviewEl);
               }
               
@@ -1632,13 +1758,18 @@ function updateTouchDrag(ev) {
             
             var title = e.title || '';
             var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-            var locHtml = '';
-            if (e.location && e.location.trim() !== '') {
-              locHtml = '<div class="muted" style="font-size:9.5px; color:inherit; opacity:0.75; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + esc(e.location.trim()) + '</div>';
+            var hasLoc = e.location && e.location.trim() !== '';
+            var locStr = hasLoc ? esc(e.location.trim()) : '';
+            var timeStr = startStr + ' - ' + endStr;
+            var detailsHtml = '';
+            if (dur >= 50 && hasLoc) {
+                detailsHtml = '<div class="event-time muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
+                detailsHtml += '<div class="event-loc muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>';
+            } else {
+                var combined = timeStr + (hasLoc ? ', ' + locStr : '');
+                detailsHtml = '<div class="event-details muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + combined + '</div>';
             }
-            dragPreviewEl.innerHTML = '<div style="font-weight:bold; pointer-events:none;">' + esc(title) + repeatIcon + '</div>' +
-                                      '<div class="muted" style="font-size:10px; color:inherit; opacity:0.8; pointer-events:none;">' + startStr + ' – ' + endStr + '</div>' +
-                                      locHtml;
+            dragPreviewEl.innerHTML = '<div class="event-title" style="font-weight:600; font-size:11.5px; margin-bottom:2px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>' + detailsHtml;
             tgc.appendChild(dragPreviewEl);
           }
           

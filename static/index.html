@@ -8,10 +8,11 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=71">
+<link rel="stylesheet" href="style.css?v=81">
 <script defer src="js/alpine.min.js"></script>
 <script src="js/marked.min.js"></script>
-<script type="module" src="app.js?v=71"></script>
+<script src="js/chart.umd.js"></script>
+<script type="module" src="app.js?v=81"></script>
 <script src="js/bottom_nav.js"></script>
 
 </head>
@@ -21,73 +22,110 @@
   <span>✨ A software update is ready!</span>
   <button id="update-btn">Update now</button>
 </div>
-<header>
-  <img src="logo.svg" alt="" class="headlogo">
-  <h1>TyloPlanner</h1>
-  <span class="date" id="headerDate"></span>
-  <span class="spacer"></span>
-  <button class="btn ghost small" onclick="toggleTheme()" title="Toggle theme">☀/☾</button>
-  <button class="btn ghost small header-desktop-only" onclick="exportData()">Backup</button>
-  <button class="btn ghost small header-desktop-only" onclick="document.getElementById('importFile').click()">Restore</button>
-  <a class="btn ghost small header-desktop-only" id="logoutBtn" href="/logout" style="display:none;text-decoration:none">Log out</a>
-  <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+<header class="top-nav-container">
+  <div class="nav-brand">
+    <img src="logo.svg" alt="" class="headlogo">
+    <h1>TyloPlanner</h1>
+    <span class="date header-desktop-only" id="headerDate"></span>
+  </div>
+  <nav id="tabs" class="nav-tabs">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="analytics">Analytics</button>
+    <button data-tab="planner">Planner</button>
+    <button data-tab="exams">Exams &amp; grades</button>
+    <button data-tab="habits">Habits</button>
+    <button data-tab="workouts">Workouts</button>
+    <button data-tab="tasks">To-do</button>
+    <button data-tab="notes">Notes</button>
+    <button data-tab="files">Files</button>
+    <button data-tab="settings">Settings<span id="settings-update-badge" class="tab-badge" style="display: none;"></span></button>
+  </nav>
+  <div class="nav-actions">
+    <button class="btn ghost small" onclick="toggleTheme()" title="Toggle theme">☀ ☾</button>
+    <button class="btn ghost small header-desktop-only" onclick="exportData()">Backup</button>
+    <button class="btn ghost small header-desktop-only" onclick="document.getElementById('importFile').click()">Restore</button>
+    <a class="btn ghost small header-desktop-only" id="logoutBtn" href="/logout" style="display:none;text-decoration:none">Log out</a>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+  </div>
 </header>
-<nav id="tabs">
-  <button data-tab="dashboard" class="active">Dashboard</button>
-  <button data-tab="analytics">Analytics</button>
-  <button data-tab="planner">Planner</button>
-  <button data-tab="exams">Exams &amp; grades</button>
-  <button data-tab="habits">Habits</button>
-  <button data-tab="workouts">Workouts</button>
-  <button data-tab="tasks">To-do</button>
-  <button data-tab="notes">Notes</button>
-  <button data-tab="files">Files</button>
-  <button data-tab="settings">Settings<span id="settings-update-badge" class="tab-badge" style="display: none;"></span></button>
-</nav>
 <main>
   <section id="tab-dashboard" class="active">
-    <div class="dash-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h2 class="pagetitle" id="greeting" style="margin-bottom: 0;"></h2>
-      <button class="customization-toggle-btn" id="customizeBtn" onclick="toggleEditMode()">⚙️ Customize</button>
-    </div>
     <div id="customizerPanel" style="display: none; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px;"></div>
     <div id="dashShortcuts" class="shortcuts-row"></div>
     <div class="dashboard-grid" id="dashCards"></div>
   </section>
 
   <section id="tab-analytics">
-    <h2 class="pagetitle">Analytics — your life over time</h2>
-    <div class="card"><h3>All-time totals</h3><div class="wstats" id="aTotals"></div></div>
-    <div class="card">
-      <h3>Workout sessions per month (last 12 months)</h3>
-      <div class="chart" id="aWorkouts"></div><div class="chartlabels" id="aWorkoutsL"></div>
+    <div class="analytics-header">
+      <h2 class="pagetitle" style="margin: 0;">Analytics Overview</h2>
+      <select id="analyticsTimeRange" onchange="window.updateAnalyticsTimeRange(this.value)" class="analytics-time-select">
+        <option value="6">Last 6 Months</option>
+        <option value="12" selected>Last 12 Months</option>
+        <option value="all">All Time</option>
+      </select>
     </div>
-    <div class="card">
-      <h3>Running — km per month</h3>
-      <div class="chart" id="aKmRun"></div><div class="chartlabels" id="aKmRunL"></div>
+
+    <!-- Bento Box Grid -->
+    <div class="analytics-bento-grid">
+      
+      <!-- Top Row: All-time Totals -->
+      <div style="grid-column: span 12; display: flex; align-items: center; margin-bottom: -8px;">
+        <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0; font-weight: 600;">All-time Totals</h3>
+      </div>
+      <div class="analytics-totals-grid" id="aTotalsGrid"></div>
+
+      <!-- Middle Row: Charts -->
+      <div class="bento-item chart-item">
+        <div class="chart-header">
+          <h3>Workout Sessions</h3>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartWorkouts"></canvas>
+        </div>
+      </div>
+      
+      <div class="bento-item chart-item">
+        <div class="chart-header">
+          <h3>Running & Cycling (km)</h3>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartDistance"></canvas>
+        </div>
+      </div>
+
+      <div class="bento-item chart-item">
+        <div class="chart-header">
+          <h3>Study Hours (Planned vs Actual)</h3>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartStudy"></canvas>
+        </div>
+      </div>
+
+      <div class="bento-item chart-item">
+        <div class="chart-header">
+          <h3>Habit Check-ins</h3>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartHabits"></canvas>
+        </div>
+      </div>
+
+      <!-- Bottom Row: Tables -->
+      <div class="bento-item table-item">
+        <h3>Grades</h3>
+        <div id="aGrades" class="bento-table-wrapper"></div>
+      </div>
+      
+      <div class="bento-item table-item">
+        <h3>Recent Study Sessions</h3>
+        <div id="aStudySessionsList" class="bento-table-wrapper"></div>
+      </div>
+      
     </div>
-    <div class="card">
-      <h3>Cycling — km per month</h3>
-      <div class="chart" id="aKmBike"></div><div class="chartlabels" id="aKmBikeL"></div>
-    </div>
-    <div class="card">
-      <h3>Study hours per month (from planner study blocks)</h3>
-      <div class="chart" id="aStudy"></div><div class="chartlabels" id="aStudyL"></div>
-    </div>
-    <div class="card">
-      <h3>Study hours per month (actual logged sessions)</h3>
-      <div class="chart" id="aStudyActual"></div><div class="chartlabels" id="aStudyActualL"></div>
-    </div>
-    <div class="card">
-      <h3>Habit check-ins per month</h3>
-      <div class="chart" id="aHabits"></div><div class="chartlabels" id="aHabitsL"></div>
-    </div>
-    <div class="card"><h3>Grades</h3><div id="aGrades"></div></div>
-    <div class="card"><h3>Recent Study Sessions</h3><div id="aStudySessionsList"></div></div>
   </section>
 
   <section id="tab-planner">
-    <h2 class="pagetitle">Week planner</h2>
     <div class="weeknav">
       <select id="plannerView" class="btn ghost small" onchange="changePlannerView(this.value)" style="margin-right:8px; padding-top:4px; padding-bottom:4px; border:none; outline:none; height:26px;">
         <option value="1">Day</option>
@@ -101,6 +139,7 @@
         <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
         <button class="btn ghost small" onclick="moveWeek(1)">&#8250;</button>
         <button class="btn ghost small header-desktop-only" @click="$dispatch('open-shortcuts-modal')" style="margin-left:4px;">⌨️ Shortcuts</button>
+        <button class="btn ghost small" @click="renderPlannerCalendarsPanel(); $dispatch('open-planner-calendars-modal')" style="margin-left:4px;">⚙️ Calendars</button>
       </div>
       <div style="position:relative; display:inline-block; vertical-align:middle;" class="header-desktop-only">
         <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
@@ -112,7 +151,6 @@
   </section>
 
   <section id="tab-exams">
-    <h2 class="pagetitle">Exams, deadlines &amp; grades</h2>
     <div class="card">
       <div class="formrow">
         <input id="examName" placeholder="Exam or deadline name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
@@ -125,7 +163,6 @@
   </section>
 
   <section id="tab-habits">
-    <h2 class="pagetitle">Habits</h2>
     <div class="card">
       <div class="formrow">
         <input id="habitName" placeholder="New habit (e.g. 8h sleep, study 2h, no snooze)" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addHabit()">
@@ -136,7 +173,6 @@
   </section>
 
   <section id="tab-workouts">
-    <h2 class="pagetitle">Workouts</h2>
     <div class="card">
       <h3>Log workout</h3>
       <div class="formrow">
@@ -161,7 +197,6 @@
   </section>
 
   <section id="tab-tasks">
-    <h2 class="pagetitle">To-do</h2>
     <div class="card">
       <div class="formrow">
         <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
@@ -177,11 +212,15 @@
   </section>
 
   <section id="tab-notes">
-    <h2 class="pagetitle">Notes</h2>
     <div class="noteslayout">
       <div class="card notelist">
-        <button class="btn" style="width:100%;margin-bottom:10px" onclick="newNote()">+ New note</button>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="btn" style="flex:1" onclick="newNote()">+ Note</button>
+          <button class="btn ghost" style="flex:1" onclick="createNoteFolderPrompt()">+ Folder</button>
+        </div>
+        <div id="noteFolderHeader" style="margin-bottom:10px;"></div>
         <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" onkeydown="handleNoteSearchKeydown(event)" style="width:100%;margin-bottom:8px">
+        <div id="noteFolderList"></div>
         <div id="noteList"></div>
       </div>
       <div class="card" id="noteEditor" style="display:none">
@@ -240,7 +279,6 @@
       <div class="drop-overlay-content">Drop files to upload into <span id="dropFolderName">Root</span></div>
     </div>
 
-    <h2 class="pagetitle">Files</h2>
     <div class="fileslayout">
       <div class="card">
         <!-- Folder navigation header -->
@@ -277,7 +315,6 @@
   </section>
 
   <section id="tab-settings">
-    <h2 class="pagetitle">Settings &amp; integrations</h2>
     <div class="card">
       <h3>📅 Calendar — export</h3>
       <p style="font-size:14px;margin-bottom:8px">Subscribe to your TyloPlanner agenda + exams from Google/Apple/Outlook Calendar with this feed URL (it contains a secret key — treat it like a password):</p>
@@ -304,6 +341,17 @@
         <button class="btn" onclick="saveCalSync()">Save</button>
         <button class="btn ghost" onclick="calSyncNow()">Sync now</button>
         <span class="muted" id="calSyncMeta"></span>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <p style="font-size:14px;margin-bottom:8px"><b>Application Time Zone</b>. If blank, uses the server's local time zone.</p>
+      <div class="formrow">
+        <select id="appTimezone" style="flex:1;min-width:180px;padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+          <option value="">-- Server Default --</option>
+        </select>
+        <button class="btn" onclick="saveAppTimezone()">Save timezone</button>
+        <button class="btn ghost" onclick="autoSetTimezone()">Auto detect</button>
       </div>
 
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
@@ -359,6 +407,7 @@
             <option value="glass">Glass</option>
             <option value="cyberpunk">Cyberpunk</option>
             <option value="material">Material</option>
+            <option value="glow">Glow (Neon/Glass)</option>
           </select>
           <button class="btn" onclick="saveAppThemeStyle()">Save style</button>
         </div>
@@ -643,7 +692,7 @@
   </div>
 
   <div id="mediaPreviewModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-media-preview-modal.window="open = true" @close-media-preview-modal.window="open = false">
-    <div class="modal-content" style="max-width: 800px; width: 95%; height: 85%; display: flex; flex-direction: column; box-sizing: border-box;">
+    <div id="mediaPreviewModalContent" class="modal-content" style="display: flex; flex-direction: column; box-sizing: border-box;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 id="mediaPreviewTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">File Preview</h3>
         <button class="btn ghost small" @click="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
@@ -704,7 +753,10 @@
     </div>
   </div>
 </main>
-<footer>TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</footer>
+<footer style="display: flex; justify-content: space-between; align-items: center; text-align: left; flex-wrap: wrap; gap: 16px;">
+  <span style="flex: 1; min-width: 200px;">TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</span>
+  <button class="customization-toggle-btn" id="customizeBtn" onclick="toggleEditMode()" style="margin: 0;">⚙️ Customize</button>
+</footer>
 <nav id="bottomNav">
   <button data-tab="dashboard">
     <span class="nav-icon">🏠</span>
@@ -735,5 +787,15 @@
     <span class="fab-icon" id="fabIcon">+</span>
   </button>
 </div>
+  <div id="plannerCalendarsModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-planner-calendars-modal.window="open = true" @close-planner-calendars-modal.window="open = false" @click="if($event.target === $el) open = false">
+    <div class="modal-content" style="max-width: 400px; width: 90%;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:16px;">Customize Calendars</h3>
+        <button class="btn ghost small" @click="open = false" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+      </div>
+      <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:12px;"></div>
+    </div>
+  </div>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify
 
-from helpers import db, uid, q, TABLES, do_backup, BACKUP_DIR
+from helpers import db, uid, q, TABLES, do_backup, BACKUP_DIR, local_now
 
 bp = Blueprint("backup", __name__)
 
@@ -36,7 +36,7 @@ def do_restore_data(data):
 
 @bp.post("/api/backup/now")
 def backup_now():
-    path = do_backup(datetime.now().strftime("%Y-%m-%d"))
+    path = do_backup(local_now().strftime("%Y-%m-%d"))
     return jsonify({"ok": True, "file": os.path.basename(path)})
 
 

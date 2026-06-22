@@ -22,6 +22,8 @@ from scheduler import scheduler_loop
 with db() as con:
     con.executescript(SCHEMA)
     _ensure_column(con, "notes", "is_pinned", "is_pinned INTEGER DEFAULT 0")
+    _ensure_column(con, "notes", "folder_id", "folder_id TEXT")
+    _ensure_column(con, "note_folders", "order_index", "order_index INTEGER DEFAULT 0")
     _ensure_column(con, "files", "is_pinned", "is_pinned INTEGER DEFAULT 0")
     _ensure_column(con, "files", "folder_id", "folder_id TEXT")
     _ensure_column(con, "folders", "icon", "icon TEXT")
@@ -184,7 +186,7 @@ def create_app():
     def add_security_headers(response):
         response.headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data: blob: https://www.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval';"
         response.headers['X-Content-Type-Options'] = "nosniff"
-        response.headers['X-Frame-Options'] = "DENY"
+        response.headers['X-Frame-Options'] = "SAMEORIGIN"
         return response
 
     return application

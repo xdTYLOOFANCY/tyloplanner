@@ -159,3 +159,36 @@ def toggle_habit(hid):
             return jsonify({"on": False})
         con.execute('INSERT INTO habit_log(habit_id,"date") VALUES(?,?)', (hid, d))
         return jsonify({"on": True})
+
+
+@bp.delete("/api/note_folders/<fid>")
+def delete_note_folder(fid):
+    with db() as con:
+        row = con.execute("SELECT parent_id FROM note_folders WHERE id=?", (fid,)).fetchone()
+        if not row:
+            return jsonify({"error": "folder not found"}), 404
+        parent_id = row["parent_id"]
+        
+        con.execute("UPDATE notes SET folder_id=? WHERE folder_id=?", (parent_id, fid))
+        con.execute("UPDATE note_folders SET parent_id=? WHERE parent_id=?", (parent_id, fid))
+        con.execute("DELETE FROM note_folders WHERE id=?", (fid,))
+    return jsonify({"ok": True})
+
+
+@bp.post("/api/notes/move")
+def move_notes():
+    data = request.get_json(force=True) or {}
+    note_ids = data.get("note_ids", [])
+    folder_id = data.get("folder_id")
+    if folder_id == "":
+        folder_id = None
+    if not note_ids:
+        return jsonify({"error": "no note ids provided"}), 400
+    
+    with db() as con:
+        placeholders = ",".join("?" for _ in note_ids)
+        con.execute(
+            f"UPDATE notes SET folder_id=? WHERE id IN ({placeholders})",
+            [folder_id] + note_ids
+        )
+    return jsonify({"ok": True})

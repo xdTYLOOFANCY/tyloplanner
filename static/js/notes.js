@@ -5,6 +5,26 @@ import { esc, api, z } from './utils.js';
 
 var currentNote = null, noteTimer = null, noteMode = "edit";
 var noteBodySearch = { q: "", idx: 0 };
+var activeNoteFolderId = null;
+var draggedNoteId = null;
+var draggedNoteFolderId = null;
+
+export function getNoteBreadcrumbs(folderId) {
+  var path = [];
+  var currentId = folderId;
+  var limit = 20;
+  while (currentId && limit > 0) {
+    limit--;
+    var folder = (S.note_folders || []).find(function(f) { return f.id === currentId; });
+    if (folder) {
+      path.unshift(folder);
+      currentId = folder.parent_id;
+    } else {
+      break;
+    }
+  }
+  return path;
+}
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function highlightText(text, q) {
@@ -248,7 +268,9 @@ export function noteInsert(type) {
 
 export async function newNote(refresh) {
   noteMode = "edit";
-  var r = await api("POST", "/api/notes", { title: "", body: "", updated: Date.now() });
+  var payload = { title: "", body: "", updated: Date.now() };
+  if (activeNoteFolderId) payload.folder_id = activeNoteFolderId;
+  var r = await api("POST", "/api/notes", payload);
   currentNote = r.id;
   localStorage.setItem("active_note_id", r.id);
   await refresh();
@@ -418,16 +440,99 @@ function applyNoteBodySearch(jump) {
   }
 }
 
+function isNoteDescendant(folderId, targetId) {
+  if (!folderId || !targetId) return false;
+  var currentId = folderId;
+  var limit = 20;
+  while (currentId && limit > 0) {
+    limit--;
+    if (currentId === targetId) return true;
+    var folder = (S.note_folders || []).find(function(f) { return f.id === currentId; });
+    currentId = folder ? folder.parent_id : null;
+  }
+  return false;
+}
+
 function renderNoteList() {
   var searchEl = document.getElementById("noteSearch");
   var q = (searchEl ? searchEl.value : "").trim().toLowerCase();
-  var list = S.notes.slice().sort(function(a, b) {
+  
+  // Render Folder Header
+  var header = document.getElementById("noteFolderHeader");
+  if (header) {
+    var breadcrumbsHtml = '<div class="breadcrumbs" style="font-size:13px; margin-bottom:8px;">';
+    breadcrumbsHtml += '<span class="breadcrumb-item' + (activeNoteFolderId ? '' : ' active') + '" onclick="navigateToNoteFolder(null)" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, null)">Root</span>';
+    var path = getNoteBreadcrumbs(activeNoteFolderId);
+    path.forEach(function(f, idx) {
+      breadcrumbsHtml += '<span class="breadcrumb-separator">/</span>';
+      var isLast = (idx === path.length - 1);
+      var folderIcon = f.icon ? f.icon + ' ' : '';
+      breadcrumbsHtml += '<span class="breadcrumb-item' + (isLast ? ' active' : '') + '" onclick="' + (isLast ? '' : 'navigateToNoteFolder(\'' + f.id + '\')') + '" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' + folderIcon + esc(f.name) + '</span>';
+    });
+    breadcrumbsHtml += '</div>';
+    
+    if (activeNoteFolderId) {
+      var currentFolder = (S.note_folders || []).find(function(f) { return f.id === activeNoteFolderId; });
+      if (currentFolder) {
+        var icon = currentFolder.icon || "📁";
+        breadcrumbsHtml += '<div style="display:flex;gap:4px;margin-bottom:8px;">';
+        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="renameNoteFolderPrompt(\'' + currentFolder.id + '\', \'' + esc(currentFolder.name).replace(/'/g, "\\'") + '\')">✏️ Rename</button>';
+        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="changeNoteFolderIconPrompt(\'' + currentFolder.id + '\', \'' + esc(icon).replace(/'/g, "\\'") + '\')">🏷️ Icon</button>';
+        breadcrumbsHtml += '<button class="btn danger small" style="padding:2px 6px;font-size:11px;" onclick="deleteNoteFolderConfirm(\'' + currentFolder.id + '\')">✕ Delete</button>';
+        breadcrumbsHtml += '<div style="flex:1"></div>';
+        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="navigateToNoteFolder(' + (currentFolder.parent_id ? '\'' + currentFolder.parent_id + '\'' : 'null') + ')" title="Go Back">⬅️</button>';
+        breadcrumbsHtml += '</div>';
+      } else {
+        activeNoteFolderId = null;
+      }
+    }
+    header.innerHTML = breadcrumbsHtml;
+  }
+  
+  // Render Folders
+  var folders = (S.note_folders || []).slice();
+  if (q) {
+    folders = folders.filter(function(f) {
+      var match = (f.name || "").toLowerCase().indexOf(q) !== -1;
+      if (!match) return false;
+      if (!activeNoteFolderId) return true;
+      return f.id === activeNoteFolderId || isNoteDescendant(f.id, activeNoteFolderId);
+    });
+  } else {
+    folders = folders.filter(function(f) { return f.parent_id === activeNoteFolderId; });
+  }
+  
+  folders.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+  
+  var fHtml = "";
+  folders.forEach(function(f) {
+    var icon = f.icon || "📁";
+    fHtml += '<div class="list-item" style="padding:6px 10px; cursor:pointer;" draggable="true" ondragstart="onNoteFolderDragStart(event, \'' + f.id + '\')" ondragend="onNoteFolderDragEnd(event)" onclick="navigateToNoteFolder(\'' + f.id + '\')" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' +
+      '<span class="task-drag-handle" style="cursor:grab; color:var(--muted); margin-right:6px;">☰</span>' +
+      '<span style="margin-right:8px;">' + esc(icon) + '</span>' +
+      '<span style="font-weight:600;">' + esc(f.name) + '</span>' +
+      '</div>';
+  });
+  var folderListEl = document.getElementById("noteFolderList");
+  if (folderListEl) folderListEl.innerHTML = fHtml;
+
+  // Render Notes
+  var list = S.notes.slice();
+  if (q) {
+    list = list.filter(function(n) {
+      var match = (n.title || "").toLowerCase().indexOf(q) !== -1 || (n.body || "").toLowerCase().indexOf(q) !== -1;
+      if (!match) return false;
+      if (!activeNoteFolderId) return true;
+      return n.folder_id === activeNoteFolderId || isNoteDescendant(n.folder_id, activeNoteFolderId);
+    });
+  } else {
+    list = list.filter(function(n) { return n.folder_id === activeNoteFolderId; });
+  }
+  list.sort(function(a, b) {
     if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
     return (b.updated || 0) - (a.updated || 0);
   });
-  if (q) list = list.filter(function(n) {
-    return (n.title || "").toLowerCase().indexOf(q) !== -1 || (n.body || "").toLowerCase().indexOf(q) !== -1;
-  });
+  
   var html = "";
   list.forEach(function(n) {
     var title = n.title ? highlightText(n.title, q) : '<span class="muted">Untitled</span>';
@@ -439,14 +544,14 @@ function renderNoteList() {
         highlightText((n.body || "").slice(start, end), q) + (end < (n.body || "").length ? "\u2026" : "") + '</div>';
     }
     var pinned = n.is_pinned ? 'note-pinned' : '';
-    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" data-id="' + n.id + '" onclick="selectNote(\'' + n.id + '\')">' +
+    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" data-id="' + n.id + '" onclick="selectNote(\'' + n.id + '\')" draggable="true" ondragstart="onNoteDragStart(event, \'' + n.id + '\')" ondragend="onNoteDragEnd(event)">' +
       '<button class="btn-pin" onclick="toggleNotePin(\'' + n.id + '\',event)" title="' + (n.is_pinned ? 'Unpin' : 'Pin') + '">\u2605</button>' +
       '<div class="grow"><div>' + title + '</div>' + snippet +
       '<div class="muted">' + new Date(n.updated || 0).toLocaleDateString() + '</div></div></div>';
   });
   var noteListEl = document.getElementById("noteList");
   if (noteListEl) {
-    noteListEl.innerHTML = html || (q ? '<div class="muted">No notes match.</div>' : '<div class="muted">No notes yet.</div>');
+    noteListEl.innerHTML = html || (q && !fHtml ? '<div class="muted">No notes match.</div>' : (!fHtml ? '<div class="muted">No notes yet.</div>' : ''));
   }
 }
 
@@ -519,4 +624,152 @@ export function notesGoBack() {
   var ed = document.getElementById("noteEditor");
   if (ed) ed.style.display = "none";
   renderNoteList();
+}
+
+export function navigateToNoteFolder(id) {
+  activeNoteFolderId = id;
+  renderNotes();
+}
+
+export async function createNoteFolderPrompt(refresh) {
+  var name = prompt("Enter folder name:");
+  if (name === null) return;
+  name = name.trim();
+  if (!name) { alert("Folder name cannot be empty."); return; }
+  
+  var actualRefresh = refresh || window.refreshApp;
+  await api("POST", "/api/note_folders", {
+    name: name,
+    parent_id: activeNoteFolderId
+  });
+  if (actualRefresh) await actualRefresh();
+}
+
+export async function renameNoteFolderPrompt(id, oldName, refresh) {
+  var name = prompt("Rename folder:", oldName);
+  if (name === null) return;
+  name = name.trim();
+  if (!name) { alert("Folder name cannot be empty."); return; }
+  
+  var actualRefresh = refresh || window.refreshApp;
+  await api("PUT", "/api/note_folders/" + id, { name: name });
+  if (actualRefresh) await actualRefresh();
+}
+
+export async function changeNoteFolderIconPrompt(id, oldIcon, refresh) {
+  var icon = prompt("Enter an emoji or character for this folder icon:", oldIcon || "📁");
+  if (icon === null) return;
+  icon = icon.trim();
+  if (!icon) icon = "📁";
+  
+  var actualRefresh = refresh || window.refreshApp;
+  await api("PUT", "/api/note_folders/" + id, { icon: icon });
+  if (actualRefresh) await actualRefresh();
+}
+
+export async function deleteNoteFolderConfirm(id, refresh) {
+  if (!confirm("Delete this folder? Its contents will be moved to the parent directory.")) return;
+  
+  var actualRefresh = refresh || window.refreshApp;
+  await api("DELETE", "/api/note_folders/" + id);
+  
+  if (activeNoteFolderId === id) {
+    var folders = S.note_folders || [];
+    var folder = folders.find(function(f) { return f.id === id; });
+    activeNoteFolderId = folder ? folder.parent_id : null;
+  }
+  
+  if (actualRefresh) await actualRefresh();
+}
+
+export function onNoteDragStart(e, noteId) {
+  draggedNoteId = noteId;
+  e.dataTransfer.setData("text/plain", noteId);
+  e.dataTransfer.effectAllowed = "move";
+}
+
+export function onNoteDragEnd(e) {
+  draggedNoteId = null;
+  document.querySelectorAll(".folder-drag-over").forEach(function(el) {
+    el.classList.remove("folder-drag-over");
+  });
+}
+
+export function onNoteFolderDragOver(e) {
+  if (!draggedNoteId && !draggedNoteFolderId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  
+  var el = e.currentTarget;
+  if (el && !el.classList.contains("folder-drag-over")) {
+    el.classList.add("folder-drag-over");
+  }
+}
+
+export function onNoteFolderDragLeave(e) {
+  var el = e.currentTarget;
+  if (el) el.classList.remove("folder-drag-over");
+}
+
+export async function onNoteFolderDrop(e, targetFolderId) {
+  e.preventDefault();
+  var el = e.currentTarget;
+  if (el) el.classList.remove("folder-drag-over");
+  
+  if (draggedNoteId) {
+    var note = S.notes.find(function(n) { return n.id === draggedNoteId; });
+    if (note && note.folder_id === targetFolderId) {
+      draggedNoteId = null;
+      return;
+    }
+    await api("POST", "/api/notes/move", {
+      note_ids: [draggedNoteId],
+      folder_id: targetFolderId
+    });
+    draggedNoteId = null;
+    if (window.refreshApp) {
+      await window.refreshApp();
+    }
+  } else if (draggedNoteFolderId) {
+    if (draggedNoteFolderId !== targetFolderId) {
+      await reorderNoteFolders(draggedNoteFolderId, targetFolderId, window.refreshApp);
+    }
+    draggedNoteFolderId = null;
+  }
+}
+
+export function onNoteFolderDragStart(e, folderId) {
+  draggedNoteFolderId = folderId;
+  e.dataTransfer.setData("text/plain", folderId);
+  e.dataTransfer.effectAllowed = "move";
+  // Prevent click on drag
+  e.stopPropagation();
+}
+
+export function onNoteFolderDragEnd(e) {
+  draggedNoteFolderId = null;
+  document.querySelectorAll(".folder-drag-over").forEach(function(el) {
+    el.classList.remove("folder-drag-over");
+  });
+}
+
+async function reorderNoteFolders(dragId, dropId, refresh) {
+  var folders = (S.note_folders || []).filter(function(f) { return f.parent_id === activeNoteFolderId; });
+  folders.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+  
+  var dragIndex = folders.findIndex(function(f) { return f.id === dragId; });
+  var dropIndex = folders.findIndex(function(f) { return f.id === dropId; });
+  if (dragIndex === -1 || dropIndex === -1 || dragIndex === dropIndex) return;
+  
+  var [dragged] = folders.splice(dragIndex, 1);
+  folders.splice(dropIndex, 0, dragged);
+  
+  var promises = [];
+  for (var i = 0; i < folders.length; i++) {
+    folders[i].order_index = i;
+    promises.push(api("PUT", "/api/note_folders/" + folders[i].id, { order_index: i }));
+  }
+  await Promise.all(promises);
+  
+  if (refresh) await refresh();
 }

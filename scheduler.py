@@ -7,13 +7,13 @@ nightly backup, and periodic calendar auto-sync.
 import time
 from datetime import datetime, timedelta
 
-from helpers import setting, kv_get, kv_set, send_notification, db, do_backup
+from helpers import setting, kv_get, kv_set, send_notification, db, do_backup, local_now
 from blueprints.calendar import cal_auto_sync
 
 
 def send_agenda(today):
     """Morning push: today's events + upcoming exam alerts + tasks due soon/overdue."""
-    now = datetime.now()
+    now = local_now()
     now_str = now.strftime("%Y-%m-%dT%H:%M")
     plus_24h_str = (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M")
 
@@ -184,7 +184,7 @@ def check_event_reminders(now):
 
 
 def scheduler_tick():
-    now = datetime.now()
+    now = local_now()
     today = now.strftime("%Y-%m-%d")
     hhmm = now.strftime("%H:%M")
     

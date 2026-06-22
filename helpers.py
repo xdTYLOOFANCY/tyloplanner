@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS tasks(
   created TEXT, completed_at TEXT, due TEXT,
   category TEXT, order_index INTEGER DEFAULT 0, due_date TEXT, parent_id TEXT);
 CREATE TABLE IF NOT EXISTS notes(
-  id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER, is_pinned INTEGER DEFAULT 0);
+  id TEXT PRIMARY KEY, title TEXT, body TEXT, updated INTEGER, is_pinned INTEGER DEFAULT 0, folder_id TEXT);
+CREATE TABLE IF NOT EXISTS note_folders(
+  id TEXT PRIMARY KEY, name TEXT, parent_id TEXT, icon TEXT, order_index INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS files(
   id TEXT PRIMARY KEY, filename TEXT, size INTEGER, mimetype TEXT, uploaded INTEGER, is_pinned INTEGER DEFAULT 0, folder_id TEXT);
 CREATE TABLE IF NOT EXISTS folders(
@@ -73,7 +75,8 @@ TABLES = {
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
     "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id"],
-    "notes":    ["title", "body", "updated", "is_pinned"],
+    "notes":    ["title", "body", "updated", "is_pinned", "folder_id"],
+    "note_folders": ["name", "parent_id", "icon", "order_index"],
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
     "folders":  ["name", "parent_id", "icon"],
     "shortcuts":["name", "url", "icon"],
@@ -146,11 +149,32 @@ SETTING_DEFAULTS = {
     "dashboard_desktop_layout": "",
     "dashboard_mobile_layout": "",
     "dashboard_widgets_data": "{}",
+    "app_timezone": "",
+    "calendar_hidden_types": "[]",
+    "calendar_colors": "{}",
 }
 
 
 def setting(key):
     return kv_get("set_" + key, SETTING_DEFAULTS.get(key, "")) or SETTING_DEFAULTS.get(key, "")
+
+
+def app_tz():
+    tz_str = setting("app_timezone")
+    if tz_str:
+        import zoneinfo
+        try:
+            return zoneinfo.ZoneInfo(tz_str)
+        except Exception:
+            pass
+    return None
+
+
+def local_now():
+    tz = app_tz()
+    if tz:
+        return datetime.now(tz).replace(tzinfo=None)
+    return datetime.now()
 
 
 # ---------------- auth helpers ----------------

@@ -24,7 +24,7 @@ import {
   showDashboardEventDetails
 } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, handlePlannerSearchKeydown } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
@@ -39,7 +39,10 @@ import {
   renderNotes, newNote as _newNote, selectNote, openNote, noteChanged, deleteNote as _deleteNote,
   toggleNotePin, noteSearchInput, noteBodySearchInput, noteBodySearchNav,
   toggleNoteMode, noteInsert, toggleNoteReadMode, toggleNoteSplitOnly,
-  handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack
+  handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack,
+  navigateToNoteFolder, createNoteFolderPrompt, renameNoteFolderPrompt, changeNoteFolderIconPrompt, deleteNoteFolderConfirm,
+  onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
+  onNoteFolderDragStart, onNoteFolderDragEnd
 } from './js/notes.js';
 import {
   renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort,
@@ -51,9 +54,9 @@ import {
 } from './js/files.js';
 import {
   renderSettings, saveNotifySettings as _saveNotifySettings, testNotify,
-  saveCalSync as _saveCalSync, calSyncNow as _calSyncNow,
-  tfaStart, tfaConfirm as _tfaConfirm, tfaDisable as _tfaDisable,
-  backupNow as _backupNow, copyIcs,
+  saveCalSync as _saveCalSync, calSyncNow as _calSyncNow, saveAppTimezone as _saveAppTimezone, autoSetTimezone as _autoSetTimezone,
+  tfaStart as _tfaStart, tfaConfirm as _tfaConfirm, tfaDisable as _tfaDisable,
+  backupNow as _backupNow, copyIcs as _copyIcs,
   importIcsFile as _importIcsFile, clearIcs as _clearIcs,
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
@@ -102,6 +105,18 @@ window.openTaskModal = openTaskModal;
 window.saveTaskModal = function() { _saveTaskModal(R); };
 window.newNote = function() { _newNote(R); };
 window.deleteNote = function() { _deleteNote(R); };
+window.navigateToNoteFolder = navigateToNoteFolder;
+window.createNoteFolderPrompt = function() { createNoteFolderPrompt(R); };
+window.renameNoteFolderPrompt = function(id, oldName) { renameNoteFolderPrompt(id, oldName, R); };
+window.changeNoteFolderIconPrompt = function(id, oldIcon) { changeNoteFolderIconPrompt(id, oldIcon, R); };
+window.deleteNoteFolderConfirm = function(id) { deleteNoteFolderConfirm(id, R); };
+window.onNoteDragStart = onNoteDragStart;
+window.onNoteDragEnd = onNoteDragEnd;
+window.onNoteFolderDragOver = onNoteFolderDragOver;
+window.onNoteFolderDragLeave = onNoteFolderDragLeave;
+window.onNoteFolderDrop = onNoteFolderDrop;
+window.onNoteFolderDragStart = onNoteFolderDragStart;
+window.onNoteFolderDragEnd = onNoteFolderDragEnd;
 window.uploadFile = function() { _uploadFile(R); };
 window.uploadCameraFile = function() { _uploadCameraFile(R); };
 window.delFile = function(id) { _delFile(id, R); };
@@ -112,6 +127,11 @@ window.changeFolderIconPrompt = function(id, oldIcon) { changeFolderIconPrompt(i
 window.deleteFolderConfirm = function(id) { deleteFolderConfirm(id, R); };
 window.renameFilePrompt = function(id, oldName) { renameFilePrompt(id, oldName, R); };
 window.previewFile = previewFile;
+window.togglePlannerCalendarsPanel = _togglePlannerCalendarsPanel;
+window.renderPlannerCalendarsPanel = _renderPlannerCalendarsPanel;
+window.toggleCalendarType = function(id, checked) { _toggleCalendarType(id, checked); };
+window.updateCalendarColor = function(id, color) { _updateCalendarColor(id, color); };
+
 window.onFileDragStart = onFileDragStart;
 window.onFileDragEnd = onFileDragEnd;
 window.onFolderDragOver = onFolderDragOver;
@@ -129,12 +149,16 @@ window.enableWebPush = function() { enableWebPush(R); };
 window.disableWebPush = function() { disableWebPush(R); };
 window.saveCalSync = function() { _saveCalSync(R); };
 window.calSyncNow = function() { _calSyncNow(R); };
+window.saveAppTimezone = function() { _saveAppTimezone(R); };
+window.autoSetTimezone = function() { _autoSetTimezone(R); };
+window.copyIcs = _copyIcs;
 window.importIcsFile = function() { _importIcsFile(R); };
 window.clearIcs = function() { _clearIcs(R); };
 window.stravaSaveConfig = function() { _stravaSaveConfig(R); };
 window.stravaForget = function() { _stravaForget(R); };
 window.stravaSync = function() { _stravaSync(R); };
 window.stravaDisconnect = function() { _stravaDisconnect(R); };
+window.tfaStart = _tfaStart;
 window.tfaConfirm = function() { _tfaConfirm(R); };
 window.tfaDisable = function() { _tfaDisable(R); };
 window.backupNow = function() { _backupNow(R); };
@@ -235,6 +259,11 @@ let currentActiveTab = "dashboard";
 
 window.updateFAB = function(tab) {
   currentActiveTab = tab;
+  
+  const customizeBtn = document.getElementById("customizeBtn");
+  if (customizeBtn) {
+    customizeBtn.style.display = (tab === "dashboard") ? "" : "none";
+  }
   const fabContainer = document.getElementById("globalFab");
   const fabBtn = document.getElementById("fabBtn");
   const fabIcon = document.getElementById("fabIcon");
