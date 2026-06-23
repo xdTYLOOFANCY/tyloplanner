@@ -3,7 +3,7 @@ import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 
-var dateOffset = 0, plannerRefresh = null, currentView = '7', scrolledToCurrentTimeThisSession = false, isResizing = false, lastScrollTop = null, activeReminders = [], isRendering = false;
+var dateOffset = 0, plannerRefresh = null, currentView = '7', scrolledToCurrentTimeThisSession = false, isResizing = false, lastScrollTop = null, activeReminders = [], isRendering = false, lastRenderToday = todayStr();
 var draggingEventId = null, draggingOffsetY = 0, currentUndoAction = null, undoToastTimeout = null, dragPreviewEl = null;
 var isTouchDragging = false, touchDragPointerId = null, touchDragStartClientX = 0, touchDragStartClientY = 0, touchDragLongPressTimer = null, justTouchDragged = false, lastTouchTime = 0;
 
@@ -236,6 +236,7 @@ function parseTime(t) {
 
 export function renderPlanner() {
   isRendering = true;
+  lastRenderToday = todayStr();
   var dates = getViewDates(currentView, dateOffset);
   var title = "";
   if (currentView === 'month') {
@@ -2004,3 +2005,24 @@ function triggerAddEventAt(iso, startMin) {
     openAdd(iso);
   }
 }
+
+export function updatePlannerTimeLine() {
+  var today = todayStr();
+  if (today !== lastRenderToday) {
+    lastRenderToday = today;
+    renderPlanner();
+    return;
+  }
+  
+  var lines = document.querySelectorAll('.current-time-line');
+  if (lines.length > 0) {
+    var now = new Date();
+    var nowMin = now.getHours() * 60 + now.getMinutes();
+    lines.forEach(function(line) {
+      line.style.top = nowMin + 'px';
+    });
+  }
+}
+
+setInterval(updatePlannerTimeLine, 15000);
+

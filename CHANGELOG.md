@@ -2,6 +2,11 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.4.1 — 2026-06-23
+
+- **Real-Time Live Updates:** Added automatic background synchronization across multiple open application instances. The backend tracks data modifications using SQLite transaction hooks and increments a `state_version` key. A smart, background-aware polling loop on the frontend checks this version and triggers a silent state refresh on mismatch, updating all tabs, widgets, notes, files, habits, and stats in real-time. Also added a continuous timer in the Planner view that updates the current time indicator red bar every 15 seconds, automatically executing a full re-render on day transitions. Bumped service worker cache to `tylo-v88`.
+- **Styled HTML Notes Compilation & Download:** Added options to download notes or entire folders as styled, standalone HTML files/folders that preserve the dark/light/cyberpunk styling, responsive layouts, code syntax highlighting, and formatting of the application's read mode for offline reading. Supported downloading the entire notebook as a single compiled HTML file.
+
 ## 1.4.0 — 2026-06-22
 
 - **Application Time Zone Support:** Added a new setting to configure the application's timezone with auto-detection capability in the Settings panel. Refactored the backend scheduler, calendar auto-sync/import/export, Strava synchronization, backups, and reminders to compute local time relative to the configured timezone (using a new `local_now()` helper), fixing offset discrepancies and syncing errors.

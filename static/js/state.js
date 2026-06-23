@@ -46,6 +46,51 @@ export const PRESETS = {
   ]
 };
 
+export let currentVersion = null;
+let syncInterval = null;
+let lastCheckTime = 0;
+const ACTIVE_INTERVAL = 5000;
+const INACTIVE_INTERVAL = 30000;
+
+async function checkVersion() {
+  if (!navigator.onLine) return;
+  try {
+    const res = await api("GET", "/api/state-version");
+    if (res && res.version !== undefined && res.version !== currentVersion) {
+      if (currentVersion !== null) {
+        if (window.refreshApp) {
+          await window.refreshApp();
+        }
+      } else {
+        currentVersion = res.version;
+      }
+    }
+  } catch (e) {
+    // Ignore network errors
+  }
+}
+
+export function startLiveSync() {
+  if (syncInterval) clearInterval(syncInterval);
+  
+  const loop = async () => {
+    const now = Date.now();
+    const interval = document.hidden ? INACTIVE_INTERVAL : ACTIVE_INTERVAL;
+    if (now - lastCheckTime >= interval) {
+      lastCheckTime = now;
+      await checkVersion();
+    }
+  };
+  
+  syncInterval = setInterval(loop, 1000);
+  
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      loop();
+    }
+  });
+}
+
 export async function refresh(renderAll) {
   S = await api("GET", "/api/state");
   if (window.Alpine) {
@@ -54,6 +99,15 @@ export async function refresh(renderAll) {
   SET = await api("GET", "/api/settings");
   habitSet = {};
   S.habit_log.forEach(function(l) { habitSet[l.habit_id + "|" + l.date] = true; });
+  
+  try {
+    const vRes = await api("GET", "/api/state-version");
+    if (vRes && vRes.version !== undefined) {
+      currentVersion = vRes.version;
+    }
+  } catch (e) {}
+
   renderAll();
 }
+
 

@@ -27,7 +27,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -93,6 +93,14 @@ def db():
     try:
         with con:
             yield con
+            if con.total_changes > 0:
+                try:
+                    con.execute(
+                        "INSERT INTO kv(key, value) VALUES('state_version', '1') "
+                        "ON CONFLICT(key) DO UPDATE SET value=CAST(value AS INTEGER) + 1"
+                    )
+                except sqlite3.OperationalError:
+                    pass
     finally:
         con.close()
 

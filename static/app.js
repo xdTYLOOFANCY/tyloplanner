@@ -3,7 +3,7 @@
 // inline onclick/onchange handlers in the HTML keep working.
 "use strict";
 
-import { refresh, SET } from './js/state.js';
+import { refresh, SET, startLiveSync } from './js/state.js';
 import { todayStr, esc, delRow as _delRow } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js';
@@ -443,6 +443,7 @@ window.addEventListener("offline", function() {
 refresh(renderAll).then(function() {
   setPlannerRefresh(R);
   updateOfflineBanner();
+  startLiveSync();
   checkForUpdates(false).catch(function() {});
   if (navigator.onLine) {
     syncQueue(R);

@@ -47,6 +47,11 @@ def get_state():
     return jsonify(out)
 
 
+@bp.get("/api/state-version")
+def get_state_version():
+    return jsonify({"version": kv_get("state_version", "0")})
+
+
 
 def sync_exam_to_event(rid):
     with db() as con:
