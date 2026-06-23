@@ -5,3 +5,10 @@ venv/
 __pycache__/
 *.pyc
 *.db
+
+# Landing Page & Marketing (Hosted separately on Cloudflare Pages)
+landing-page/
+take_screenshots.js
+node_modules/
+package.json
+package-lock.json

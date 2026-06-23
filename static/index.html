@@ -217,6 +217,7 @@
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <button class="btn" style="flex:1" onclick="newNote()">+ Note</button>
           <button class="btn ghost" style="flex:1" onclick="createNoteFolderPrompt()">+ Folder</button>
+          <button class="btn ghost" style="padding:6px 10px;" onclick="downloadAllNotesNotebook()" title="Compile all notes into a digital notebook">📚</button>
         </div>
         <div id="noteFolderHeader" style="margin-bottom:10px;"></div>
         <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" onkeydown="handleNoteSearchKeydown(event)" style="width:100%;margin-bottom:8px">
@@ -239,6 +240,14 @@
             <span class="muted note-control-label">Read Mode</span>
             <div class="note-control-widget">
               <input type="checkbox" id="noteReadToggle" class="ios-toggle" onchange="toggleNoteReadMode()">
+            </div>
+            <div class="dropdown" id="noteDownloadDropdown">
+              <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note">📥 Export</button>
+              <div class="dropdown-content" id="noteDownloadMenu">
+                <a href="#" onclick="downloadNoteAs('html'); return false;">📄 Styled HTML (.html)</a>
+                <a href="#" onclick="downloadNoteAs('md'); return false;">📝 Markdown (.md)</a>
+                <a href="#" onclick="downloadNoteAs('print'); return false;">🖨️ Print / PDF</a>
+              </div>
             </div>
             <button class="btn danger small note-control-delete" onclick="deleteNote()">Delete</button>
           </div>

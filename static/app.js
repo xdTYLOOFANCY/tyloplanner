@@ -42,7 +42,8 @@ import {
   handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack,
   navigateToNoteFolder, createNoteFolderPrompt, renameNoteFolderPrompt, changeNoteFolderIconPrompt, deleteNoteFolderConfirm,
   onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
-  onNoteFolderDragStart, onNoteFolderDragEnd
+  onNoteFolderDragStart, onNoteFolderDragEnd,
+  toggleNoteDownloadMenu, downloadNoteAs, downloadNoteFolder, downloadAllNotesNotebook
 } from './js/notes.js';
 import {
   renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort,
@@ -214,6 +215,10 @@ window.toggleNoteReadMode = toggleNoteReadMode;
 window.toggleNoteSplitOnly = toggleNoteSplitOnly;
 window.noteInsert = noteInsert;
 window.toggleNotePin = toggleNotePin;
+window.toggleNoteDownloadMenu = toggleNoteDownloadMenu;
+window.downloadNoteAs = downloadNoteAs;
+window.downloadNoteFolder = downloadNoteFolder;
+window.downloadAllNotesNotebook = downloadAllNotesNotebook;
 window.toggleFilePin = toggleFilePin;
 window.setFileSort = setFileSort;
 window.renderFiles = renderFiles;

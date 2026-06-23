@@ -316,13 +316,13 @@ table.grades input{width:70px;padding:5px 7px}
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  position: relative !important;
+  z-index: 10 !important;
 }
 .note-control-grid {
-  display: grid;
-  grid-template-columns: 80px 44px 65px;
-  column-gap: 8px;
+  display: flex;
+  gap: 8px;
   align-items: center;
-  justify-items: end;
 }
 .note-control-label {
   font-size: 12px;
@@ -2670,3 +2670,71 @@ body.dark .drop-overlay {
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
+
+/* Dropdown Menu for Notes Download */
+.dropdown {
+  position: relative;
+  display: inline-block;
+  z-index: 15 !important;
+}
+.dropdown-content {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background-color: var(--panel);
+  min-width: 180px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  z-index: 1000;
+  overflow: hidden;
+  animation: fadeInDropdown 0.2s ease-out;
+}
+@keyframes fadeInDropdown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dropdown-content a {
+  color: var(--text);
+  padding: 10px 14px;
+  text-decoration: none;
+  display: block;
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  border-bottom: 1px solid var(--border);
+}
+.dropdown-content a:last-child {
+  border-bottom: none;
+}
+.dropdown-content a:hover {
+  background-color: var(--panel2);
+  color: var(--accent);
+}
+.dropdown.show .dropdown-content {
+  display: block;
+}
+
+/* Print view for single notes */
+@media print {
+  .top-nav-container, main > section:not(.active), .nav-tabs, .nav-actions, .notelist, #noteToolbar, .note-search-bar, #noteBody, .note-control-grid, #noteBackBtn {
+    display: none !important;
+  }
+  body, main, section, .noteslayout, #noteEditor, #noteView {
+    background: white !important;
+    color: black !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  #noteView {
+    display: block !important;
+    min-height: auto !important;
+  }
+}
+
