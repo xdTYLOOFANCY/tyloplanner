@@ -8,11 +8,14 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=81">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css?v=85">
 <script defer src="js/alpine.min.js"></script>
 <script src="js/marked.min.js"></script>
 <script src="js/chart.umd.js"></script>
-<script type="module" src="app.js?v=81"></script>
+<script type="module" src="app.js?v=85"></script>
 <script src="js/bottom_nav.js"></script>
 
 </head>
@@ -308,7 +311,7 @@
         <div class="file-toolbar">
           <div class="file-search-container">
             <span class="search-icon">🔍</span>
-            <input id="fileSearch" placeholder="Search files…" oninput="renderFiles()" onkeydown="handleFileSearchKeydown(event)">
+            <input id="fileSearch" placeholder="Search files…" oninput="fileSearchInput()" onkeydown="handleFileSearchKeydown(event)">
           </div>
           <div class="file-sort-group">
             <span class="sort-label">Sort:</span>
@@ -445,7 +448,7 @@
     </div>
     <div class="card">
       <h3>💾 Data</h3>
-      <p style="font-size:14px;margin-bottom:8px">Your data lives in <b>data/tyloplanner.db</b> (SQLite) on your server. Use Backup/Restore for JSON snapshots, or copy the .db file directly. Login credentials are set in <b>.env</b> (AUTH_USERNAME / AUTH_PASSWORD).</p>
+      <p style="font-size:14px;margin-bottom:8px">Your data lives in <b>data/tyloplanner.db</b> (SQLite) on your server. Use Backup/Restore for JSON snapshots, or copy the .db file directly. The initial password can be bootstrapped from <b>.env</b> (AUTH_PASSWORD) or changed under Security.</p>
       <!-- Backup/Restore buttons: always visible on mobile (header buttons hidden), desktop-only in header -->
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
         <button class="btn ghost small" onclick="exportData()">⬇️ Backup (download)</button>
@@ -454,6 +457,11 @@
       <div id="backupStatus" style="margin-top:4px"></div>
       <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Available backups</h4>
       <div id="backupList" class="card-scroll"><span class="muted">Loading…</span></div>
+    </div>
+    <div class="card">
+      <h3>⚙️ Background Tasks Log</h3>
+      <p style="font-size:14px;margin-bottom:10px">View the status and logs of recent background tasks (syncs, backups, notifications).</p>
+      <div id="bgTaskList" class="card-scroll" style="max-height: 250px; overflow-y: auto;"><span class="muted">Loading tasks…</span></div>
     </div>
     <div class="card">
       <h3>🔄 Software Updates</h3>
@@ -467,7 +475,7 @@
     </div>
   </section>
 
-  <div id="updateModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-update-modal.window="open = true">
+  <dialog id="updateModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-update-modal.window="open = true" @close-update-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 450px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Update TyloPlanner</h3>
       <p style="font-size:14px; margin-bottom:12px; line-height:1.5;">To update TyloPlanner to the latest version, run the following commands on your server:</p>
@@ -488,9 +496,9 @@
         <button class="btn" @click="open = false">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="taskModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-task-modal.window="open = true" @close-task-modal.window="open = false">
+  <dialog id="taskModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-task-modal.window="open = true" @close-task-modal.window="open = false" @click="if($event.target === $el) open = false" @keydown.enter="if($event.target.tagName !== 'BUTTON') { $event.preventDefault(); saveTaskModal(); }">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>
       <input type="hidden" id="editTaskId">
@@ -515,9 +523,9 @@
         <button class="btn" onclick="saveTaskModal()">Save</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="categoriesModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-categories-modal.window="open = true" @close-categories-modal.window="open = false">
+  <dialog id="categoriesModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-categories-modal.window="open = true" @close-categories-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Manage Categories</h3>
       
@@ -533,9 +541,9 @@
         <button class="btn" @click="open = false">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="eventModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-event-modal.window="open = true" @close-event-modal.window="open = false">
+  <dialog id="eventModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-event-modal.window="open = true" @close-event-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 id="evModalTitleText" style="margin-bottom:16px; font-size:16px; font-weight:700;">Event Details</h3>
       <input type="hidden" id="evModalId">
@@ -654,9 +662,9 @@
         </div>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="shortcutsModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-shortcuts-modal.window="open = true" @close-shortcuts-modal.window="open = false">
+  <dialog id="shortcutsModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-shortcuts-modal.window="open = true" @close-shortcuts-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 420px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Keyboard Shortcuts</h3>
       <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
@@ -698,24 +706,24 @@
         <button class="btn ghost" style="padding:10px;" @click="open = false">Cancel</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="mediaPreviewModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-media-preview-modal.window="open = true" @close-media-preview-modal.window="open = false">
+  <dialog id="mediaPreviewModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';" @open-media-preview-modal.window="open = true" @close-media-preview-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div id="mediaPreviewModalContent" class="modal-content" style="display: flex; flex-direction: column; box-sizing: border-box;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 id="mediaPreviewTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">File Preview</h3>
-        <button class="btn ghost small" @click="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+        <button class="btn ghost small" @click="open = false" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
       </div>
       <div id="mediaPreviewContainer" style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto; background:#121212; border-radius:4px; min-height:0; padding:10px;">
         <!-- Embedded preview will go here -->
       </div>
       <div style="margin-top:12px; display:flex; justify-content:flex-end;">
-        <button class="btn ghost" @click="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';">Close</button>
+        <button class="btn ghost" @click="open = false">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="dashboardEventDetailsModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-dashboard-event-modal.window="open = true" @close-dashboard-event-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="dashboardEventDetailsModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-dashboard-event-modal.window="open = true" @close-dashboard-event-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 id="dbEvModalTitle" style="font-size:16px; font-weight:700; margin:0;">Event Details</h3>
@@ -760,7 +768,7 @@
         <button class="btn ghost" style="flex:1;" @click="open = false">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
 </main>
 <footer style="display: flex; justify-content: space-between; align-items: center; text-align: left; flex-wrap: wrap; gap: 16px;">
   <span style="flex: 1; min-width: 200px;">TyloPlanner — self-hosted. Source code is yours: edit <b>app.py</b> and <b>static/</b>.</span>
@@ -796,7 +804,7 @@
     <span class="fab-icon" id="fabIcon">+</span>
   </button>
 </div>
-  <div id="plannerCalendarsModal" class="modal" style="display:none;" x-data="{ open: false }" x-show="open" @open-planner-calendars-modal.window="open = true" @close-planner-calendars-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="plannerCalendarsModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-planner-calendars-modal.window="open = true" @close-planner-calendars-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 style="margin:0;font-size:16px;">Customize Calendars</h3>
@@ -804,7 +812,6 @@
       </div>
       <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:12px;"></div>
     </div>
-  </div>
-  <script type="module" src="/static/app.js"></script>
+  </dialog>
 </body>
 </html>

@@ -12,15 +12,15 @@ for architecture and the full API reference — read it before making changes.
 ## Commands
 
 ```bash
-pip install -r requirements.txt        # deps
-python app.py                          # run dev server on :8000 (no login)
-AUTH_PASSWORD=dev python app.py        # run with login enabled
-python -m py_compile app.py            # syntax-check backend
+pip3 install -r requirements.txt       # deps
+python3 app.py                         # run dev server on :8000 (no login)
+AUTH_PASSWORD=dev python3 app.py       # run with login enabled
+python3 -m py_compile app.py           # syntax-check backend
 node --check static/app.js             # syntax-check frontend
 docker compose up -d --build           # production build/run
 ```
 
-Run the test suite with `python -m unittest test_app` (stdlib unittest +
+Run the test suite with `python3 -m unittest test_app` (stdlib unittest +
 Flask test client; it covers the generic CRUD API and the auth/routing
 guard and points DB_PATH at a temp dir, so it won't touch real data). For
 behavior the suite doesn't cover, also exercise the affected endpoints with
@@ -49,8 +49,7 @@ User settings live in the `kv` table with a `set_` prefix.
 - **Escape user content** with the `esc()` helper before injecting into HTML.
 - New protected routes are covered automatically by the `before_request`
   guard; anything that must be reachable before login goes in `LOGIN_ASSETS`.
-- Bump the `CACHE` name in `static/sw.js` when changing static assets, or
-  clients may keep serving stale files.
+- Asset versioning is automated on startup. No need to manually bump cache versions in static/sw.js or query params in index.html.
 - Update `CHANGELOG.md` and the relevant file in `docs/` with user-facing
   changes.
 

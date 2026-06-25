@@ -4,14 +4,22 @@
   --accent-rgb:79, 140, 255;
   --green:#3ecf8e; --orange:#f5a623; --red:#ef5b6c; --radius:12px;
   --text-muted: var(--muted);
+  /* Scrollbar tokens – thumb (moving part) / track (gutter) */
+  --scrollbar-thumb: #3a4055;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: #4f8cff;
 }
 [data-theme="light"]{
   --bg:#f4f5f8; --panel:#ffffff; --panel2:#eef0f5; --border:#dcdfe6;
   --text:#1c2230; --muted:#69707f;
   --text-muted: var(--muted);
+  /* Scrollbar tokens – light theme */
+  --scrollbar-thumb: #c4cad6;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: #4f8cff;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh}
 .top-nav-container {
   display: flex;
   align-items: center;
@@ -85,7 +93,7 @@ section.active{display:block}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
 .cards .card{margin-bottom:0}
 .card h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:16px;font-weight:600}
-.card-scroll{max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.card-scroll{max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track)}
 .btn{background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s}
 .btn:hover{background:var(--border)}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
@@ -120,7 +128,7 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .weekgrid{display:flex;flex-direction:column;}
 
 /* Time Grid Layout */
-.time-grid-wrapper { display: block; position: relative; overflow-y: auto; height: 730px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.time-grid-wrapper { display: block; position: relative; overflow-y: auto; height: 730px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
 .time-grid-inner { display: flex; min-height: 100%; }
 .time-axis { width: 50px; flex-shrink: 0; border-right: 1px solid var(--border); position: relative; background: var(--panel2); }
 .time-label { position: absolute; right: 8px; font-size: 11px; color: var(--muted); transform: translateY(-50%); top: 0; }
@@ -194,8 +202,51 @@ body.dragging-move-active { cursor: grabbing; user-select: none; }
 table.habits{width:100%;border-collapse:collapse}
 table.habits th,table.habits td{padding:8px 6px;text-align:center;font-size:13px;border-bottom:1px solid var(--border)}
 table.habits th:first-child,table.habits td:first-child{text-align:left}
-.hcheck{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--panel2);cursor:pointer;display:inline-block;line-height:22px;user-select:none;text-align:center}
-.hcheck.on{background:var(--green);border-color:var(--green);color:#08311f;font-weight:800}
+.hcheck {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  cursor: pointer;
+  display: inline-block;
+  user-select: none;
+  position: relative;
+  font-size: 0 !important;
+  vertical-align: middle;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.hcheck:hover {
+  transform: scale(1.08);
+  border-color: var(--accent);
+}
+.hcheck:active {
+  transform: scale(0.95);
+}
+.hcheck.on {
+  background: var(--green);
+  border-color: var(--green);
+  color: #08311f;
+  font-weight: 800;
+}
+.hcheck::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 25%;
+  height: 50%;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translate(-50%, -60%) rotate(45deg) scale(0);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
+  transform-origin: center;
+}
+.hcheck.on::after {
+  transform: translate(-50%, -60%) rotate(45deg) scale(1);
+  opacity: 1;
+}
 /* stats + charts */
 .wstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
 .stat{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:left;display:flex;flex-direction:column;gap:4px;transition:transform 0.2s}
@@ -255,6 +306,8 @@ table.grades input{width:70px;padding:5px 7px}
   background: var(--panel2);
   color: var(--text);
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 #noteView h1, #noteView h2, #noteView h3, #noteView h4 {
   margin-top: 16px;
@@ -282,6 +335,8 @@ table.grades input{width:70px;padding:5px 7px}
   overflow-x: auto;
   margin-bottom: 12px;
   border: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 #noteView pre code {
   background: transparent;
@@ -431,6 +486,24 @@ code.url{background:var(--panel2);padding:4px 8px;border-radius:6px;font-size:12
 
 /* Modal */
 .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}
+dialog.modal {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  max-width: 100vw;
+  max-height: 100vh;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  display: none;
+}
+dialog.modal[open] {
+  display: flex;
+}
+dialog.modal::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
 .modal-content{background:var(--panel);width:90%;max-width:400px;border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.5);border:1px solid var(--border)}
 
 
@@ -696,9 +769,12 @@ body.dark .drop-overlay {
   background: color-mix(in srgb, var(--panel2) 92%, var(--accent));
   border-left: 3px solid var(--accent);
 }
-.folder-drag-over {
+.drag-over {
   background: var(--panel2);
   border: 2px dashed var(--accent) !important;
+}
+.folder-card.drag-over,
+.list-item.drag-over {
   transform: scale(1.01);
   transition: transform 0.15s ease, border 0.15s ease;
 }
@@ -2141,7 +2217,7 @@ body.dark .drop-overlay {
   z-index: 1;
 }
 
-.swipe-bg.archive {
+.swipe-bg.delete {
   background: var(--red);
 }
 
@@ -2735,6 +2811,139 @@ body.dark .drop-overlay {
   #noteView {
     display: block !important;
     min-height: auto !important;
+  }
+}
+
+/* ---------- View Transitions ---------- */
+
+/* Custom sliding animations with cross-fade */
+@keyframes slide-to-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-50px); opacity: 0; }
+}
+
+@keyframes slide-from-right {
+  from { transform: translateX(50px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-to-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(50px); opacity: 0; }
+}
+
+@keyframes slide-from-left {
+  from { transform: translateX(-50px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Set up shared animation properties for the view transition pseudo-elements */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.25s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-fill-mode: both;
+}
+
+/* Apply forward sliding when the 'forward' type is active (using either modern types API or class fallback) */
+html:active-view-transition-type(forward)::view-transition-old(root),
+html.transition-forward::view-transition-old(root) {
+  animation-name: slide-to-left;
+}
+html:active-view-transition-type(forward)::view-transition-new(root),
+html.transition-forward::view-transition-new(root) {
+  animation-name: slide-from-right;
+}
+
+/* Apply backward sliding when the 'backward' type is active (using either modern types API or class fallback) */
+html:active-view-transition-type(backward)::view-transition-old(root),
+html.transition-backward::view-transition-old(root) {
+  animation-name: slide-to-right;
+}
+html:active-view-transition-type(backward)::view-transition-new(root),
+html.transition-backward::view-transition-new(root) {
+  animation-name: slide-from-left;
+}
+
+/* Respect prefers-reduced-motion: disable slide animations, fall back to simple fade or instantly swap */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+
+/* =============================================================
+   CUSTOM SCROLLBAR THEME
+   Uses the standard scrollbar-color / scrollbar-width API.
+   Variables (--scrollbar-thumb, --scrollbar-track,
+   --scrollbar-thumb-hover) are defined in :root and
+   [data-theme="light"] so every colour scheme is covered
+   automatically.
+   ============================================================= */
+
+/* 1 ── Global defaults: every scrollable element inherits the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* 2 ── Legacy WebKit fallback (Chrome < 121, older Safari)
+        Wrapped in @supports so browsers that understand
+        scrollbar-color natively never receive both rule sets. */
+@supports not (scrollbar-color: auto) {
+  /* Vertical scrollers */
+  *::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  /* Horizontal scrollers (e.g. #noteView pre, wide tables) */
+  *::-webkit-scrollbar:horizontal {
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+    /* Subtle inner border gives the thumb visual depth */
+    border: 1px solid var(--panel2);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  /* Corner where horizontal + vertical scrollbars meet */
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* 3 ── Cyberpunk theme: neon-accent thumb to match the glowing UI */
+[data-theme-style="cyberpunk"] {
+  --scrollbar-thumb: var(--accent);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: var(--accent2);
+}
+
+/* 4 ── High-contrast accessibility override */
+@media (prefers-contrast: more) {
+  :root,
+  [data-theme="light"] {
+    --scrollbar-thumb: #000000;
+    --scrollbar-track: #ffffff;
+    --scrollbar-thumb-hover: #000000;
+  }
+
+  [data-theme="light"] {
+    --scrollbar-thumb: #000000;
+    --scrollbar-track: #f0f0f0;
   }
 }
 

@@ -6,12 +6,13 @@ import time
 
 from flask import Blueprint, request, jsonify, send_file
 
-from helpers import db, uid, UPLOAD_DIR
+from helpers import db, uid, UPLOAD_DIR, db_retry
 
 bp = Blueprint("files", __name__)
 
 
 @bp.post("/api/files/upload")
+@db_retry()
 def upload_file():
     f = request.files.get("file")
     if not f:
@@ -25,7 +26,7 @@ def upload_file():
     f.save(disk_path)
     size = os.path.getsize(disk_path)
     ts = int(time.time() * 1000)
-    with db() as con:
+    with db(write=True) as con:
         con.execute(
             "INSERT INTO files(id, filename, size, mimetype, uploaded, folder_id) VALUES(?,?,?,?,?,?)",
             (fid, original_name, size, f.mimetype or "application/octet-stream", ts, folder_id))
@@ -58,8 +59,9 @@ def view_file(fid):
 
 
 @bp.delete("/api/files/<fid>")
+@db_retry()
 def delete_file(fid):
-    with db() as con:
+    with db(write=True) as con:
         row = con.execute("SELECT id FROM files WHERE id=?", (fid,)).fetchone()
         if not row:
             return jsonify({"error": "not found"}), 404
@@ -71,8 +73,9 @@ def delete_file(fid):
 
 
 @bp.delete("/api/folders/<fid>")
+@db_retry()
 def delete_folder(fid):
-    with db() as con:
+    with db(write=True) as con:
         row = con.execute("SELECT parent_id FROM folders WHERE id=?", (fid,)).fetchone()
         if not row:
             return jsonify({"error": "folder not found"}), 404
@@ -85,6 +88,7 @@ def delete_folder(fid):
 
 
 @bp.post("/api/files/move")
+@db_retry()
 def move_files():
     data = request.get_json(force=True) or {}
     file_ids = data.get("file_ids", [])
@@ -94,10 +98,63 @@ def move_files():
     if not file_ids:
         return jsonify({"error": "no file ids provided"}), 400
     
-    with db() as con:
+    with db(write=True) as con:
         placeholders = ",".join("?" for _ in file_ids)
         con.execute(
             f"UPDATE files SET folder_id=? WHERE id IN ({placeholders})",
             [folder_id] + file_ids
         )
     return jsonify({"ok": True})
+
+
+def run_storage_cleanup():
+    deleted_files = []
+    missing_files = []
+
+    # 1. Fetch all file records from DB
+    with db() as con:
+        db_files = con.execute("SELECT id, filename FROM files").fetchall()
+    db_file_ids = {row["id"] for row in db_files}
+
+    # 2. Delete orphaned files on disk (files on disk not in DB)
+    if os.path.exists(UPLOAD_DIR):
+        for entry in os.scandir(UPLOAD_DIR):
+            if entry.is_file():
+                filename = entry.name
+                # Ignore hidden files (e.g. .DS_Store, .gitkeep)
+                if filename.startswith('.'):
+                    continue
+                if filename not in db_file_ids:
+                    try:
+                        os.remove(entry.path)
+                        deleted_files.append(filename)
+                    except Exception as e:
+                        print(f"Cleanup error: Failed to delete orphaned file {entry.path}: {e}")
+
+    # 3. Identify files in DB but missing on disk
+    for row in db_files:
+        fid = row["id"]
+        disk_path = os.path.join(UPLOAD_DIR, fid)
+        if not os.path.exists(disk_path):
+            missing_files.append({"id": fid, "filename": row["filename"]})
+
+    # Print reports to console
+    if deleted_files:
+        print(f"Storage cleanup: Deleted {len(deleted_files)} orphaned files from disk: {deleted_files}")
+    if missing_files:
+        print(f"Warning: {len(missing_files)} files in database are missing on disk: {missing_files}")
+
+    return {
+        "deleted_count": len(deleted_files),
+        "deleted_files": deleted_files,
+        "missing_count": len(missing_files),
+        "missing_files": missing_files
+    }
+
+
+@bp.post("/api/files/cleanup")
+@db_retry()
+def manual_cleanup():
+    res = run_storage_cleanup()
+    return jsonify(res)
+

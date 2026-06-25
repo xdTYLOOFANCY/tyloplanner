@@ -6,7 +6,7 @@ import json
 import re
 from datetime import datetime
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 
 from helpers import db, uid, q, TABLES, do_backup, BACKUP_DIR, local_now
 
@@ -17,7 +17,11 @@ def do_restore_data(data):
     if not data or not isinstance(data, dict):
         return 0
     restored_count = 0
-    with db() as con:
+    with db(write=True) as con:
+        try:
+            con.execute("DELETE FROM deleted_records")
+        except Exception:
+            pass
         for t in list(TABLES) + ["habit_log"]:
             if t in data and isinstance(data[t], list):
                 con.execute("DELETE FROM %s" % t)
@@ -36,8 +40,21 @@ def do_restore_data(data):
 
 @bp.post("/api/backup/now")
 def backup_now():
-    path = do_backup(local_now().strftime("%Y-%m-%d"))
-    return jsonify({"ok": True, "file": os.path.basename(path)})
+    from scheduler import enqueue_task, execute_queued_task
+    task_id = enqueue_task("backup", {"date": local_now().strftime("%Y-%m-%d")})
+    
+    if (current_app.testing and request.args.get("async") != "true") or request.args.get("sync") == "true":
+        execute_queued_task(task_id)
+        with db() as con:
+            row = con.execute("SELECT result, status, error_message FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
+        if row and row["status"] == "completed" and row["result"]:
+            res = json.loads(row["result"])
+            return jsonify({"ok": True, "file": res["file"], "task_id": task_id})
+        else:
+            err = (row["error_message"] if row else None) or "Backup failed"
+            return jsonify({"error": err}), 500
+            
+    return jsonify({"status": "queued", "task_id": task_id})
 
 
 @bp.post("/api/restore")

@@ -3,8 +3,8 @@
 // inline onclick/onchange handlers in the HTML keep working.
 "use strict";
 
-import { refresh, SET, startLiveSync } from './js/state.js';
-import { todayStr, esc, delRow as _delRow } from './js/utils.js';
+import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
+import { todayStr, esc, delRow as _delRow, navigateWithTransition } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js';
 import { exportData, importData } from './js/backup.js';
@@ -51,7 +51,7 @@ import {
   previewFile, renameFilePrompt,
   onFileDragStart, onFileDragEnd, onFolderDragOver, onFolderDragLeave, onFolderDrop,
   toggleSelectAllFiles, onFileSelectChange, moveSelectedFilesToFolder, deleteSelectedFiles,
-  clearFileSelection, handleFileSearchKeydown
+  clearFileSelection, handleFileSearchKeydown, fileSearchInput
 } from './js/files.js';
 import {
   renderSettings, saveNotifySettings as _saveNotifySettings, testNotify,
@@ -65,15 +65,44 @@ import {
   toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
   updateCategoryColor as _updateCategoryColor, checkForUpdates,
-  enableWebPush, disableWebPush
+  enableWebPush, disableWebPush, changePassword,
+  revokeSession as _revokeSession
 } from './js/settings.js';
 import './js/study_timer.js';
 import { initSwipeGestures } from './js/swipe.js';
 
+function getActiveTab() {
+  const activeBtn = document.querySelector("#tabs button.active");
+  return activeBtn ? activeBtn.dataset.tab : "dashboard";
+}
+
+function renderTab(tab) {
+  if (tab === "dashboard") renderDashboard();
+  else if (tab === "analytics") renderAnalytics();
+  else if (tab === "planner") renderPlanner();
+  else if (tab === "exams") renderExams();
+  else if (tab === "habits") renderHabits();
+  else if (tab === "workouts") renderWorkouts();
+  else if (tab === "tasks") renderTasks();
+  else if (tab === "notes") renderNotes();
+  else if (tab === "files") renderFiles();
+  else if (tab === "settings") renderSettings(R);
+  
+  if (tabNeedsRender[tab] !== undefined) {
+    tabNeedsRender[tab] = false;
+  }
+}
+
 // ---- renderAll used by refresh() ----
 function renderAll() {
-  renderDashboard(); renderAnalytics(); renderPlanner(); renderExams();
-  renderHabits(); renderWorkouts(); renderTasks(); renderNotes(); renderFiles(); renderSettings(R);
+  // Mark all tabs as needing rendering since state has changed
+  Object.keys(tabNeedsRender).forEach(function(t) {
+    tabNeedsRender[t] = true;
+  });
+  
+  // Render only the active tab immediately
+  const activeTab = getActiveTab();
+  renderTab(activeTab);
 }
 
 // ---- wrappers that bind refresh ----
@@ -87,7 +116,7 @@ window.addExam = function() { _addExam(R); };
 window.setGrade = function(id, val) { _setGrade(id, val, R); };
 window.addHabit = function() { _addHabit(R); };
 window.delHabit = function(id) { _delHabit(id, R); };
-window.toggleHabit = function(id, iso) { _toggleHabit(id, iso, renderHabits, renderDashboard); };
+window.toggleHabit = function(id, iso) { _toggleHabit(id, iso); };
 window.addWorkout = function() { _addWorkout(R); };
 window.addTask = function() { _addTask(R); };
 window.toggleTask = function(id, done) { _toggleTask(id, done, R); };
@@ -162,6 +191,8 @@ window.stravaDisconnect = function() { _stravaDisconnect(R); };
 window.tfaStart = _tfaStart;
 window.tfaConfirm = function() { _tfaConfirm(R); };
 window.tfaDisable = function() { _tfaDisable(R); };
+window.revokeSession = function(sid) { _revokeSession(sid, R); };
+window.changePassword = function() { changePassword(R); };
 window.backupNow = function() { _backupNow(R); };
 window.saveAppThemeStyle = function() { _saveAppThemeStyle(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
@@ -222,6 +253,7 @@ window.downloadAllNotesNotebook = downloadAllNotesNotebook;
 window.toggleFilePin = toggleFilePin;
 window.setFileSort = setFileSort;
 window.renderFiles = renderFiles;
+window.fileSearchInput = fileSearchInput;
 window.handleFileSearchKeydown = handleFileSearchKeydown;
 window.toggleTheme = toggleTheme;
 window.exportData = exportData;
@@ -242,20 +274,41 @@ window.startResize = startResize;
 window.showDashboardEventDetails = showDashboardEventDetails;
 
 // ---------- tabs ----------
+const TABS = ["dashboard", "analytics", "planner", "exams", "habits", "workouts", "tasks", "notes", "files", "settings"];
+
 var tabsNav = document.getElementById("tabs");
 tabsNav.addEventListener("click", function(e) {
   var b = e.target.closest("button"); if (!b) return;
-  tabsNav.querySelectorAll("button").forEach(function(x) { x.classList.remove("active"); });
-  b.classList.add("active");
-  document.querySelectorAll("main section").forEach(function(s) { s.classList.remove("active"); });
-  document.getElementById("tab-" + b.dataset.tab).classList.add("active");
+  
+  const currentActiveBtn = tabsNav.querySelector("button.active");
+  const oldTab = currentActiveBtn ? currentActiveBtn.dataset.tab : "dashboard";
+  const newTab = b.dataset.tab;
+  
+  if (oldTab === newTab) return;
+  
+  const oldIdx = TABS.indexOf(oldTab);
+  const newIdx = TABS.indexOf(newTab);
+  const direction = newIdx > oldIdx ? "forward" : "backward";
+
+  navigateWithTransition(function() {
+    tabsNav.querySelectorAll("button").forEach(function(x) { x.classList.remove("active"); });
+    b.classList.add("active");
+    document.querySelectorAll("main section").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("tab-" + newTab).classList.add("active");
+    
+    // Render the target tab if it has stale state
+    if (tabNeedsRender[newTab]) {
+      renderTab(newTab);
+    }
+  }, direction);
+
   if (!SET || SET.persist_active_tab !== "0") {
-    localStorage.setItem("active_tab", b.dataset.tab);
+    localStorage.setItem("active_tab", newTab);
   } else {
     localStorage.removeItem("active_tab");
   }
   if (typeof window.updateFAB === "function") {
-    window.updateFAB(b.dataset.tab);
+    window.updateFAB(newTab);
   }
 });
 
@@ -366,6 +419,7 @@ function renderFabMenu() {
 
 // ---------- boot ----------
 document.addEventListener('alpine:init', () => {
+  Alpine.magic('cleanup', (el, { cleanup }) => cleanup);
   import('./js/state.js').then(({ S }) => {
     Alpine.store('state', S || {});
   });

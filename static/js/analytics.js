@@ -1,6 +1,6 @@
 // TyloPlanner — analytics module.
 
-import { S } from './state.js';
+import { S, safeRender } from './state.js';
 import { z, esc, MONTHS } from './utils.js';
 
 let chartInstances = {};
@@ -86,6 +86,8 @@ function createChart(canvasId, type, labels, datasets, options = {}) {
 }
 
 export function renderAnalytics() {
+  if (!S) return;
+  safeRender("analytics", () => {
   // Determine time range
   let allKeys = new Set();
   S.workouts.forEach(w => allKeys.add((w.date || "").slice(0, 7)));
@@ -304,4 +306,9 @@ export function renderAnalytics() {
     sh = '<div class="muted">No study sessions logged yet. Complete a Pomodoro session or stopwatch on the dashboard to log!</div>';
   }
   document.getElementById("aStudySessionsList").innerHTML = sh;
+  });
 }
+
+window.addEventListener('theme-changed', () => {
+  renderAnalytics();
+});

@@ -1,4 +1,4 @@
-// TyloPlanner — Swipe gestures for mobile list items (archive notes, complete tasks).
+// TyloPlanner — Swipe gestures for mobile list items (delete notes, complete tasks).
 "use strict";
 
 import { api, todayStr, toast } from './utils.js';
@@ -81,7 +81,7 @@ export function initSwipeGestures() {
           // Create/update swipe background behind the item
           if (!swipeBgElement) {
             swipeBgElement = document.createElement("div");
-            swipeBgElement.className = `swipe-bg ${type === 'notes' ? 'archive' : 'complete'}`;
+            swipeBgElement.className = `swipe-bg ${type === 'notes' ? 'delete' : 'complete'}`;
             
             // Set exact dimensions to match target card
             swipeBgElement.style.top = swipeActiveElement.offsetTop + "px";
@@ -92,7 +92,7 @@ export function initSwipeGestures() {
             
             // Text representation inside the background
             swipeBgElement.innerHTML = type === 'notes' 
-              ? '<span>📦 Archive</span>' 
+              ? '<span>✕ Delete</span>' 
               : '<span>✅ Done</span>';
             
             swipeActiveElement.parentNode.insertBefore(swipeBgElement, swipeActiveElement);
@@ -168,7 +168,7 @@ export function initSwipeGestures() {
     }
   };
 
-  // 1. Notes Tab: Swipe Left to Archive/Delete note
+  // 1. Notes Tab: Swipe Left to Delete note
   setupContainer("noteList", ".list-item", "notes", async (id, element) => {
     try {
       await api("DELETE", "/api/notes/" + id);
@@ -176,15 +176,15 @@ export function initSwipeGestures() {
       if (activeId === id) {
         localStorage.removeItem("active_note_id");
       }
-      toast("Note archived");
+      toast("Note deleted");
       if (window.refreshApp) {
         await window.refreshApp();
       }
     } catch (err) {
-      console.error("Failed to swipe-archive note:", err);
+      console.error("Failed to swipe-delete note:", err);
       element.style.transform = "";
       element.style.opacity = "1";
-      toast("Failed to archive note");
+      toast("Failed to delete note");
     }
   });
 

@@ -1,6 +1,6 @@
 // TyloPlanner — habits tracker module.
 
-import { S, habitSet, setHabitEntry } from './state.js';
+import { S, habitSet, setHabitEntry, safeRender } from './state.js';
 import { toISO, todayStr, parseISO, esc, api, DAYS } from './utils.js';
 import { weekDates } from './utils.js';
 
@@ -16,10 +16,15 @@ export async function delHabit(id, refresh) {
   await api("DELETE", "/api/habits/" + id); await refresh();
 }
 
-export async function toggleHabit(id, iso, renderHabits, renderDashboard) {
+export async function toggleHabit(id, iso) {
   var key = id + "|" + iso;
-  setHabitEntry(key, !habitSet[key]); // optimistic
-  renderHabits(); renderDashboard();
+  var done = !habitSet[key];
+  setHabitEntry(key, done); // optimistic
+  
+  window.dispatchEvent(new CustomEvent("tylo:habit-toggled", {
+    detail: { id: id, date: iso, done: done }
+  }));
+
   await api("POST", "/api/habits/" + id + "/toggle", { date: iso });
 }
 
@@ -31,18 +36,50 @@ export function streak(hid) {
 }
 
 export function renderHabits() {
-  var dates = weekDates(0), today = todayStr();
-  var html = '<tr><th>Habit</th>';
-  for (var i = 0; i < 7; i++) html += '<th' + (toISO(dates[i]) === today ? ' style="color:var(--accent)"' : '') + '>' + DAYS[i] + '</th>';
-  html += '<th>Streak</th><th></th></tr>';
-  S.habits.forEach(function(h) {
-    html += '<tr><td>' + esc(h.name) + '</td>';
-    for (var k = 0; k < 7; k++) {
-      var iso = toISO(dates[k]), on = !!habitSet[h.id + "|" + iso];
-      html += '<td><span class="hcheck' + (on ? ' on' : '') + '" onclick="toggleHabit(\'' + h.id + '\',\'' + iso + '\')">' + (on ? '✓' : '') + '</span></td>';
-    }
-    html += '<td><span class="badge ' + (streak(h.id) > 0 ? 'green' : 'gray') + '">' + streak(h.id) + '🔥</span></td>';
-    html += '<td><button class="btn danger small" onclick="delHabit(\'' + h.id + '\')">✕</button></td></tr>';
+  safeRender("habits", () => {
+    var dates = weekDates(0), today = todayStr();
+    var html = '<tr><th>Habit</th>';
+    for (var i = 0; i < 7; i++) html += '<th' + (toISO(dates[i]) === today ? ' style="color:var(--accent)"' : '') + '>' + DAYS[i] + '</th>';
+    html += '<th>Streak</th><th></th></tr>';
+    S.habits.forEach(function(h) {
+      html += '<tr><td>' + esc(h.name) + '</td>';
+      for (var k = 0; k < 7; k++) {
+        var iso = toISO(dates[k]), on = !!habitSet[h.id + "|" + iso];
+        html += '<td><span class="hcheck' + (on ? ' on' : '') + '" data-habit-id="' + h.id + '" data-habit-date="' + iso + '" onclick="toggleHabit(\'' + h.id + '\',\'' + iso + '\')">' + (on ? '✓' : '') + '</span></td>';
+      }
+      html += '<td><span class="badge ' + (streak(h.id) > 0 ? 'green' : 'gray') + '" data-habit-streak="' + h.id + '">' + streak(h.id) + '🔥</span></td>';
+      html += '<td><button class="btn danger small" onclick="delHabit(\'' + h.id + '\')">✕</button></td></tr>';
+    });
+    document.getElementById("habitTable").innerHTML = html + (S.habits.length ? "" : '<tr><td colspan="10" class="muted">No habits yet \u2014 add one above.</td></tr>');
   });
-  document.getElementById("habitTable").innerHTML = html + (S.habits.length ? "" : '<tr><td colspan="10" class="muted">No habits yet \u2014 add one above.</td></tr>');
 }
+
+// Global listener for localized DOM patching
+window.addEventListener("tylo:habit-toggled", function(e) {
+  const { id, date, done } = e.detail;
+  
+  // Patch checkboxes
+  const checkEls = document.querySelectorAll(`[data-habit-id="${id}"][data-habit-date="${date}"]`);
+  checkEls.forEach(function(el) {
+    if (done) {
+      el.classList.add("on");
+      el.textContent = "✓";
+    } else {
+      el.classList.remove("on");
+      el.textContent = "";
+    }
+  });
+
+  // Patch streak badges
+  const streakEls = document.querySelectorAll(`[data-habit-streak="${id}"]`);
+  streakEls.forEach(function(el) {
+    var c = streak(id);
+    el.textContent = c + "🔥";
+    if (c > 0) {
+      el.className = "badge green";
+    } else {
+      el.className = "badge gray";
+    }
+  });
+});
+

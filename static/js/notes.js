@@ -1,6 +1,6 @@
 // TyloPlanner — notes module (editor, markdown, search, cross-links).
 
-import { S } from './state.js';
+import { S, safeRender } from './state.js';
 import { esc, api, z } from './utils.js';
 
 var currentNote = null, noteTimer = null, noteMode = "edit";
@@ -8,6 +8,9 @@ var noteBodySearch = { q: "", idx: 0 };
 var activeNoteFolderId = null;
 var draggedNoteId = null;
 var draggedNoteFolderId = null;
+var lastNoteSearchQuery = "";
+var noteSearchResults = null;
+var noteSearchTimeout = null;
 
 export function getNoteBreadcrumbs(folderId) {
   var path = [];
@@ -382,7 +385,42 @@ export async function toggleNotePin(id, ev) {
   renderNoteList();
 }
 
-export function noteSearchInput() { renderNoteList(); }
+export function noteSearchInput() {
+  var searchEl = document.getElementById("noteSearch");
+  var q = (searchEl ? searchEl.value : "").trim().toLowerCase();
+  
+  if (q === lastNoteSearchQuery) return;
+  lastNoteSearchQuery = q;
+  
+  if (noteSearchTimeout) clearTimeout(noteSearchTimeout);
+  
+  if (!q) {
+    noteSearchResults = null;
+    renderNoteList();
+    return;
+  }
+  
+  // Render local results immediately, then update once FTS5 finishes
+  noteSearchResults = null;
+  renderNoteList();
+  
+  noteSearchTimeout = setTimeout(function() {
+    fetch("/api/notes/search?q=" + encodeURIComponent(q))
+      .then(function(res) { return res.json(); })
+      .then(function(ids) {
+        if (lastNoteSearchQuery === q) {
+          noteSearchResults = ids;
+          renderNoteList();
+        }
+      })
+      .catch(function() {
+        if (lastNoteSearchQuery === q) {
+          noteSearchResults = null;
+          renderNoteList();
+        }
+      });
+  }, 150);
+}
 
 export function handleNoteSearchKeydown(e) {
   if (e.key === "Enter") {
@@ -520,19 +558,35 @@ function renderNoteList() {
   // Render Notes
   var list = S.notes.slice();
   if (q) {
-    list = list.filter(function(n) {
-      var match = (n.title || "").toLowerCase().indexOf(q) !== -1 || (n.body || "").toLowerCase().indexOf(q) !== -1;
-      if (!match) return false;
-      if (!activeNoteFolderId) return true;
-      return n.folder_id === activeNoteFolderId || isNoteDescendant(n.folder_id, activeNoteFolderId);
-    });
+    if (noteSearchResults !== null) {
+      list = list.filter(function(n) {
+        var inFts = noteSearchResults.indexOf(n.id) !== -1;
+        if (!inFts) return false;
+        if (!activeNoteFolderId) return true;
+        return n.folder_id === activeNoteFolderId || isNoteDescendant(n.folder_id, activeNoteFolderId);
+      });
+      list.sort(function(a, b) {
+        return noteSearchResults.indexOf(a.id) - noteSearchResults.indexOf(b.id);
+      });
+    } else {
+      list = list.filter(function(n) {
+        var match = (n.title || "").toLowerCase().indexOf(q) !== -1 || (n.body || "").toLowerCase().indexOf(q) !== -1;
+        if (!match) return false;
+        if (!activeNoteFolderId) return true;
+        return n.folder_id === activeNoteFolderId || isNoteDescendant(n.folder_id, activeNoteFolderId);
+      });
+      list.sort(function(a, b) {
+        if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
+        return (b.updated || 0) - (a.updated || 0);
+      });
+    }
   } else {
     list = list.filter(function(n) { return n.folder_id === activeNoteFolderId; });
+    list.sort(function(a, b) {
+      if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
+      return (b.updated || 0) - (a.updated || 0);
+    });
   }
-  list.sort(function(a, b) {
-    if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
-    return (b.updated || 0) - (a.updated || 0);
-  });
   
   var html = "";
   list.forEach(function(n) {
@@ -557,7 +611,8 @@ function renderNoteList() {
 }
 
 export function renderNotes() {
-  renderNoteList();
+  safeRender("notes", () => {
+    renderNoteList();
   
   if (currentNote === null) {
     var savedActiveNoteId = localStorage.getItem("active_note_id");
@@ -613,7 +668,8 @@ export function renderNotes() {
   }
   
   noteBodySearch.idx = 0;
-  applyNoteMode();
+    applyNoteMode();
+  });
 }
 
 // Mobile panel navigation: go back from editor to note list
@@ -691,8 +747,8 @@ export function onNoteDragStart(e, noteId) {
 
 export function onNoteDragEnd(e) {
   draggedNoteId = null;
-  document.querySelectorAll(".folder-drag-over").forEach(function(el) {
-    el.classList.remove("folder-drag-over");
+  document.querySelectorAll(".drag-over").forEach(function(el) {
+    el.classList.remove("drag-over");
   });
 }
 
@@ -702,20 +758,20 @@ export function onNoteFolderDragOver(e) {
   e.dataTransfer.dropEffect = "move";
   
   var el = e.currentTarget;
-  if (el && !el.classList.contains("folder-drag-over")) {
-    el.classList.add("folder-drag-over");
+  if (el && !el.classList.contains("drag-over")) {
+    el.classList.add("drag-over");
   }
 }
 
 export function onNoteFolderDragLeave(e) {
   var el = e.currentTarget;
-  if (el) el.classList.remove("folder-drag-over");
+  if (el) el.classList.remove("drag-over");
 }
 
 export async function onNoteFolderDrop(e, targetFolderId) {
   e.preventDefault();
   var el = e.currentTarget;
-  if (el) el.classList.remove("folder-drag-over");
+  if (el) el.classList.remove("drag-over");
   
   if (draggedNoteId) {
     var note = S.notes.find(function(n) { return n.id === draggedNoteId; });
@@ -749,8 +805,8 @@ export function onNoteFolderDragStart(e, folderId) {
 
 export function onNoteFolderDragEnd(e) {
   draggedNoteFolderId = null;
-  document.querySelectorAll(".folder-drag-over").forEach(function(el) {
-    el.classList.remove("folder-drag-over");
+  document.querySelectorAll(".drag-over").forEach(function(el) {
+    el.classList.remove("drag-over");
   });
 }
 

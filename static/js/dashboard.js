@@ -1,6 +1,6 @@
 // TyloPlanner — dashboard module.
 
-import { S, habitSet, SET, PRESETS } from './state.js';
+import { S, habitSet, SET, PRESETS, safeRender } from './state.js';
 import { todayStr, fmtShort, esc, daysUntil, api, z, MONTHS } from './utils.js';
 import { examBadge } from './exams.js';
 import { streak } from './habits.js';
@@ -276,7 +276,7 @@ function renderHabitsWidget(id) {
   var html = '<h3>' + esc(title) + '</h3><div class="card-scroll">';
   if (S.habits.length) S.habits.forEach(function(h) {
     var on = !!habitSet[h.id + "|" + today];
-    html += '<div class="list-item"><span class="hcheck' + (on ? ' on' : '') + '" onclick="toggleHabit(\'' + h.id + '\',\'' + today + '\')">' + (on ? '\u2713' : '') + '</span><div class="grow">' + esc(h.name) + '</div><span class="badge ' + (streak(h.id) > 0 ? 'green' : 'gray') + '">' + streak(h.id) + '\uD83D\uDD25</span></div>'; });
+    html += '<div class="list-item"><span class="hcheck' + (on ? ' on' : '') + '" data-habit-id="' + h.id + '" data-habit-date="' + today + '" onclick="toggleHabit(\'' + h.id + '\',\'' + today + '\')">' + (on ? '\u2713' : '') + '</span><div class="grow">' + esc(h.name) + '</div><span class="badge ' + (streak(h.id) > 0 ? 'green' : 'gray') + '" data-habit-streak="' + h.id + '">' + streak(h.id) + '\uD83D\uDD25</span></div>'; });
   else html += '<div class="muted">No habits yet.</div>';
   html += '</div>';
   return html;
@@ -300,7 +300,7 @@ function renderTasksWidget(id) {
   var open = S.tasks.filter(function(x) { return !x.done && !x.parent_id; });
   var html = '<h3>' + esc(title) + '</h3><div class="card-scroll">';
   if (open.length) open.forEach(function(o) {
-    html += '<div class="checkbox-task"><span class="hcheck' + (o.done ? ' on' : '') + '" onclick="toggleTask(\'' + o.id + '\',true)">' + (o.done ? '✓' : '') + '</span><span>' + esc(o.name) + '</span></div>'; });
+    html += '<div class="checkbox-task" data-dashboard-task-id="' + o.id + '"><span class="hcheck' + (o.done ? ' on' : '') + '" data-task-check="' + o.id + '" onclick="toggleTask(\'' + o.id + '\',true)">' + (o.done ? '✓' : '') + '</span><span>' + esc(o.name) + '</span></div>'; });
   else html += '<div class="muted">All clear \u2728</div>';
   html += '</div>';
   return html;
@@ -1175,126 +1175,137 @@ function startClockUpdates() {
 }
 
 export function renderDashboard() {
-  var now = new Date(), hr = now.getHours();
-  var g = hr < 6 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
-  var greetEl = document.getElementById("greeting");
-  if (greetEl) greetEl.textContent = g + " \uD83D\uDC4B";
-  document.getElementById("headerDate").textContent = fmtShort(now) + " " + now.getFullYear();
+  safeRender("dashboard", () => {
+    var now = new Date(), hr = now.getHours();
+    var g = hr < 6 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
+    var greetEl = document.getElementById("greeting");
+    if (greetEl) greetEl.textContent = g + " \uD83D\uDC4B";
+    document.getElementById("headerDate").textContent = fmtShort(now) + " " + now.getFullYear();
 
-  // Load widgets data
-  try {
-    widgetsData = JSON.parse(SET && SET.dashboard_widgets_data ? SET.dashboard_widgets_data : '{}');
-  } catch(e) {
-    widgetsData = {};
-  }
-
-  // Load layout and theme style
-  if (!isEditMode) {
-    initLayoutAndStyle();
-  }
-
-  // Render Customizer Panel if customizing
-  var panel = document.getElementById("customizerPanel");
-  if (panel) {
-    if (isEditMode) {
-      panel.style.display = "block";
-      panel.innerHTML = renderCustomizerPanelHTML();
-    } else {
-      panel.style.display = "none";
-      panel.innerHTML = "";
+    // Load widgets data
+    try {
+      widgetsData = JSON.parse(SET && SET.dashboard_widgets_data ? SET.dashboard_widgets_data : '{}');
+    } catch(e) {
+      widgetsData = {};
     }
-  }
 
-  // Set grid edit mode classes
-  var container = document.getElementById("dashCards");
-  if (container) {
-    container.className = "dashboard-grid";
-    container.setAttribute("data-customizing", isEditMode ? "true" : "false");
+    // Load layout and theme style
+    if (!isEditMode) {
+      initLayoutAndStyle();
+    }
 
-    // No native drag & drop container listeners needed (handled via pointer events)
-  }
+    // Render Customizer Panel if customizing
+    var panel = document.getElementById("customizerPanel");
+    if (panel) {
+      if (isEditMode) {
+        panel.style.display = "block";
+        panel.innerHTML = renderCustomizerPanelHTML();
+      } else {
+        panel.style.display = "none";
+        panel.innerHTML = "";
+      }
+    }
 
-  // Render cards based on currentLayout configuration
-  // On mobile (flex-column), sort by mobile y-position so visual order matches the layout intent
-  var isMobileRender = window.innerWidth <= 640;
-  var renderLayout = isMobileRender
-    ? currentLayout.slice().sort(function(a, b) {
-        if (a.my !== b.my) return a.my - b.my;
-        return a.mx - b.mx;
-      })
-    : currentLayout;
+    // Set grid edit mode classes
+    var container = document.getElementById("dashCards");
+    if (container) {
+      container.className = "dashboard-grid";
+      container.setAttribute("data-customizing", isEditMode ? "true" : "false");
 
-  var html = "";
-  renderLayout.forEach(function(item) {
-    var cardContent = getCardHTML(item.type || item.id, item.id);
-    if (!cardContent) return;
-    
-    var wData = widgetsData[item.id] || {};
-    var borderColor = wData.border_color;
-    var borderStyle = borderColor ? "border-color: " + borderColor + " !important; " : "";
+      // No native drag & drop container listeners needed (handled via pointer events)
+    }
 
-    var styleStr = 
-      "--x: " + item.x + "; --w: " + item.w + "; --y: " + item.y + "; --h: " + item.h + "; " +
-      "--mx: " + item.mx + "; --mw: " + item.mw + "; --my: " + item.my + "; --mh: " + item.mh + "; " +
-      "grid-column: var(--x) / span var(--w); grid-row: var(--y) / span var(--h); " + borderStyle;
+    // Render cards based on currentLayout configuration
+    // On mobile (flex-column), sort by mobile y-position so visual order matches the layout intent
+    var isMobileRender = window.innerWidth <= 640;
+    var renderLayout = isMobileRender
+      ? currentLayout.slice().sort(function(a, b) {
+          if (a.my !== b.my) return a.my - b.my;
+          return a.mx - b.mx;
+        })
+      : currentLayout;
+
+    var html = "";
+    renderLayout.forEach(function(item) {
+      var cardContent = getCardHTML(item.type || item.id, item.id);
+      if (!cardContent) return;
       
-    html += '<div class="card" data-id="' + item.id + '" style="' + styleStr + '">';
-    
-    if (isEditMode) {
-      html += '<div class="card-drag-handle" onmousedown="startCardDrag(event, \'' + item.id + '\')" ontouchstart="startCardDrag(event, \'' + item.id + '\')"></div>';
-      html += '<button class="card-settings-btn" onclick="openWidgetSettings(event, \'' + item.id + '\')" style="position: absolute; top: 6px; right: 6px; z-index: 12; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; cursor: pointer; color: var(--text); font-size: 11px;">⚙️</button>';
-      html += '<div class="card-resize-handle" onmousedown="startResize(event, \'' + item.id + '\')" ontouchstart="startResize(event, \'' + item.id + '\')"></div>';
+      var wData = widgetsData[item.id] || {};
+      var borderColor = wData.border_color;
+      var borderStyle = borderColor ? "border-color: " + borderColor + " !important; " : "";
+
+      var styleStr = 
+        "--x: " + item.x + "; --w: " + item.w + "; --y: " + item.y + "; --h: " + item.h + "; " +
+        "--mx: " + item.mx + "; --mw: " + item.mw + "; --my: " + item.my + "; --mh: " + item.mh + "; " +
+        "grid-column: var(--x) / span var(--w); grid-row: var(--y) / span var(--h); " + borderStyle;
+        
+      html += '<div class="card" data-id="' + item.id + '" style="' + styleStr + '">';
+      
+      if (isEditMode) {
+        html += '<div class="card-drag-handle" onmousedown="startCardDrag(event, \'' + item.id + '\')" ontouchstart="startCardDrag(event, \'' + item.id + '\')"></div>';
+        html += '<button class="card-settings-btn" onclick="openWidgetSettings(event, \'' + item.id + '\')" style="position: absolute; top: 6px; right: 6px; z-index: 12; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; cursor: pointer; color: var(--text); font-size: 11px;">⚙️</button>';
+        html += '<div class="card-resize-handle" onmousedown="startResize(event, \'' + item.id + '\')" ontouchstart="startResize(event, \'' + item.id + '\')"></div>';
+      }
+      
+      html += cardContent;
+      html += '</div>';
+    });
+
+    if (container) {
+      if (window.Alpine && typeof window.Alpine.destroyTree === 'function') {
+        container.querySelectorAll('[x-data]').forEach(function(el) {
+          try {
+            window.Alpine.destroyTree(el);
+          } catch (e) {
+            console.warn("Failed to destroy Alpine tree for element:", el, e);
+          }
+        });
+      }
+      container.innerHTML = html;
     }
-    
-    html += cardContent;
-    html += '</div>';
+
+    // Render shortcuts
+    var shortcutHtml = '';
+    var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
+    if (showShortcuts && S.shortcuts) {
+      var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
+      var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
+      var sorted = S.shortcuts.slice().sort(function(a, b) {
+        var ia = order.indexOf(a.id);
+        var ib = order.indexOf(b.id);
+        if (ia === -1) ia = 999;
+        if (ib === -1) ib = 999;
+        return ia - ib;
+      });
+
+      sorted.forEach(function(s) {
+        if (disabled.indexOf(s.id) !== -1) return;
+        var domain = '';
+        try { domain = new URL(s.url).hostname; } catch(e){}
+        var icon = s.icon || ("https://www.google.com/s2/favicons?domain=" + domain + "&sz=64");
+        
+        shortcutHtml += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn">' +
+                '<img src="' + esc(icon) + '" alt="">' +
+                '<div class="name">' + esc(s.name) + '</div>' +
+                '</a>';
+      });
+    }
+
+    var shortcutsEl = document.getElementById("dashShortcuts");
+    if (shortcutsEl) {
+      var hasShortcutsWidget = currentLayout.some(x => (x.type || x.id) === 'shortcuts');
+      if (hasShortcutsWidget) {
+        shortcutsEl.innerHTML = '';
+        shortcutsEl.style.display = 'none';
+      } else {
+        shortcutsEl.innerHTML = shortcutHtml;
+        shortcutsEl.style.display = shortcutHtml ? 'flex' : 'none';
+      }
+    }
+
+    // Trigger clock updates
+    startClockUpdates();
   });
-
-  if (container) {
-    container.innerHTML = html;
-  }
-
-  // Render shortcuts
-  var shortcutHtml = '';
-  var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
-  if (showShortcuts && S.shortcuts) {
-    var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
-    var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
-    var sorted = S.shortcuts.slice().sort(function(a, b) {
-      var ia = order.indexOf(a.id);
-      var ib = order.indexOf(b.id);
-      if (ia === -1) ia = 999;
-      if (ib === -1) ib = 999;
-      return ia - ib;
-    });
-
-    sorted.forEach(function(s) {
-      if (disabled.indexOf(s.id) !== -1) return;
-      var domain = '';
-      try { domain = new URL(s.url).hostname; } catch(e){}
-      var icon = s.icon || ("https://www.google.com/s2/favicons?domain=" + domain + "&sz=64");
-      
-      shortcutHtml += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn">' +
-              '<img src="' + esc(icon) + '" alt="">' +
-              '<div class="name">' + esc(s.name) + '</div>' +
-              '</a>';
-    });
-  }
-
-  var shortcutsEl = document.getElementById("dashShortcuts");
-  if (shortcutsEl) {
-    var hasShortcutsWidget = currentLayout.some(x => (x.type || x.id) === 'shortcuts');
-    if (hasShortcutsWidget) {
-      shortcutsEl.innerHTML = '';
-      shortcutsEl.style.display = 'none';
-    } else {
-      shortcutsEl.innerHTML = shortcutHtml;
-      shortcutsEl.style.display = shortcutHtml ? 'flex' : 'none';
-    }
-  }
-
-  // Trigger clock updates
-  startClockUpdates();
 }
 
 export async function addShortcut(refresh) {
@@ -1723,3 +1734,14 @@ export function startResize(e, id) {
   window.addEventListener(isTouch ? 'touchmove' : 'mousemove', onMove, { passive: false });
   window.addEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
 }
+
+// Global listener for localized DOM patching on dashboard
+window.addEventListener("tylo:task-updated", function(e) {
+  const { id, done } = e.detail;
+  if (done) {
+    const el = document.querySelector(`[data-dashboard-task-id="${id}"]`);
+    if (el) {
+      el.remove();
+    }
+  }
+});

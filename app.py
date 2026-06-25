@@ -12,30 +12,16 @@ import threading
 
 from flask import Flask
 
+import helpers
 from helpers import (
-    DB_PATH, PORT, APP_URL, AUTH_ENABLED,
-    SCHEMA, TABLES, db, _ensure_column, kv_get, kv_set,
+    DB_PATH, PORT, APP_URL,
+    TABLES, db, kv_get, kv_set, close_db, run_migrations,
 )
-from scheduler import scheduler_loop
+from scheduler import scheduler_loop, recover_interrupted_tasks
 
 # ---------------- database init ----------------
-with db() as con:
-    con.executescript(SCHEMA)
-    _ensure_column(con, "notes", "is_pinned", "is_pinned INTEGER DEFAULT 0")
-    _ensure_column(con, "notes", "folder_id", "folder_id TEXT")
-    _ensure_column(con, "note_folders", "order_index", "order_index INTEGER DEFAULT 0")
-    _ensure_column(con, "files", "is_pinned", "is_pinned INTEGER DEFAULT 0")
-    _ensure_column(con, "files", "folder_id", "folder_id TEXT")
-    _ensure_column(con, "folders", "icon", "icon TEXT")
-    _ensure_column(con, "events", "description", "description TEXT")
-    _ensure_column(con, "events", "location", "location TEXT")
-    _ensure_column(con, "events", "recurrence", "recurrence TEXT DEFAULT 'none'")
-    _ensure_column(con, "events", "recurrence_until", "recurrence_until TEXT")
-    _ensure_column(con, "tasks", "due", "due TEXT")
-    _ensure_column(con, "tasks", "category", "category TEXT")
-    _ensure_column(con, "tasks", "order_index", "order_index INTEGER DEFAULT 0")
-    _ensure_column(con, "tasks", "due_date", "due_date TEXT")
-    _ensure_column(con, "tasks", "parent_id", "parent_id TEXT")
+run_migrations()
+recover_interrupted_tasks()
 
 _WELCOME_NOTE_TITLE = "How to use Notes"
 _WELCOME_NOTE_BODY = """\
@@ -132,12 +118,95 @@ with db() as con:
         )
         con.execute("INSERT INTO kv(key,value) VALUES('seed_default_shortcut','1')")
 
+# ---------------- logging middleware ----------------
+class LoggingMiddleware:
+    """
+    WSGI middleware to log all incoming HTTP requests to stdout in the standard
+    Apache Combined Log format:
+    %h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-Agent}i"
+    """
+    def __init__(self, app, flask_app=None):
+        self.app = app
+        self.flask_app = flask_app
+
+    def __call__(self, environ, start_response):
+        # Bypass logging if running in a test suite
+        import os
+        if (self.flask_app and self.flask_app.testing) or os.environ.get("TESTING") == "True":
+            return self.app(environ, start_response)
+
+        status_code = '-'
+        response_length = 0
+
+        def custom_start_response(status, response_headers, exc_info=None):
+            nonlocal status_code, response_length
+            status_code = status.split()[0]
+            for name, val in response_headers:
+                if name.lower() == 'content-length':
+                    try:
+                        response_length = int(val)
+                    except ValueError:
+                        pass
+            return start_response(status, response_headers, exc_info)
+
+        try:
+            response_iterable = self.app(environ, custom_start_response)
+        except Exception:
+            # If an unhandled exception bubbles up, log it as a 500 error
+            status_code = '500'
+            self._log(environ, status_code, response_length)
+            raise
+
+        def response_wrapper(iterable):
+            bytes_sent = 0
+            try:
+                for chunk in iterable:
+                    bytes_sent += len(chunk)
+                    yield chunk
+            finally:
+                if hasattr(iterable, 'close'):
+                    iterable.close()
+                final_length = response_length if response_length > 0 else bytes_sent
+                self._log(environ, status_code, final_length)
+
+        return response_wrapper(response_iterable)
+
+    def _log(self, environ, status_code, response_length):
+        from datetime import datetime, timezone
+        
+        ip = environ.get('REMOTE_ADDR', '-')
+        user = environ.get('REMOTE_USER', '-')
+        
+        # Apache time format: [day/month/year:hour:minute:second zone]
+        now = datetime.now(timezone.utc).astimezone()
+        time_str = now.strftime('%d/%b/%Y:%H:%M:%S %z')
+        
+        method = environ.get('REQUEST_METHOD', '-')
+        path = environ.get('PATH_INFO', '')
+        query = environ.get('QUERY_STRING', '')
+        protocol = environ.get('SERVER_PROTOCOL', 'HTTP/1.1')
+        
+        if query:
+            request_line = f"{method} {path}?{query} {protocol}"
+        else:
+            request_line = f"{method} {path} {protocol}"
+            
+        bytes_sent_str = str(response_length) if response_length > 0 else '-'
+        referer = environ.get('HTTP_REFERER', '-')
+        user_agent = environ.get('HTTP_USER_AGENT', '-')
+        
+        log_entry = f'{ip} - {user} [{time_str}] "{request_line}" {status_code} {bytes_sent_str} "{referer}" "{user_agent}"'
+        print(log_entry, flush=True)
+
+
 # ---------------- app factory ----------------
 def create_app():
     application = Flask(__name__, static_folder="static", static_url_path="")
     application.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-    from flask import request
+    from flask import request, jsonify
+    import traceback
+    from werkzeug.exceptions import HTTPException
 
     @application.after_request
     def add_header(r):
@@ -148,12 +217,16 @@ def create_app():
         return r
 
     from werkzeug.middleware.proxy_fix import ProxyFix
+    application.wsgi_app = LoggingMiddleware(application.wsgi_app, flask_app=application)
     application.wsgi_app = ProxyFix(application.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # Secure session cookies
+    # SESSION_COOKIE_SECURE is only set when APP_URL uses HTTPS so that
+    # localhost, LAN, and Tailscale HTTP setups continue to work normally.
     application.config.update(
         SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE='Lax'
+        SESSION_COOKIE_SAMESITE='Lax',
+        SESSION_COOKIE_SECURE=APP_URL.startswith("https://"),
     )
 
     # Session secret: from env, else generated once and stored in the database
@@ -189,6 +262,87 @@ def create_app():
         response.headers['X-Frame-Options'] = "SAMEORIGIN"
         return response
 
+    @application.after_request
+    def compress_response(response):
+        accept_encoding = request.headers.get("Accept-Encoding", "")
+        if "gzip" not in accept_encoding.lower():
+            return response
+
+        if not (200 <= response.status_code < 300):
+            return response
+
+        if "Content-Encoding" in response.headers:
+            return response
+
+        if response.is_streamed or response.direct_passthrough:
+            return response
+
+        mimetype = response.mimetype
+        if not mimetype:
+            return response
+
+        mimetype = mimetype.lower()
+        compressible_types = [
+            "text/html",
+            "text/css",
+            "text/plain",
+            "text/xml",
+            "application/json",
+            "application/javascript",
+            "text/javascript",
+            "image/svg+xml",
+            "application/xml",
+            "application/x-javascript"
+        ]
+
+        is_compressible = any(t in mimetype for t in compressible_types)
+        if not is_compressible:
+            return response
+
+        data = response.get_data()
+        if len(data) < 500:
+            return response
+
+        import gzip
+        import io
+
+        gzip_buffer = io.BytesIO()
+        with gzip.GzipFile(mode='wb', fileobj=gzip_buffer, compresslevel=6) as gzip_file:
+            gzip_file.write(data)
+
+        compressed_data = gzip_buffer.getvalue()
+
+        response.set_data(compressed_data)
+        response.headers['Content-Encoding'] = 'gzip'
+
+        vary = response.headers.get("Vary")
+        if vary:
+            if "Accept-Encoding" not in vary:
+                response.headers["Vary"] = vary + ", Accept-Encoding"
+        else:
+            response.headers["Vary"] = "Accept-Encoding"
+
+        return response
+
+    @application.errorhandler(Exception)
+    def handle_exception(e):
+        application.logger.error(f"Unhandled exception: {e}\n{traceback.format_exc()}")
+
+        if isinstance(e, HTTPException):
+            return jsonify({
+                "error": e.description,
+                "code": e.code,
+                "type": e.__class__.__name__
+            }), e.code
+
+        return jsonify({
+            "error": "An unexpected error occurred",
+            "code": 500,
+            "type": "InternalServerError"
+        }), 500
+
+    application.teardown_appcontext(close_db)
+
     return application
 
 
@@ -196,8 +350,33 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="TyloPlanner - self-hosted personal dashboard.")
+    parser.add_argument("--reset-password", type=str, help="Reset the admin/login password directly from the host terminal.")
+    parser.add_argument("--disable-2fa", action="store_true", help="Disable TOTP 2FA directly from the host terminal.")
+    
+    args = parser.parse_args()
+
+    if args.reset_password or args.disable_2fa:
+        if args.reset_password:
+            password = args.reset_password.strip()
+            if len(password) < 4:
+                print("Error: Password must be at least 4 characters long.")
+                sys.exit(1)
+            helpers.set_password(password)
+            print("Password successfully reset.")
+
+        if args.disable_2fa:
+            helpers.kv_del("totp_secret")
+            helpers.kv_del("totp_pending")
+            print("TOTP 2FA successfully disabled.")
+
+        sys.exit(0)
+
     from waitress import serve
-    if not AUTH_ENABLED:
+    if not helpers.AUTH_ENABLED:
         print("WARNING: AUTH_PASSWORD is not set - TyloPlanner is running WITHOUT a login.")
     threading.Thread(target=scheduler_loop, daemon=True).start()
     print("TyloPlanner running on %s (port %d)" % (APP_URL, PORT))

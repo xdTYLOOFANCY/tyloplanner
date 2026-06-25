@@ -1,12 +1,15 @@
 // TyloPlanner — file storage module.
 
-import { S } from './state.js';
+import { S, safeRender } from './state.js';
 import { esc, api, toast } from './utils.js';
 
 var fileSort = "date";
 var activeFolderId = null;
 var selectedFileIds = [];
 var draggedFileIds = [];
+var lastFileSearchQuery = "";
+var fileSearchResults = null;
+var fileSearchTimeout = null;
 
 function fmtSize(bytes) {
   if (bytes == null) return "—";
@@ -56,7 +59,8 @@ function isDescendant(folderId, targetId) {
 }
 
 export function renderFiles() {
-  var q = (document.getElementById("fileSearch") || { value: "" }).value.trim().toLowerCase();
+  safeRender("files", () => {
+    var q = (document.getElementById("fileSearch") || { value: "" }).value.trim().toLowerCase();
   
   // Make sure active folder is valid
   var folders = S.folders || [];
@@ -146,12 +150,21 @@ export function renderFiles() {
   // 3. Render Files
   var list = (S.files || []).slice();
   if (q) {
-    list = list.filter(function(f) {
-      var nameMatch = (f.filename || "").toLowerCase().indexOf(q) !== -1;
-      if (!nameMatch) return false;
-      if (!activeFolderId) return true;
-      return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
-    });
+    if (fileSearchResults !== null) {
+      list = list.filter(function(f) {
+        var inFts = fileSearchResults.indexOf(f.id) !== -1;
+        if (!inFts) return false;
+        if (!activeFolderId) return true;
+        return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
+      });
+    } else {
+      list = list.filter(function(f) {
+        var nameMatch = (f.filename || "").toLowerCase().indexOf(q) !== -1;
+        if (!nameMatch) return false;
+        if (!activeFolderId) return true;
+        return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
+      });
+    }
   } else {
     list = list.filter(function(f) {
       return f.folder_id === activeFolderId;
@@ -190,21 +203,28 @@ export function renderFiles() {
     }
   }
 
-  if (fileSort === "name") {
+  if (q && fileSearchResults !== null) {
     list.sort(function(a, b) {
       if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
-      return (a.filename || "").localeCompare(b.filename || "");
-    });
-  } else if (fileSort === "size") {
-    list.sort(function(a, b) {
-      if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
-      return (b.size || 0) - (a.size || 0);
+      return fileSearchResults.indexOf(a.id) - fileSearchResults.indexOf(b.id);
     });
   } else {
-    list.sort(function(a, b) {
-      if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
-      return (b.uploaded || 0) - (a.uploaded || 0);
-    });
+    if (fileSort === "name") {
+      list.sort(function(a, b) {
+        if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
+        return (a.filename || "").localeCompare(b.filename || "");
+      });
+    } else if (fileSort === "size") {
+      list.sort(function(a, b) {
+        if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
+        return (b.size || 0) - (a.size || 0);
+      });
+    } else {
+      list.sort(function(a, b) {
+        if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
+        return (b.uploaded || 0) - (a.uploaded || 0);
+      });
+    }
   }
 
   var html = "";
@@ -333,6 +353,7 @@ export function renderFiles() {
       }
     });
   }
+  });
 }
 
 export async function uploadFile(refresh) {
@@ -398,6 +419,43 @@ export async function toggleFilePin(id, ev) {
 }
 
 export function setFileSort(s) { fileSort = s; renderFiles(); }
+
+export function fileSearchInput() {
+  var searchEl = document.getElementById("fileSearch");
+  var q = (searchEl ? searchEl.value : "").trim().toLowerCase();
+  
+  if (q === lastFileSearchQuery) return;
+  lastFileSearchQuery = q;
+  
+  if (fileSearchTimeout) clearTimeout(fileSearchTimeout);
+  
+  if (!q) {
+    fileSearchResults = null;
+    renderFiles();
+    return;
+  }
+  
+  // Render local results immediately, then update once FTS5 finishes
+  fileSearchResults = null;
+  renderFiles();
+  
+  fileSearchTimeout = setTimeout(function() {
+    fetch("/api/files/search?q=" + encodeURIComponent(q))
+      .then(function(res) { return res.json(); })
+      .then(function(ids) {
+        if (lastFileSearchQuery === q) {
+          fileSearchResults = ids;
+          renderFiles();
+        }
+      })
+      .catch(function() {
+        if (lastFileSearchQuery === q) {
+          fileSearchResults = null;
+          renderFiles();
+        }
+      });
+  }, 150);
+}
 
 export function handleFileSearchKeydown(e) {
   if (e.key === "Enter") {
@@ -549,8 +607,8 @@ export function onFileDragStart(e, fileId) {
 
 export function onFileDragEnd(e) {
   draggedFileIds = [];
-  document.querySelectorAll(".folder-drag-over").forEach(function(el) {
-    el.classList.remove("folder-drag-over");
+  document.querySelectorAll(".drag-over").forEach(function(el) {
+    el.classList.remove("drag-over");
   });
 }
 
@@ -561,15 +619,15 @@ export function onFolderDragOver(e) {
   e.dataTransfer.dropEffect = "move";
   
   var el = e.currentTarget;
-  if (el && !el.classList.contains("folder-drag-over")) {
-    el.classList.add("folder-drag-over");
+  if (el && !el.classList.contains("drag-over")) {
+    el.classList.add("drag-over");
   }
 }
 
 export function onFolderDragLeave(e) {
   var el = e.currentTarget;
   if (el) {
-    el.classList.remove("folder-drag-over");
+    el.classList.remove("drag-over");
   }
 }
 
@@ -577,7 +635,7 @@ export async function onFolderDrop(e, targetFolderId) {
   e.preventDefault();
   var el = e.currentTarget;
   if (el) {
-    el.classList.remove("folder-drag-over");
+    el.classList.remove("drag-over");
   }
   
   if (draggedFileIds.length > 0) {

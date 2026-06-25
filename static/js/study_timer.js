@@ -132,6 +132,10 @@ export function studyTimerWidget() {
       if (this.timerState === 'running') {
         this.startInterval();
       }
+
+      return () => {
+        this.destroy();
+      };
     },
     
     destroy() {

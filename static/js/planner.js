@@ -1,5 +1,5 @@
-import { S, SET } from './state.js';
-import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS } from './utils.js';
+import { S, SET, safeRender } from './state.js';
+import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 
@@ -235,7 +235,8 @@ function parseTime(t) {
 }
 
 export function renderPlanner() {
-  isRendering = true;
+  safeRender("planner", () => {
+    isRendering = true;
   lastRenderToday = todayStr();
   var dates = getViewDates(currentView, dateOffset);
   var title = "";
@@ -739,7 +740,8 @@ export function renderPlanner() {
     isRendering = false;
   }
 
-  var t = document.getElementById("evTitle"); if (t) t.focus();
+    var t = document.getElementById("evTitle"); if (t) t.focus();
+  });
 }
 
 function scrollToCurrentTimeLineIfVisible() {
@@ -904,15 +906,11 @@ function initTabListener() {
     var tabPlanner = document.getElementById("tab-planner");
     if (!tabPlanner || !tabPlanner.classList.contains("active")) return;
     
-    if (document.activeElement && (
-      document.activeElement.tagName === 'INPUT' ||
-      document.activeElement.tagName === 'TEXTAREA' ||
-      document.activeElement.tagName === 'SELECT'
-    )) return;
+    if (isInputFocused()) return;
 
     var modalOpen = false;
     document.querySelectorAll('.modal').forEach(function(m) {
-      if (m.style.display && m.style.display !== 'none') modalOpen = true;
+      if (m.open || (m.style.display && m.style.display !== 'none')) modalOpen = true;
     });
     if (modalOpen) return;
 

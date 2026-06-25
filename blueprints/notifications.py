@@ -6,7 +6,7 @@ import json
 import time
 from flask import Blueprint, jsonify, request
 
-from helpers import setting, db, vapid_keys, send_notification
+from helpers import setting, db, vapid_keys, send_notification, db_retry
 
 bp = Blueprint("notifications", __name__)
 
@@ -18,6 +18,7 @@ def push_public_key():
 
 
 @bp.post("/api/push/subscribe")
+@db_retry()
 def push_subscribe():
     data = request.get_json(force=True, silent=True) or {}
     endpoint = data.get("endpoint")
@@ -27,7 +28,7 @@ def push_subscribe():
     subscription_json = json.dumps(data)
     sub_id = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:16]
     
-    with db() as con:
+    with db(write=True) as con:
         con.execute(
             "INSERT INTO push_subscriptions(id, subscription_json, created_at) VALUES(?,?,?) "
             "ON CONFLICT(id) DO UPDATE SET subscription_json=excluded.subscription_json",
@@ -37,13 +38,14 @@ def push_subscribe():
 
 
 @bp.post("/api/push/unsubscribe")
+@db_retry()
 def push_unsubscribe():
     data = request.get_json(force=True, silent=True) or {}
     endpoint = data.get("endpoint")
     if not endpoint:
         return jsonify({"error": "endpoint required"}), 400
     sub_id = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()[:16]
-    with db() as con:
+    with db(write=True) as con:
         con.execute("DELETE FROM push_subscriptions WHERE id=?", (sub_id,))
     return jsonify({"ok": True})
 

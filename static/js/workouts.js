@@ -1,6 +1,6 @@
 // TyloPlanner — workouts module.
 
-import { S } from './state.js';
+import { S, safeRender } from './state.js';
 import { toISO, todayStr, esc, api } from './utils.js';
 import { weekDates } from './utils.js';
 
@@ -33,7 +33,8 @@ export function weekTotals(off) {
 }
 
 export function renderWorkouts() {
-  var t = weekTotals(0);
+  safeRender("workouts", () => {
+    var t = weekTotals(0);
   document.getElementById("wStats").innerHTML =
     '<div class="stat"><div class="v">' + t.count + '</div><div class="l">sessions</div></div>' +
     '<div class="stat"><div class="v">' + (Math.round(t.runKm * 10) / 10) + '</div><div class="l">run km</div></div>' +
@@ -51,4 +52,5 @@ export function renderWorkouts() {
   });
   document.getElementById("wList").innerHTML = html || '<div class="muted">No workouts logged yet.</div>';
   document.getElementById("stravaSyncBtn").style.display = S.strava.connected ? "inline-block" : "none";
+  });
 }

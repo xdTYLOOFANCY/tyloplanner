@@ -2,6 +2,7 @@
 
 export function applyTheme() {
   document.documentElement.setAttribute("data-theme", localStorage.getItem("tylo-theme") || "dark");
+  window.dispatchEvent(new CustomEvent("theme-changed"));
 }
 
 export function toggleTheme() {
@@ -62,6 +63,7 @@ export function applyAccent(hexColor) {
   var hex2 = '#' + toHex(r2) + toHex(g2) + toHex(b2);
 
   document.documentElement.style.setProperty('--accent2', hex2);
+  window.dispatchEvent(new CustomEvent("theme-changed"));
 }
 
 export function applyAccentFromSettings(set) {
@@ -72,6 +74,7 @@ export function applyAccentFromSettings(set) {
 
 export function applyThemeStyle(style) {
   document.documentElement.setAttribute("data-theme-style", style || "default");
+  window.dispatchEvent(new CustomEvent("theme-changed"));
 }
 
 export function applyThemeStyleFromSettings(set) {

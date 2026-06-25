@@ -92,22 +92,164 @@ export function startLiveSync() {
 }
 
 export async function refresh(renderAll) {
-  S = await api("GET", "/api/state");
+  var offMod = await import('./offline.js');
+  
+  if (!S) {
+    try {
+      S = await offMod.getCache("state");
+    } catch (e) {}
+  }
+
+  const isValidS = S && typeof S === "object" && Array.isArray(S.events) && Array.isArray(S.tasks) && Array.isArray(S.habit_log);
+  let deltaSuccess = false;
+  
+  if (isValidS && currentVersion !== null && navigator.onLine) {
+    try {
+      const delta = await api("GET", "/api/state?since_version=" + currentVersion);
+      if (delta && delta.is_delta) {
+        for (const table in delta) {
+          if (table === "deleted_records" || table === "is_delta" || table === "version" ||
+              table === "strava" || table === "auth" || table === "app_url" || table === "feed_url" ||
+              table === "habit_log") {
+            continue;
+          }
+          if (Array.isArray(S[table]) && Array.isArray(delta[table])) {
+            delta[table].forEach(function(newRow) {
+              var idx = S[table].findIndex(function(row) { return row.id === newRow.id; });
+              if (idx > -1) {
+                S[table][idx] = newRow;
+              } else {
+                S[table].push(newRow);
+              }
+            });
+          }
+        }
+
+        if (Array.isArray(delta.habit_log) && Array.isArray(S.habit_log)) {
+          delta.habit_log.forEach(function(newRow) {
+            var idx = S.habit_log.findIndex(function(row) {
+              return row.habit_id === newRow.habit_id && row.date === newRow.date;
+            });
+            if (idx > -1) {
+              S.habit_log[idx] = newRow;
+            } else {
+              S.habit_log.push(newRow);
+            }
+          });
+        }
+
+        if (Array.isArray(delta.deleted_records)) {
+          delta.deleted_records.forEach(function(del) {
+            var table = del.table;
+            if (table === "habit_log") {
+              if (Array.isArray(S.habit_log)) {
+                var parts = del.id.split(":");
+                var habitId = parts[0];
+                var date = parts[1];
+                S.habit_log = S.habit_log.filter(function(row) {
+                  return !(row.habit_id === habitId && row.date === date);
+                });
+              }
+            } else {
+              if (Array.isArray(S[table])) {
+                S[table] = S[table].filter(function(row) { return row.id !== del.id; });
+              }
+            }
+          });
+        }
+
+        if (delta.strava) S.strava = delta.strava;
+        if (delta.auth) S.auth = delta.auth;
+        if (delta.app_url) S.app_url = delta.app_url;
+        if (delta.feed_url) S.feed_url = delta.feed_url;
+        
+        currentVersion = delta.version;
+        await offMod.setCache("state", S);
+        deltaSuccess = true;
+      }
+    } catch (e) {
+      console.error("Delta sync failed, falling back to full state reload:", e);
+    }
+  }
+
+  if (!deltaSuccess) {
+    try {
+      S = await api("GET", "/api/state");
+      await offMod.setCache("state", S);
+      currentVersion = S.version;
+    } catch (e) {
+      console.warn("Failed to fetch state, falling back to cache:", e);
+      if (!S) {
+        try {
+          S = await offMod.getCache("state");
+        } catch (err) {
+          console.error("Failed to load cached state:", err);
+        }
+      }
+      const isValidS = S && typeof S === "object" && Array.isArray(S.events) && Array.isArray(S.tasks) && Array.isArray(S.habit_log);
+      if (isValidS) {
+        currentVersion = S.version;
+      } else {
+        throw e;
+      }
+    }
+  }
+
   if (window.Alpine) {
     Alpine.store('state', S);
   }
-  SET = await api("GET", "/api/settings");
-  habitSet = {};
-  S.habit_log.forEach(function(l) { habitSet[l.habit_id + "|" + l.date] = true; });
   
   try {
-    const vRes = await api("GET", "/api/state-version");
-    if (vRes && vRes.version !== undefined) {
-      currentVersion = vRes.version;
+    SET = await api("GET", "/api/settings");
+    await offMod.setCache("settings", SET);
+  } catch (e) {
+    console.warn("Failed to fetch settings, falling back to cache:", e);
+    if (!SET) {
+      try {
+        SET = await offMod.getCache("settings");
+      } catch (err) {
+        console.error("Failed to load cached settings:", err);
+      }
     }
-  } catch (e) {}
+    if (!SET) {
+      SET = {
+        app_theme_style: "default",
+        accent_color: null,
+        persist_active_tab: "1"
+      };
+    }
+  }
+  habitSet = {};
+  if (S && S.habit_log) {
+    S.habit_log.forEach(function(l) { habitSet[l.habit_id + "|" + l.date] = true; });
+  }
 
   renderAll();
 }
+
+export const tabNeedsRender = {
+  dashboard: true,
+  analytics: true,
+  planner: true,
+  exams: true,
+  habits: true,
+  workouts: true,
+  tasks: true,
+  notes: true,
+  files: true,
+  settings: true
+};
+
+export function safeRender(tabName, renderFn) {
+  const activeBtn = document.querySelector("#tabs button.active");
+  const activeTab = activeBtn ? activeBtn.dataset.tab : "dashboard";
+  if (activeTab === tabName) {
+    renderFn();
+    tabNeedsRender[tabName] = false;
+  } else {
+    tabNeedsRender[tabName] = true;
+  }
+}
+
 
 

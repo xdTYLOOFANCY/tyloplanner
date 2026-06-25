@@ -82,6 +82,7 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `DELETE /api/files/<id>` | Delete a file (removes DB row and disk file). |
 | `DELETE /api/folders/<id>` | Delete a folder recursively (relocating child files and folders to the parent directory). |
 | `POST /api/files/move` | Batch move multiple files to a folder. Payload: `{file_ids: [...], folder_id: ...}`. |
+| `POST /api/files/cleanup` | Run manual storage reconciliation and cleanup of orphaned files. |
 | `POST /api/ics/import` · `POST /api/ics/sync-now` · `DELETE /api/ics` | Calendar import, forced auto-sync, remove imported events. |
 | `GET /calendar.ics?key=…` | iCal feed (secret key instead of cookies). |
 | `POST /api/2fa/setup` · `GET /api/2fa/qr` · `POST /api/2fa/enable` · `POST /api/2fa/disable` | TOTP lifecycle. |

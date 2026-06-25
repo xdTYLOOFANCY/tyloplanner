@@ -1,6 +1,6 @@
 // TyloPlanner — settings module (notifications, calendar, security, Strava).
 
-import { S, SET } from './state.js';
+import { S, SET, safeRender } from './state.js';
 import { esc, api, toast } from './utils.js';
 import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
@@ -15,7 +15,8 @@ function setVal(id, v) {
 }
 
 export function renderSettings(refresh) {
-  document.getElementById("icsUrl").textContent = S.feed_url;
+  safeRender("settings", () => {
+    document.getElementById("icsUrl").textContent = S.feed_url;
   document.getElementById("icsDownload").href = S.feed_url;
   document.getElementById("logoutBtn").style.display = S.auth.enabled ? "inline-block" : "none";
   var box = document.getElementById("stravaBox"), html = "";
@@ -79,7 +80,9 @@ export function renderSettings(refresh) {
     settingsCategoriesEl.innerHTML = catsHtml || '<div class="muted">No categories configured.</div>';
   }
 
-  renderBackupList("backupList", refresh);
+    renderBackupList("backupList", refresh);
+    renderTasks();
+  });
 }
 
 export async function toggleTabPersistence(refresh) {
@@ -305,10 +308,14 @@ export async function saveCalSync(refresh) {
 
 export async function calSyncNow(refresh) {
   try {
-    toast("Syncing calendars\u2026");
+    toast("Syncing calendars (queued)...");
     var j = await api("POST", "/api/ics/sync-now");
-    toast("Calendar sync done \u2014 " + j.added + " new events");
-    await refresh();
+    if (j.status === "queued") {
+      pollTask(j.task_id, "Calendar sync done", refresh);
+    } else {
+      toast("Calendar sync done \u2014 " + (j.added || 0) + " new events");
+      await refresh();
+    }
   } catch(e) { alert(e.message); }
 }
 
@@ -359,21 +366,123 @@ function renderSecurity() {
   var html = "";
   if (!S.auth.enabled) {
     html = '<p style="font-size:14px">Login is disabled \u2014 set <b>AUTH_PASSWORD</b> in <b>.env</b> to enable it (required before 2FA makes sense).</p>';
-  } else if (SET.totp_enabled) {
-    html = '<p style="font-size:14px;margin-bottom:10px">\u2705 Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>' +
-      '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaDisable()">' +
-      '<button class="btn danger" onclick="tfaDisable()">Disable 2FA</button></div>';
-  } else if (tfaPending) {
-    html = '<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>' +
-      '<img src="/api/2fa/qr?t=' + Date.now() + '" alt="2FA QR" style="width:180px;border-radius:10px;background:#fff;padding:8px">' +
-      '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaConfirm()">' +
-      '<button class="btn" onclick="tfaConfirm()">Confirm &amp; enable</button>' +
-      '<button class="btn ghost" onclick="tfaPending=false;renderSecurity()">Cancel</button></div>';
   } else {
-    html = '<p style="font-size:14px;margin-bottom:10px">Add a second login step with an authenticator app (TOTP):</p>' +
-      '<button class="btn" onclick="tfaStart()">Enable 2FA</button>';
+    if (SET.totp_enabled) {
+      html = '<p style="font-size:14px;margin-bottom:10px">\u2705 Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>' +
+        '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaDisable()">' +
+        '<button class="btn danger" onclick="tfaDisable()">Disable 2FA</button></div>';
+    } else if (tfaPending) {
+      html = '<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>' +
+        '<img src="/api/2fa/qr?t=' + Date.now() + '" alt="2FA QR" style="width:180px;border-radius:10px;background:#fff;padding:8px">' +
+        '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaConfirm()">' +
+        '<button class="btn" onclick="tfaConfirm()">Confirm &amp; enable</button>' +
+        '<button class="btn ghost" onclick="tfaPending=false;renderSecurity()">Cancel</button></div>';
+    } else {
+      html = '<p style="font-size:14px;margin-bottom:10px">Add a second login step with an authenticator app (TOTP):</p>' +
+        '<button class="btn" onclick="tfaStart()">Enable 2FA</button>';
+    }
+
+    // Add password change form below 2FA controls
+    html += '<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">' +
+      '<h4 style="margin-bottom:12px;font-size:14px;color:var(--text)">Change Password</h4>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;max-width:320px;">' +
+      '  <div style="display:flex;flex-direction:column;gap:4px;">' +
+      '    <label class="muted" style="font-size:12px;">Current Password</label>' +
+      '    <input id="changePwCurrent" type="password" placeholder="••••••••" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);">' +
+      '  </div>' +
+      (SET.totp_enabled ?
+      '  <div style="display:flex;flex-direction:column;gap:4px;">' +
+      '    <label class="muted" style="font-size:12px;">2FA Verification Code</label>' +
+      '    <input id="changePwTfa" type="text" placeholder="123456" maxlength="6" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);text-align:center;letter-spacing:2px;">' +
+      '  </div>' : '') +
+      '  <div style="display:flex;flex-direction:column;gap:4px;">' +
+      '    <label class="muted" style="font-size:12px;">New Password</label>' +
+      '    <input id="changePwNew" type="password" placeholder="••••••••" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);">' +
+      '  </div>' +
+      '  <div style="display:flex;flex-direction:column;gap:4px;">' +
+      '    <label class="muted" style="font-size:12px;">Confirm New Password</label>' +
+      '    <input id="changePwConfirm" type="password" placeholder="••••••••" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);" onkeydown="if(event.keyCode===13)changePassword()">' +
+      '  </div>' +
+      '  <button class="btn" onclick="changePassword()" style="align-self:flex-start;margin-top:4px;">Update Password</button>' +
+      '</div>';
+
+    // Add active sessions section
+    html += '<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">' +
+      '<h4 style="margin-bottom:12px;font-size:14px;color:var(--text)">📱 Active Sessions</h4>' +
+      '<div id="activeSessionsBox"><p class="muted" style="font-size:13px">Loading active sessions...</p></div>';
   }
   box.innerHTML = html;
+  if (S.auth.enabled) {
+    loadActiveSessions();
+  }
+}
+
+async function loadActiveSessions() {
+  var container = document.getElementById("activeSessionsBox");
+  if (!container) return;
+  try {
+    var sessions = await api("GET", "/api/auth/sessions");
+    if (!sessions || sessions.length === 0) {
+      container.innerHTML = '<p class="muted" style="font-size:13px">No active sessions.</p>';
+      return;
+    }
+    
+    var html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+    sessions.forEach(function(s) {
+      var isCurrent = s.is_current;
+      var activeDate = new Date(s.active_at * 1000);
+      var timeStr = activeDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      var dateStr = activeDate.toLocaleDateString([], {month: 'short', day: 'numeric'});
+      
+      var timeDiff = Math.floor(Date.now() / 1000 - s.active_at);
+      var relativeTime = "";
+      if (timeDiff < 60) relativeTime = "Just now";
+      else if (timeDiff < 3600) relativeTime = Math.floor(timeDiff / 60) + "m ago";
+      else if (timeDiff < 86400) relativeTime = Math.floor(timeDiff / 3600) + "h ago";
+      else relativeTime = Math.floor(timeDiff / 86400) + "d ago";
+
+      html += '<div class="list-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:6px; border:1px solid var(--border); background:var(--panel-dark, rgba(0,0,0,0.02)); gap:10px;">' +
+        '  <div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;">' +
+        '    <div style="display:flex; align-items:center; gap:6px;">' +
+        '      <span style="font-weight:600; font-size:13.5px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(s.device) + '</span>' +
+        (isCurrent ? '      <span class="badge" style="background:var(--accent); color:#fff; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:600;">Current Device</span>' : '') +
+        '    </div>' +
+        '    <div style="font-size:12px; color:var(--text-muted, #888); display:flex; gap:10px; flex-wrap:wrap;">' +
+        '      <span>IP: ' + esc(s.ip_address) + '</span>' +
+        '      <span>•</span>' +
+        '      <span title="' + activeDate.toLocaleString() + '">Active: ' + esc(relativeTime) + ' (' + esc(dateStr) + ' ' + esc(timeStr) + ')</span>' +
+        '    </div>' +
+        '  </div>' +
+        '  <div>' +
+        '    <button class="btn danger small" onclick="revokeSession(\'' + esc(s.id) + '\')">Revoke</button>' +
+        '  </div>' +
+        '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<p class="danger" style="font-size:13px; color:red;">Failed to load active sessions: ' + esc(e.message) + '</p>';
+  }
+}
+
+export async function revokeSession(sid, refresh) {
+  var confirmMsg = "Are you sure you want to revoke this session? You will be logged out of that device.";
+  if (confirm(confirmMsg)) {
+    try {
+      var res = await api("POST", "/api/auth/sessions/revoke", { session_id: sid });
+      if (res.logged_out) {
+        toast("Current session revoked. Logging out...");
+        setTimeout(() => {
+          location.href = "/login";
+        }, 1000);
+      } else {
+        toast("Session revoked.");
+        await refresh();
+      }
+    } catch(e) {
+      alert(e.message || "Failed to revoke session.");
+    }
+  }
 }
 
 export async function tfaStart() {
@@ -399,10 +508,63 @@ export async function tfaDisable(refresh) {
   } catch(e) { alert(e.message); }
 }
 
+export async function changePassword(refresh) {
+  var curPw = document.getElementById("changePwCurrent").value;
+  var newPw = document.getElementById("changePwNew").value;
+  var confirmPw = document.getElementById("changePwConfirm").value;
+  
+  var tfaEl = document.getElementById("changePwTfa");
+  var tfaCode = tfaEl ? tfaEl.value.trim() : "";
+
+  if (!curPw) {
+    alert("Please enter your current password.");
+    return;
+  }
+  if (tfaEl && !tfaCode) {
+    alert("Please enter your 2FA verification code.");
+    return;
+  }
+  if (!newPw) {
+    alert("Please enter your new password.");
+    return;
+  }
+  if (newPw.length < 4) {
+    alert("New password must be at least 4 characters long.");
+    return;
+  }
+  if (newPw !== confirmPw) {
+    alert("New password and confirmation do not match.");
+    return;
+  }
+
+  try {
+    await api("POST", "/api/settings/password", {
+      current_password: curPw,
+      new_password: newPw,
+      tfa_code: tfaCode
+    });
+    toast("Password updated successfully!");
+    document.getElementById("changePwCurrent").value = "";
+    document.getElementById("changePwNew").value = "";
+    document.getElementById("changePwConfirm").value = "";
+    if (tfaEl) tfaEl.value = "";
+    if (refresh) await refresh();
+  } catch(e) {
+    alert(e.message || "Failed to update password.");
+  }
+}
+
 export async function backupNow(refresh) {
-  var j = await api("POST", "/api/backup/now");
-  toast("Backup written: " + j.file);
-  await refresh();
+  try {
+    toast("Creating backup (queued)...");
+    var j = await api("POST", "/api/backup/now");
+    if (j.status === "queued") {
+      pollTask(j.task_id, "Backup written", refresh);
+    } else {
+      toast("Backup written: " + j.file);
+      await refresh();
+    }
+  } catch(e) { alert(e.message); }
 }
 
 export function copyIcs() {
@@ -446,11 +608,15 @@ export async function stravaForget(refresh) {
 }
 
 export async function stravaSync(refresh) {
-  toast("Syncing with Strava\u2026");
   try {
+    toast("Syncing with Strava (queued)...");
     var j = await api("POST", "/api/strava/sync");
-    toast("Strava sync done \u2014 " + j.added + " new activities");
-    await refresh();
+    if (j.status === "queued") {
+      pollTask(j.task_id, "Strava sync done", refresh);
+    } else {
+      toast("Strava sync done \u2014 " + (j.added || 0) + " new activities");
+      await refresh();
+    }
   } catch(e) { alert(e.message); }
 }
 
@@ -587,4 +753,124 @@ export async function checkForUpdates(force) {
   } finally {
     if (checkBtn) checkBtn.disabled = false;
   }
+}
+
+
+export async function renderTasks() {
+  var list = document.getElementById("bgTaskList");
+  if (!list) return;
+
+  try {
+    var tasks = await api("GET", "/api/tasks");
+    if (!tasks || tasks.length === 0) {
+      list.innerHTML = '<span class="muted">No background tasks logged.</span>';
+      return;
+    }
+
+    var html = "";
+    tasks.forEach(function(t) {
+      var statusClass = "gray";
+      if (t.status === "completed") statusClass = "green";
+      else if (t.status === "running") statusClass = "blue";
+      else if (t.status === "failed") statusClass = "red";
+      else if (t.status === "pending") statusClass = "orange";
+
+      var created = new Date(t.created_at * 1000).toLocaleString();
+      var finished = t.finished_at ? new Date(t.finished_at * 1000).toLocaleString() : "-";
+      var started = t.started_at ? new Date(t.started_at * 1000).toLocaleString() : "-";
+
+      var duration = "-";
+      if (t.started_at && t.finished_at) {
+        duration = (t.finished_at - t.started_at) + "s";
+      }
+
+      var payloadStr = "";
+      if (t.payload) {
+        try {
+          payloadStr = JSON.stringify(JSON.parse(t.payload));
+        } catch(e) {
+          payloadStr = t.payload;
+        }
+      }
+
+      var resultStr = "";
+      if (t.result) {
+        try {
+          resultStr = JSON.stringify(JSON.parse(t.result));
+        } catch(e) {
+          resultStr = t.result;
+        }
+      }
+
+      var errHtml = "";
+      if (t.error_message) {
+        var errId = "task-err-" + t.id;
+        errHtml = '<div style="margin-top:6px; font-size:11px;">' +
+          '<button class="btn ghost small" onclick="var el = document.getElementById(\'' + errId + '\'); el.style.display = el.style.display === \'none\' ? \'block\' : \'none\'">Show error log</button>' +
+          '<pre id="' + errId + '" style="display:none; margin-top:4px; padding:6px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; font-family:monospace; white-space:pre-wrap; word-break:break-all; max-height:150px; overflow-y:auto; color:var(--red); text-align:left;">' + esc(t.error_message) + '</pre>' +
+          '</div>';
+      }
+
+      html += '<div class="list-item" style="display:flex; flex-direction:column; padding:10px 8px; border-bottom:1px solid var(--border); gap:4px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+        '<b>' + esc(t.task_type.toUpperCase()) + '</b>' +
+        '<span class="badge ' + statusClass + '">' + esc(t.status.toUpperCase()) + '</span>' +
+        '</div>' +
+        '<div class="muted" style="font-size:12px; display:flex; flex-wrap:wrap; gap:8px 12px;">' +
+        '<span>Created: ' + esc(created) + '</span>' +
+        '<span>Attempts: ' + t.attempts + '/' + t.max_attempts + '</span>' +
+        (duration !== "-" ? '<span>Duration: ' + esc(duration) + '</span>' : '') +
+        '</div>' +
+        (payloadStr ? '<div class="muted" style="font-size:12px;">Payload: <code>' + esc(payloadStr) + '</code></div>' : '') +
+        (resultStr ? '<div class="muted" style="font-size:12px; color:var(--green);">Result: <code>' + esc(resultStr) + '</code></div>' : '') +
+        errHtml +
+        '</div>';
+    });
+
+    list.innerHTML = html;
+  } catch (err) {
+    list.innerHTML = '<span class="muted" style="color:var(--red)">Failed to load task logs: ' + esc(err.message) + '</span>';
+  }
+}
+
+
+async function pollTask(taskId, successMessage, refresh) {
+  var count = 0;
+  var interval = setInterval(async function() {
+    try {
+      count++;
+      var t = await api("GET", "/api/tasks/" + taskId);
+      
+      // Update task list log in UI
+      renderTasks();
+      
+      if (t.status === "completed") {
+        clearInterval(interval);
+        var resultMsg = successMessage;
+        if (t.result) {
+          try {
+            var res = JSON.parse(t.result);
+            if (res.added !== undefined) {
+              resultMsg += " \u2014 " + res.added + " new items";
+            } else if (res.file !== undefined) {
+              resultMsg += ": " + res.file;
+            }
+          } catch(e) {}
+        }
+        toast(resultMsg);
+        await refresh();
+      } else if (t.status === "failed") {
+        clearInterval(interval);
+        alert("Task failed: " + (t.error_message || "Unknown error"));
+        await refresh();
+      } else if (count > 60) {
+        clearInterval(interval);
+        toast("Task is taking longer than expected. Check logs below.");
+        await refresh();
+      }
+    } catch(e) {
+      clearInterval(interval);
+      alert("Error checking task status: " + e.message);
+    }
+  }, 1000);
 }

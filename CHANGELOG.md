@@ -2,6 +2,157 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.26 — 2026-06-25
+
+- **Backend Input Validation for Generic CRUD Endpoints:** The `POST /api/<table>` and `PUT /api/<table>/<rid>` endpoints now validate every accepted field before touching the database. A new `_validate_fields()` helper in `blueprints/api.py` enforces: date format (`YYYY-MM-DD`) for date columns, datetime format (`YYYY-MM-DDTHH:MM`) for `due_date` / `completed_at`, time format (`HH:MM`) for `start` / `end`, numeric ranges for `ects` (0–999), `grade` (0–10), `dur`, `dist`, `duration` (0–1 000 000), boolean coercion for `done`, `is_pinned`, `completed`, integer bounds for `order_index`, `size`, `reminder_offset`, an allowed-set enum for the `events.type` column (including dynamic `ics_N` types), and max-length checks for all string / URL fields. Malformed payloads now return a descriptive `400 Bad Request` JSON error instead of a database exception or silent data corruption. No new dependencies were added — validation uses stdlib only.
+
+## 1.5.25 — 2026-06-25
+
+- **Unified Custom Scrollbar Theme:** Introduced a cohesive, theme-aware scrollbar system across all scrollable containers. Three new CSS custom properties (`--scrollbar-thumb`, `--scrollbar-track`, `--scrollbar-thumb-hover`) are declared in `:root` (dark) and `[data-theme="light"]`, so scrollbar colours follow the active colour scheme automatically. The modern `scrollbar-color` / `scrollbar-width` API is used globally via a `*` selector. A `@supports not (scrollbar-color: auto)` block provides `::-webkit-scrollbar` legacy fallbacks for older browsers without duplication. The cyberpunk theme receives neon-accent thumb colours; a `prefers-contrast: more` media query forces high-contrast black/white styling for accessibility.
+
+## 1.5.24 — 2026-06-25
+
+- **Animated Checkbox Interaction:** Redesigned `.hcheck` custom checkboxes. Added smooth scale hover (`scale(1.08)`) and active click (`scale(0.95)`) transitions. Swapped the static text checkmark ("✓") for a CSS pseudo-element-drawn checkmark that animate-scales from 0 to 1 with a spring-loaded `cubic-bezier(0.34, 1.56, 0.64, 1)` easing, enhancing user interaction across all tasks, habits, files selection, and customization toggles.
+
+## 1.5.23 — 2026-06-25
+
+- **Screenshot Generator Mock Mismatch Fix:** Fixed a property name discrepancy in the Puppeteer-based screenshot generation script (`take_screenshots.js`) where mock tasks used the property `text` (e.g., `{text: 'Submit ML Assignment'}`) instead of `name`. This mismatch caused the generated Dashboard screenshots to display empty task checkbox widgets without names. Corrected the mock tasks in `take_screenshots.js` to match the application schema's `name` property.
+
+## 1.5.22 — 2026-06-25
+
+- **Swipe-to-Delete Action Label Fix:** Fixed a misleading swipe action label on Notes list where swipe-to-delete notes displayed a green-looking "Archive" button and "Note archived" toast, but actually deleted the database records permanently. Updated the label to "Delete" (✕ Delete) and the toast notifications to "Note deleted".
+
+## 1.5.21 — 2026-06-25
+
+- **Notes Folder Deletion Re-parenting Fix:** Fixed a functional bug where deleting a notes folder orphaned its child notes and subfolders (making them permanently invisible in the UI).
+  - Explicitly prioritized the specific `/api/note_folders/<fid>` DELETE route over the generic `/api/<table>/<rid>` route.
+  - Hardened the backend's generic `delete_row` route to intercept and safely delegate deletions of custom tables (`note_folders`, `folders`, `files`) to their custom functions.
+  - Implemented client-side optimistic update re-parenting in `static/js/utils.js` for both note folders and file folders so that offline changes immediately reflect the correct layout.
+  - Added automated unit test covering note folder and subfolder re-parenting on deletion.
+
+## 1.5.20 — 2026-06-25
+
+- **Waitress Access Logging:** Implemented `LoggingMiddleware` to wrap Flask's `wsgi_app` inside `app.py`. The middleware intercepts incoming HTTP requests and outputs standard Apache Combined Log entries to `stdout` for debugging and security auditing. It automatically bypasses logging during unit tests to keep test output clean.
+- **Automated Asset Cache-Busting:** Implemented dynamic cache-busting versioning on application startup. Python calculates a SHA-256 hash of the static assets and injects this hash version into all local CSS and JS imports within `index.html` and `login.html`. Additionally, it updates the service worker (`sw.js`) cache name and replaces `caches.match` with `{ignoreSearch: true}` to enable seamless offline asset matching with version query parameters.
+- **Python3 Command Standard:** Configured codebase documentation to standardise on `python3`/`pip3` for all operations.
+
+## 1.5.19 — 2026-06-25
+
+- **CLI Administration Tools for Recovery:** Added command-line options (`--reset-password "<new_password>"` and `--disable-2fa`) to `app.py`. This allows self-hosted administrators who are locked out to safely clear TOTP keys and reset their admin password directly from the host terminal.
+
+## 1.5.18 — 2026-06-25
+
+- **Optimized FTS5 Search Storage:** Transitioned SQLite FTS5 search index virtual tables (`notes_fts` and `files_fts`) to External Content Tables. This stores indices in FTS5 but refers to original text/filename columns in the main tables by mapping `rowid` to the underlying table's `rowid`, eliminating data duplication and reducing database file size. Added migration `011_optimize_fts5_storage.sql` to upgrade existing databases.
+
+## 1.5.17 — 2026-06-25
+
+- **SQLite Foreign Key Missing Indices:** Created a database migration to add indexes on foreign keys (`parent_id`, `folder_id`, `habit_id`) for `tasks`, `notes`, `note_folders`, `files`, `folders`, and `habit_log`. This avoids full table scans when parent records are deleted and cascading operations are triggered, improving performance.
+
+## 1.5.16 — 2026-06-25
+
+- **Asynchronous Task Queue Recovery:** Added startup task queue recovery logic. When the application server starts up, it scans the `queued_tasks` table for any tasks stuck in the `running` state (e.g. from an abrupt crash or server restart). It resets tasks with remaining retries back to `pending` (updating error log to "Server restarted" and clearing execution flags) to ensure they get re-executed, and marks tasks that have exhausted their max attempts as `failed` to prevent infinite restart-crash loops.
+
+## 1.5.15 — 2026-06-25
+
+- **HTTP Retry Decorator for External Sync:** Introduced a robust `@http_retry` decorator using exponential backoff to handle transient network drops and rate-limiting (HTTP 429) for external sync tasks. Replaced direct requests with `http_get` and `http_post` in the Strava integration (`blueprints/strava.py`) and Calendar integration (`blueprints/calendar.py`), preventing sudden sync failures on temporary external API drops.
+
+## 1.5.14 — 2026-06-25
+
+- **SQLite WAL Checkpointing:** Implemented weekly SQLite WAL checkpointing (`PRAGMA wal_checkpoint(TRUNCATE)`) during the Sunday session cleanup task in `scheduler.py` to prevent the WAL log file from growing indefinitely and maintain optimal read/write performance.
+
+## 1.5.13 — 2026-06-25
+
+- **Visual Drop-Target Feedback:** Replaced the `.folder-drag-over` CSS class with a unified `.drag-over` class in `static/js/files.js` and `static/js/notes.js`. Updated `.drag-over` styling in `static/style.css` to provide immediate, dashed accent border visual feedback when dragging files or notes over folders, breadcrumb links, and list items.
+- **Service Worker Cache Update:** Bumped service worker cache version to `tylo-v103`.
+
+## 1.5.12 — 2026-06-25
+
+- **Live Theme Synced Chart.js Styling:** Implemented a new custom event `theme-changed` dispatched from `theme.js` when the theme, theme style, or accent color is updated. Subscribed to this event in `analytics.js` to dynamically redraw active charts with updated CSS variables (such as grid, text, and panel colors) without requiring a page reload.
+- **Service Worker Cache Update:** Bumped service worker cache version to `tylo-v102` and cache-buster asset version queries in `index.html` to `v=85`.
+
+## 1.5.11 — 2026-06-24
+
+- **Component-Level Reactivity & Targeted Rendering:** Optimized the frontend rendering loop to only re-render the currently active tab on state changes. Inactive tabs are marked stale and rendered on-demand when activated, preventing background layout thrashing and CPU load.
+- **Localized DOM Event-Based Patching:** Introduced custom DOM events (`tylo:task-updated`, `tylo:habit-toggled`) to update checkboxes, streak badges, and widget elements locally without triggering full tab re-renders. Bumped service worker cache to `tylo-v101` and asset version query parameters in `index.html` to `v=84`.
+
+## 1.5.10 — 2026-06-24
+
+- **Graceful Web Push Notification Fallback:** Wrapped external dependencies (`pywebpush`, `py-vapid`, and `cryptography`) in try-except blocks. If these optional packages are missing in the runtime environment, the system now logs a warning instead of raising `ModuleNotFoundError`. This prevents scheduler tasks (like daily morning agendas) from failing when run in minimal test or production environments.
+
+## 1.5.9 — 2026-06-24
+
+- **Refactored Custom Modals to Native `<dialog>`:** Refactored all 8 custom modal overlays to native HTML5 `<dialog>` elements. This adds native Escape key handling, keyboard focus trapping, and backdrop dismissal. Removed redundant manual Escape key and backdrop click handlers from `tasks.js`, and updated `planner.js` to correctly detect open dialogs for keyboard shortcut blocking. Bumped service worker cache to `tylo-v100`.
+
+## 1.5.8 — 2026-06-24
+
+- **Richer iCal/ICS Feed Export:** Enriched `/calendar.ics` to export event `location`, `description`, and recurrence rules (`RRULE`) using standard ICS attributes.
+- **UTC Timezone Synchronization:** Timed events are converted to UTC based on the application timezone setting and exported with the `Z` suffix, preventing timezone shifts on external clients. All-day events remain date-only to keep their all-day status.
+
+## 1.5.7 — 2026-06-24
+
+- **Delta Sync Database Indexing:** Created a database migration to add indexes on the `version` column for all 12 synchronized tables (`tasks`, `events`, `exams`, `habits`, `habit_log`, `workouts`, `notes`, `note_folders`, `files`, `folders`, `shortcuts`, `study_sessions`). This prevents full-table scans during delta sync polling, improving backend response times and overall application performance.
+
+## 1.5.6 — 2026-06-24
+
+- **Session Lifetime Management & Cleanup:** Implemented a weekly background cleanup task in `scheduler.py` to purge database sessions that have been inactive for more than 30 days. The task runs automatically at 04:00 AM on Sundays (alongside storage cleanup) and deletes inactive entries from the `user_sessions` table, keeping database size optimized.
+
+## 1.5.5 — 2026-06-24
+
+- **Silent Sync-Queue Data Loss Fix:** Fixed an issue where 401/403 HTTP responses (due to expired session) inside the offline syncQueue loop would cause data loss by silently deleting offline changes from IndexedDB. Added checks to alert the user, redirect them to the login page, and abort sync execution, successfully preserving all queued changes. Bumped service worker cache to `tylo-v99` and asset version query parameters in `index.html` to `v=83`.
+
+## 1.5.4 — 2026-06-24
+
+- **Redundant Double Script Load Fix:** Removed the redundant `/static/app.js` module script tag from the footer of `index.html`. This fixes a console 404 error when `static_url_path=""` is configured on the backend. Bumped service worker cache to `tylo-v98` and asset version query parameters in `index.html` to `v=82`.
+
+## 1.5.3 — 2026-06-24
+
+- **Keyboard Shortcuts Input Collision Fix:** Added the `isInputFocused()` utility function to check if any text input, textarea, select element, or contenteditable block is focused. Integrated this helper to guard the global planner keydown shortcut handler, preventing typing input (like `t`, `w`, `n`) from triggering layout transitions or modal openings. Bumped service worker cache to `tylo-v97`.
+
+## 1.5.2 — 2026-06-24
+
+- **Modern Navigation View Transitions:** Integrated the browser View Transitions API (`document.startViewTransition`) during tab navigation to animate cross-tab transitions smoothly. Added directionality detection to slide new content in from the right when moving forward in the tab index, and from the left when moving backward. Provided full backwards-compatibility for older browsers supporting View Transitions but not active types by setting class names (`transition-forward`/`transition-backward`) on the document element. Automatically respects user preferences for reduced motion (`prefers-reduced-motion: reduce`). Bumped service worker cache to `tylo-v96`.
+
+## 1.5.1 — 2026-06-24
+
+- **PWA Loading Resilience:** Wrapped the fallback state and settings retrieval calls in try-catch blocks to gracefully load the IndexedDB cached state on network/server failure. This prevents unhandled exceptions from rejecting the initialization promise, resolving the issue where offline users encounter a permanent blank screen or spinner when the server is unreachable. Bumped service worker cache to `tylo-v95`.
+
+## 1.5.0 — 2026-06-24
+
+- **Cryptographic Password Hashing & Management:** Upgraded the application authentication to hash passwords using the strong `scrypt` algorithm (via Werkzeug) instead of relying on plain-text comparisons. Added automatic database bootstrapping that hashes and saves the environment variable `AUTH_PASSWORD` to the SQLite `kv` table on startup. Implemented a "Change Password" form under Settings → Security that allows users to securely update their login password directly from the user interface, bypassing the need to edit environment variables. Requires 2FA verification code confirmation if two-factor authentication is active. Bumped service worker cache to `tylo-v93`.
+
+## 1.4.9 — 2026-06-24
+
+- **Storage Reconciliation & Weekly Cleanup:** Implemented a weekly background storage cleanup and reconciliation task running at 04:00 AM on Sundays. The task scans `data/uploads/` to delete orphaned files that are no longer referenced in the `files` database table. It also identifies and logs any files that are referenced in the database but missing from disk, storing the results in the `queued_tasks` execution log. Added a protected `POST /api/files/cleanup` route to allow manual cleanup execution.
+- **SQLite Foreign Key Enforcements:** Enabled foreign key constraint enforcement (`PRAGMA foreign_keys = ON;`) on all database connections to prevent data orphaning and ensure relational integrity at the database engine level.
+
+## 1.4.8 — 2026-06-23
+
+- **Uniform API Error Handling & Structured JSON Responses:** Registered a global Flask error handler for HTTP exceptions and generic Python server exceptions. All unhandled exceptions are caught and formatted into structured JSON responses containing detailed error descriptions, HTTP status codes, and exception types. This guarantees that all client-side fetch calls receive valid JSON payloads even on 404, 405, or 500 server errors, enhancing PWA/offline recovery and preventing parser crashes.
+
+## 1.4.7 — 2026-06-23
+
+- **Response Compression (Gzip):** Implemented an after-request middleware in `app.py` utilizing the standard library's `gzip` module. Automatically compresses responses for supported MIME types (JSON, HTML, CSS, JS, XML, SVG) that exceed 500 bytes when clients specify support through the `Accept-Encoding: gzip` request header. Properly manages cache-proxy safety by appending the `Vary: Accept-Encoding` header. Excludes streams, non-compressible binary media, and failed status responses.
+
+## 1.4.6 — 2026-06-23
+
+- **Incremental API State Sync (Delta Sync):** Refactored the state synchronization protocol to support delta sync (`GET /api/state?since_version=X`), returning only records inserted, updated, or deleted since version `X` across all user data tables. Implemented an automatic trigger-based SQLite state-version tracker where inserts, updates, and deletes increment the global `state_version` and tag rows with the corresponding version. Added a `deleted_records` tombstone table to track deleted IDs. Refactored the frontend synchronization pipeline to perform incremental syncs and reconcile client-generated temporary IDs with server-assigned UUIDs, minimizing payload size and database overhead on poor connections. Bumped service worker cache to `tylo-v90`.
+
+## 1.4.5 — 2026-06-23
+
+- **SQLite Auto-Vacuuming & Fragment Optimization:** Enabled incremental auto-vacuum mode (`PRAGMA auto_vacuum = INCREMENTAL`) on database initialization, running a full database `VACUUM` to restructure database pages on disk. Integrated connection-level optimizations by executing `PRAGMA optimize;` before closing active connections, keeping the SQLite query planner statistics up to date. Set up a daily cron job inside the scheduler loop running at `03:00` to execute `PRAGMA incremental_vacuum;` and reclaim unused database pages from deleted files, notes, and activity logs.
+
+## 1.4.4 — 2026-06-23
+
+- **Structured Schema Versioning & Migrations:** Decoupled SQLite database schema management from startup code by implementing a lightweight, file-based migrations manager. Migrations are organized as standalone SQL files under the `migrations/` folder (`001` through `005`) and run sequentially inside transactions on startup. Added an auto-detection engine to determine version profiles of legacy pre-migration databases, preventing re-execution of older column alterations. Tracks the current database version in the `kv` table to ensure safe, thread-safe, and race-free schema management.
+
+## 1.4.3 — 2026-06-23
+
+- **SQLite Full-Text Search (FTS5):** Set up `fts5` virtual tables (`notes_fts` and `files_fts`) to index note titles/bodies and filenames. Synchronized index updates using automated SQLite database triggers (`INSERT`, `UPDATE`, `DELETE`). Added custom search API endpoints (`/api/notes/search` and `/api/files/search`) featuring prefix query formatting (incremental typing wildcard support) and query tokenization. Integrated endpoints into the frontend with a 150ms debounce window and built-in offline fallbacks to local JavaScript substring matching. Bumped service worker cache to `tylo-v89`.
+
+## 1.4.2 — 2026-06-23
+
+- **SQLite Connection Pooling (g context):** Implemented connection pooling using Flask's `g` application context to store a single database connection per request. The connection is opened on demand on the first database call and automatically closed during request teardown context, reducing overhead, improving response times, and ensuring thread-safe transaction isolation. Stands on fallback behavior for non-request contexts (CLI, tests, scheduler daemon threads).
+
 ## 1.4.1 — 2026-06-23
 
 - **Real-Time Live Updates:** Added automatic background synchronization across multiple open application instances. The backend tracks data modifications using SQLite transaction hooks and increments a `state_version` key. A smart, background-aware polling loop on the frontend checks this version and triggers a silent state refresh on mismatch, updating all tabs, widgets, notes, files, habits, and stats in real-time. Also added a continuous timer in the Planner view that updates the current time indicator red bar every 15 seconds, automatically executing a full re-render on day transitions. Bumped service worker cache to `tylo-v88`.

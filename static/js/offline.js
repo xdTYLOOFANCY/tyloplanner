@@ -134,8 +134,33 @@ export async function syncQueue(refreshCallback) {
       }
       var r = await fetch(item.path, opt);
       if (!r.ok) {
+        if (r.status === 401 || r.status === 403) {
+          alert("Session expired. Please log in again to sync your changes.");
+          window.location.href = "/login";
+          await updateOfflineBanner();
+          return;
+        }
         if (r.status >= 500) {
           throw new Error("Server error: " + r.statusText);
+        }
+      } else {
+        try {
+          var res = await r.json();
+          if (item.method === "POST" && res && res.id && item.clientId) {
+            var stateMod = await import('./state.js');
+            var S = stateMod.S || await getCache("state");
+            var parts = item.path.split("/");
+            var table = parts[2];
+            if (table && S && S[table]) {
+              var idx = S[table].findIndex(function(x) { return x.id === item.clientId; });
+              if (idx > -1) {
+                S[table][idx].id = res.id;
+                await setCache("state", S);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to reconcile client-generated ID:", e);
         }
       }
       await removeFromQueue(item.id);

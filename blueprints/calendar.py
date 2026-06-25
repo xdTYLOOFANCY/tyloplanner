@@ -1,14 +1,15 @@
 """
 Calendar blueprint — ICS export, import, sync, and clear.
 """
+import os
 import re
 from datetime import datetime, timezone
 import zoneinfo
 
 import requests
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, current_app
 
-from helpers import db, uid, setting, kv_set, app_tz, local_now
+from helpers import db, uid, setting, kv_set, app_tz, local_now, db_retry, http_get
 
 bp = Blueprint("calendar", __name__)
 
@@ -124,10 +125,11 @@ def parse_ics(text):
     return events
 
 
+@db_retry()
 def import_ics_text(text, source_id="ics"):
     evs = parse_ics(text)
     added = 0
-    with db() as con:
+    with db(write=True) as con:
         for e in evs:
             dup = con.execute(
                 'SELECT id, source FROM events WHERE "date"=? AND title=? AND "start"=?',
@@ -152,7 +154,7 @@ def cal_auto_sync():
         if not url.lower().startswith(("http://", "https://")):
             continue
         try:
-            r = requests.get(url, timeout=20)
+            r = http_get(url, timeout=20)
             r.raise_for_status()
             total += import_ics_text(r.text, source_id=f"ics_{idx}")["added"]
         except Exception as e:
@@ -168,6 +170,7 @@ def ics_export():
     now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//TyloPlanner//EN",
              "CALSCALE:GREGORIAN", "X-WR-CALNAME:TyloPlanner"]
+    tz = app_tz()
     with db() as con:
         for e in con.execute("SELECT * FROM events"):
             d = (e["date"] or "").replace("-", "")
@@ -175,13 +178,56 @@ def ics_export():
                 continue
             lines += ["BEGIN:VEVENT", "UID:%s@tyloplanner" % e["id"], "DTSTAMP:" + now]
             if e["start"]:
-                st = e["start"].replace(":", "") + "00"
-                lines.append("DTSTART:%sT%s" % (d, st))
-                if e["end"]:
-                    lines.append("DTEND:%sT%s00" % (d, e["end"].replace(":", "")))
+                try:
+                    dt_start = datetime.strptime(f"{e['date']} {e['start']}", "%Y-%m-%d %H:%M")
+                    if tz:
+                        dt_start = dt_start.replace(tzinfo=tz)
+                    dt_start_utc = dt_start.astimezone(timezone.utc)
+                    lines.append("DTSTART:" + dt_start_utc.strftime("%Y%m%dT%H%M%SZ"))
+                    
+                    if e["end"]:
+                        dt_end = datetime.strptime(f"{e['date']} {e['end']}", "%Y-%m-%d %H:%M")
+                        if tz:
+                            dt_end = dt_end.replace(tzinfo=tz)
+                        dt_end_utc = dt_end.astimezone(timezone.utc)
+                        lines.append("DTEND:" + dt_end_utc.strftime("%Y%m%dT%H%M%SZ"))
+                except Exception:
+                    st = e["start"].replace(":", "") + "00"
+                    lines.append("DTSTART:%sT%s" % (d, st))
+                    if e["end"]:
+                        lines.append("DTEND:%sT%s00" % (d, e["end"].replace(":", "")))
             else:
                 lines.append("DTSTART;VALUE=DATE:" + d)
-            lines += ["SUMMARY:" + ics_escape(e["title"]), "END:VEVENT"]
+            
+            lines.append("SUMMARY:" + ics_escape(e["title"]))
+            
+            if e["location"]:
+                lines.append("LOCATION:" + ics_escape(e["location"]))
+            if e["description"]:
+                lines.append("DESCRIPTION:" + ics_escape(e["description"]))
+                
+            rec = e["recurrence"]
+            if rec and rec != "none":
+                freq = None
+                if rec == "daily":
+                    freq = "DAILY"
+                elif rec == "weekly":
+                    freq = "WEEKLY"
+                elif rec == "monthly":
+                    freq = "MONTHLY"
+                
+                if freq:
+                    rrule = f"RRULE:FREQ={freq}"
+                    if e["recurrence_until"]:
+                        until_d = e["recurrence_until"].replace("-", "")
+                        if e["start"]:
+                            rrule += f";UNTIL={until_d}T235959Z"
+                        else:
+                            rrule += f";UNTIL={until_d}"
+                    lines.append(rrule)
+            
+            lines.append("END:VEVENT")
+            
         for x in con.execute("SELECT * FROM exams"):
             d = (x["date"] or "").replace("-", "")
             if not d:
@@ -214,7 +260,7 @@ def ics_import():
                 urls = [u.strip() for u in setting("cal_sync_urls").splitlines() if u.strip()]
                 if url in urls:
                     source_id = f"ics_{urls.index(url)}"
-                r = requests.get(url, timeout=20)
+                r = http_get(url, timeout=20)
                 r.raise_for_status()
                 text = r.text
             except Exception as e:
@@ -228,12 +274,27 @@ def ics_import():
 def ics_sync_now():
     if not setting("cal_sync_urls").strip():
         return jsonify({"error": "no calendar URLs configured (and saved)"}), 400
-    added = cal_auto_sync()
-    return jsonify({"added": added})
+        
+    from scheduler import enqueue_task, execute_queued_task
+    import json
+    
+    task_id = enqueue_task("calendar_sync")
+    if (current_app.testing and request.args.get("async") != "true") or request.args.get("sync") == "true":
+        execute_queued_task(task_id)
+        with db() as con:
+            row = con.execute("SELECT result, status, error_message FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
+        if row and row["status"] == "completed" and row["result"]:
+            return jsonify(json.loads(row["result"]))
+        else:
+            err = (row["error_message"] if row else None) or "Calendar sync failed"
+            return jsonify({"error": err}), 500
+            
+    return jsonify({"status": "queued", "task_id": task_id})
 
 
 @bp.delete("/api/ics")
+@db_retry()
 def ics_clear():
-    with db() as con:
-        cur = con.execute("DELETE FROM events WHERE source='ics'")
+    with db(write=True) as con:
+        cur = con.execute("DELETE FROM events WHERE source='ics' OR source LIKE 'ics_%'")
     return jsonify({"deleted": cur.rowcount})

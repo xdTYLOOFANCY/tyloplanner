@@ -19,6 +19,8 @@ All features developed for the upcoming release have been verified, and the proj
 - **Study Timer & Pomodoro Tracker**: Added an Alpine.js study countdown/stopwatch widget on the dashboard, SQLite session log table, audio chimes, and analytics visualization.
 - **Security Hardening**: Replaced thread-blocking sleep delays with a non-blocking in-memory IP rate limiter, added anti-CSRF headers for mutating API calls, enabled SQLite WAL mode, and implemented a strict Content Security Policy.
 - **Deadline & Calendar Sync**: Implemented real-time bidirectional synchronization between exams/deadlines and calendar events.
+- **SQLite Foreign Key Enforcements**: Enabled foreign key constraint enforcement (`PRAGMA foreign_keys = ON;`) on database connections to prevent data orphaning and ensure relational integrity at the database engine level.
+- **PWA Loading Resilience**: Wrapped fallback API state and settings retrievals in try-catch blocks to fallback to Cached IndexedDB state on server unreachability, avoiding permanent blank screens/spinners for offline users.
 
 ---
 
@@ -29,4 +31,15 @@ Ran compile checks and the full Flask test client suite in the project virtual e
 ```bash
 .venv/bin/python -m unittest test_app
 ```
-- **Result**: Successfully checked and verified: all **54 tests passed** with 0 failures and 0 errors.
+- **Result**: Successfully checked and verified: all **97 tests passed** with 0 failures and 0 errors.
+
+### Frontend Rendering Validation (Console Check)
+We resolved rendering issues that were preventing the app from launching:
+1. **Dashboard Module Fix**: Resolved a `SyntaxError: Unexpected token 'export'` in [dashboard.js](file:///Users/brambiemans/Documents/GitHub/tyloplanner/static/js/dashboard.js) caused by duplicate/mismatched function nesting when wrapping `renderDashboard()` with `safeRender()`.
+2. **Study Timer Module Fix**: Resolved a warning `ReferenceError: $cleanup is not defined` in [study_timer.js](file:///Users/brambiemans/Documents/GitHub/tyloplanner/static/js/study_timer.js) by replacing the non-standard `x-init="$cleanup(init())"` with the standard `x-init="init()"`.
+
+We ran the headless browser validation script using Puppeteer to verify the console is completely clear of runtime exceptions and syntax errors:
+```bash
+NODE_PATH=node_modules node /Users/brambiemans/.gemini/antigravity/brain/4b8b6fba-04b2-4165-a2ba-7cf504de33aa/scratch/check_console.js
+```
+- **Result**: The page loaded successfully with **zero errors/warnings** in the browser console.

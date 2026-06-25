@@ -100,6 +100,33 @@ function optimisticUpdate(method, path, body, id, S, SET) {
       Object.assign(S[table][idx], body);
     }
   } else if (method === "DELETE") {
+    if (table === "note_folders") {
+      var deletedFolder = (S.note_folders || []).find(function(f) { return f.id === id; });
+      var parentId = deletedFolder ? deletedFolder.parent_id : null;
+      if (S.notes) {
+        S.notes.forEach(function(n) {
+          if (n.folder_id === id) n.folder_id = parentId;
+        });
+      }
+      if (S.note_folders) {
+        S.note_folders.forEach(function(f) {
+          if (f.parent_id === id) f.parent_id = parentId;
+        });
+      }
+    } else if (table === "folders") {
+      var deletedFolder = (S.folders || []).find(function(f) { return f.id === id; });
+      var parentId = deletedFolder ? deletedFolder.parent_id : null;
+      if (S.files) {
+        S.files.forEach(function(f) {
+          if (f.folder_id === id) f.folder_id = parentId;
+        });
+      }
+      if (S.folders) {
+        S.folders.forEach(function(f) {
+          if (f.parent_id === id) f.parent_id = parentId;
+        });
+      }
+    }
     S[table] = S[table].filter(function(item) { return item.id !== id; });
     if (table === "habits" && S.habit_log) {
       S.habit_log = S.habit_log.filter(function(l) { return l.habit_id !== id; });
@@ -145,6 +172,7 @@ export async function api(method, path, body) {
         method: method,
         path: path,
         data: body,
+        clientId: generatedId,
         timestamp: Date.now()
       };
 
@@ -218,3 +246,53 @@ export async function delRow(table, id, refresh) {
   await api("DELETE", "/api/" + table + "/" + id);
   await refresh();
 }
+
+/**
+ * Executes a callback within a view transition, if supported by the browser.
+ * Otherwise, calls the callback immediately.
+ * Optionally supports specifying a transition direction ('forward' or 'backward').
+ * @param {Function} updateDOM - Callback that performs the DOM updates.
+ * @param {string} [direction] - Optional navigation direction.
+ */
+export function navigateWithTransition(updateDOM, direction) {
+  if (!document.startViewTransition) {
+    updateDOM();
+    return;
+  }
+
+  if (direction) {
+    try {
+      // 1. Modern API: types option
+      return document.startViewTransition({
+        update: updateDOM,
+        types: [direction]
+      });
+    } catch (e) {
+      // Fallback for browsers supporting startViewTransition but not types
+      document.documentElement.classList.add(`transition-${direction}`);
+      const transition = document.startViewTransition(updateDOM);
+      transition.finished.finally(() => {
+        document.documentElement.classList.remove(`transition-${direction}`);
+      });
+      return transition;
+    }
+  } else {
+    return document.startViewTransition(updateDOM);
+  }
+}
+
+/**
+ * Checks if the user is currently focused on a text input, textarea, select, or contenteditable element.
+ * Useful for guarding global keyboard shortcuts.
+ * @returns {boolean} True if an input element is focused.
+ */
+export function isInputFocused() {
+  var active = document.activeElement;
+  if (!active) return false;
+  var tag = active.tagName.toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (active.isContentEditable || active.closest('[contenteditable="true"]') !== null) return true;
+  return false;
+}
+
+

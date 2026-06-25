@@ -1,6 +1,6 @@
 // TyloPlanner — exams & grades module.
 
-import { S } from './state.js';
+import { S, safeRender } from './state.js';
 import { esc, api, daysUntil, todayStr } from './utils.js';
 
 export async function addExam(refresh) {
@@ -28,7 +28,8 @@ export function examBadge(d) {
 }
 
 export function renderExams() {
-  var list = S.exams.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
+  safeRender("exams", () => {
+    var list = S.exams.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
   var html = '<tr><th>Name</th><th>Date</th><th>Countdown</th><th>ECTS</th><th>Grade</th><th></th></tr>';
   list.forEach(function(e) {
     html += '<tr><td>' + esc(e.name) + '</td><td class="muted">' + esc(e.date) + '</td><td>' + examBadge(daysUntil(e.date)) + '</td>' +
@@ -36,5 +37,6 @@ export function renderExams() {
       '<td><input type="number" step="0.1" min="1" max="10" value="' + (e.grade != null ? e.grade : "") + '" placeholder="—" onchange="setGrade(\'' + e.id + '\',this.value)"></td>' +
       '<td><button class="btn danger small" onclick="delRow(\'exams\',\'' + e.id + '\')">✕</button></td></tr>';
   });
-  document.getElementById("examTable").innerHTML = html + (list.length ? "" : '<tr><td colspan="6" class="muted">No exams yet.</td></tr>');
+    document.getElementById("examTable").innerHTML = html + (list.length ? "" : '<tr><td colspan="6" class="muted">No exams yet.</td></tr>');
+  });
 }

@@ -1,6 +1,6 @@
 // TyloPlanner — tasks (to-do) module.
 
-import { S, SET } from './state.js';
+import { S, SET, safeRender } from './state.js';
 import { todayStr, esc, api } from './utils.js';
 import { getTaskCategories } from './settings.js';
 
@@ -53,6 +53,16 @@ export async function addSubtask(parentId, refresh) {
 }
 
 export async function toggleTask(id, done, refresh) {
+  var t = S.tasks.find(function(x) { return x.id === id; });
+  if (t) {
+    t.done = done ? 1 : 0;
+    t.completed_at = done ? todayStr() : null;
+  }
+
+  window.dispatchEvent(new CustomEvent("tylo:task-updated", {
+    detail: { id: id, done: done }
+  }));
+
   await api("PUT", "/api/tasks/" + id, { done: done ? 1 : 0, completed_at: done ? todayStr() : null });
   await refresh();
 }
@@ -232,147 +242,137 @@ export async function saveTaskModal(refresh) {
 }
 
 export function renderTasks() {
-  var cats = getTaskCategories();
-  
-  // Populate both task creation and edit form category dropdowns
-  var selectEl = document.getElementById("taskCategory");
-  if (selectEl) {
-    var currentVal = selectEl.value;
-    var optHtml = '<option value="">Category (opt.)</option>';
-    cats.forEach(function(c) {
-      optHtml += '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>';
-    });
-    selectEl.innerHTML = optHtml;
-    selectEl.value = currentVal;
-  }
-  
-  var editSelectEl = document.getElementById("editTaskCategory");
-  if (editSelectEl) {
-    var editCurrentVal = editSelectEl.value;
-    var optHtml = '<option value="">Category (opt.)</option>';
-    cats.forEach(function(c) {
-      optHtml += '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>';
-    });
-    editSelectEl.innerHTML = optHtml;
-    editSelectEl.value = editCurrentVal;
-  }
-
-  // Populate Categories Modal List
-  var modalListEl = document.getElementById("modalCategoriesList");
-  if (modalListEl) {
-    var catsHtml = "";
-    cats.forEach(function(cat) {
-      catsHtml += '<div class="list-item" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">' +
-        '<input type="color" value="' + esc(cat.color) + '" onchange="updateModalCategoryColor(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="width:28px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
-        '<input type="text" value="' + esc(cat.name) + '" onchange="renameModalCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="flex:1; font-size:13px; padding:2px 6px; border:1px solid var(--border); border-radius:4px; background:var(--panel2); color:var(--text);">' +
-        '<button class="btn danger small" onclick="deleteModalCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\')">✕</button>' +
-        '</div>';
-    });
-    modalListEl.innerHTML = catsHtml || '<div class="muted">No categories configured.</div>';
-  }
-
-  var parentTasks = S.tasks.filter(function(t) { return !t.parent_id; });
-  parentTasks.sort(function(a, b) {
-    return (a.order_index || 0) - (b.order_index || 0);
-  });
-
-  var html = "";
-  parentTasks.forEach(function(t) {
-    var catObj = cats.find(function(c) { return c.name === t.category; });
-    var color = catObj ? catObj.color : '#4f8cff';
-    var categoryBadge = t.category ? '<span class="badge" style="margin-right:8px; background-color:' + esc(color) + '; color:#fff; font-weight:600; padding:3px 8px; border-radius:4px;">' + esc(t.category) + '</span>' : '';
+  safeRender("tasks", () => {
+    var cats = getTaskCategories();
     
-    var dueBadge = '';
-    if (t.due_date) {
-      var now = new Date();
-      var dueDt = new Date(t.due_date);
-      var isOverdue = !t.done && (dueDt < now);
-      var formattedDue = t.due_date.replace("T", " ");
-      var badgeClass = isOverdue ? 'red' : 'gray';
-      dueBadge = '<span class="badge ' + badgeClass + '" style="margin-right:8px">' + esc(formattedDue) + '</span>';
-    } else if (t.due) {
-      var nowStr = todayStr();
-      var isOverdue = !t.done && (t.due < nowStr);
-      var badgeClass = isOverdue ? 'red' : 'gray';
-      dueBadge = '<span class="badge ' + badgeClass + '" style="margin-right:8px">' + esc(t.due) + '</span>';
+    // Populate both task creation and edit form category dropdowns
+    var selectEl = document.getElementById("taskCategory");
+    if (selectEl) {
+      var currentVal = selectEl.value;
+      var optHtml = '<option value="">Category (opt.)</option>';
+      cats.forEach(function(c) {
+        optHtml += '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>';
+      });
+      selectEl.innerHTML = optHtml;
+      selectEl.value = currentVal;
+    }
+    
+    var editSelectEl = document.getElementById("editTaskCategory");
+    if (editSelectEl) {
+      var editCurrentVal = editSelectEl.value;
+      var optHtml = '<option value="">Category (opt.)</option>';
+      cats.forEach(function(c) {
+        optHtml += '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>';
+      });
+      editSelectEl.innerHTML = optHtml;
+      editSelectEl.value = editCurrentVal;
     }
 
-    var subtasks = S.tasks.filter(function(sub) { return sub.parent_id === t.id; });
-    var subtasksHtml = "";
-    subtasks.forEach(function(sub) {
-      subtasksHtml += '<div class="subtask-row">' +
-        '<span class="hcheck' + (sub.done ? ' on' : '') + '" onclick="toggleTask(\'' + sub.id + '\',' + !sub.done + ')">' + (sub.done ? '✓' : '') + '</span>' +
-        '<span class="subtask-name' + (sub.done ? ' done' : '') + '" style="flex:1">' + esc(sub.name) + '</span>' +
-        '<button class="btn ghost small" style="padding: 1px 4px; font-size: 10px; margin-right: 4px;" onclick="openTaskModal(\'' + sub.id + '\')">✏️</button>' +
-        '<button class="btn danger small" style="padding:1px 5px; font-size:10px;" onclick="delRow(\'tasks\',\'' + sub.id + '\')">✕</button>' +
-        '</div>';
+    // Populate Categories Modal List
+    var modalListEl = document.getElementById("modalCategoriesList");
+    if (modalListEl) {
+      var catsHtml = "";
+      cats.forEach(function(cat) {
+        catsHtml += '<div class="list-item" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">' +
+          '<input type="color" value="' + esc(cat.color) + '" onchange="updateModalCategoryColor(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="width:28px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
+          '<input type="text" value="' + esc(cat.name) + '" onchange="renameModalCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="flex:1; font-size:13px; padding:2px 6px; border:1px solid var(--border); border-radius:4px; background:var(--panel2); color:var(--text);">' +
+          '<button class="btn danger small" onclick="deleteModalCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\')">✕</button>' +
+          '</div>';
+      });
+      modalListEl.innerHTML = catsHtml || '<div class="muted">No categories configured.</div>';
+    }
+
+    var parentTasks = S.tasks.filter(function(t) { return !t.parent_id; });
+    parentTasks.sort(function(a, b) {
+      return (a.order_index || 0) - (b.order_index || 0);
     });
 
-    html += '<div class="task-card" draggable="true" data-id="' + t.id + '" ' +
-      'ondragstart="dragTaskStart(event,\'' + t.id + '\')" ' +
-      'ondragover="dragTaskOver(event)" ' +
-      'ondrop="dropTask(event,\'' + t.id + '\')" ' +
-      'ondragend="dragTaskEnd(event)">' +
-      '<div class="task-header">' +
-        '<span class="task-drag-handle" style="cursor:grab; color:var(--muted)">☰</span>' +
-        '<span class="hcheck' + (t.done ? ' on' : '') + '" onclick="toggleTask(\'' + t.id + '\',' + !t.done + ')">' + (t.done ? '✓' : '') + '</span>' +
-        '<span class="task-name' + (t.done ? ' done' : '') + '" style="flex:1">' + esc(t.name) + '</span>' +
-        categoryBadge + dueBadge +
-        '<button class="btn ghost small" style="padding: 2px 6px; margin-right: 4px;" onclick="openTaskModal(\'' + t.id + '\')">✏️</button>' +
-        '<button class="btn danger small" onclick="delRow(\'tasks\',\'' + t.id + '\')">✕</button>' +
-      '</div>' +
-      '<div class="subtasks-container">' +
-        '<div class="subtasks-list">' + subtasksHtml + '</div>' +
-        '<div class="subtask-add-row" style="display:flex; gap:6px; margin-top:6px;">' +
-          '<input type="text" placeholder="Add subtask..." class="subtask-input" id="subtask-input-' + t.id + '" style="font-size:12px; padding:2px 6px; flex:1" onkeydown="if(event.key===\'Enter\')addSubtask(\'' + t.id + '\')">' +
-          '<button class="btn small" style="padding:2px 8px;" onclick="addSubtask(\'' + t.id + '\')">+</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  });
-
-  document.getElementById("taskList").innerHTML = html || '<div class="muted">Nothing to do. Nice.</div>';
-}
-
-// --- Modal Event Listeners (Outside clicks, Enter, Escape key handling) ---
-var taskModalEl = document.getElementById("taskModal");
-if (taskModalEl) {
-  taskModalEl.addEventListener("click", function(e) {
-    if (e.target === this) {
-      window.dispatchEvent(new CustomEvent('close-task-modal'));
-    }
-  });
-  taskModalEl.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") {
-      var target = e.target;
-      if (target && target.tagName !== 'BUTTON') {
-        e.preventDefault();
-        if (typeof window.saveTaskModal === "function") {
-          window.saveTaskModal();
-        }
+    var html = "";
+    parentTasks.forEach(function(t) {
+      var catObj = cats.find(function(c) { return c.name === t.category; });
+      var color = catObj ? catObj.color : '#4f8cff';
+      var categoryBadge = t.category ? '<span class="badge" style="margin-right:8px; background-color:' + esc(color) + '; color:#fff; font-weight:600; padding:3px 8px; border-radius:4px;">' + esc(t.category) + '</span>' : '';
+      
+      var dueBadge = '';
+      if (t.due_date) {
+        var now = new Date();
+        var dueDt = new Date(t.due_date);
+        var isOverdue = !t.done && (dueDt < now);
+        var formattedDue = t.due_date.replace("T", " ");
+        var badgeClass = isOverdue ? 'red' : 'gray';
+        dueBadge = '<span class="badge ' + badgeClass + '" style="margin-right:8px">' + esc(formattedDue) + '</span>';
+      } else if (t.due) {
+        var nowStr = todayStr();
+        var isOverdue = !t.done && (t.due < nowStr);
+        var badgeClass = isOverdue ? 'red' : 'gray';
+        dueBadge = '<span class="badge ' + badgeClass + '" style="margin-right:8px">' + esc(t.due) + '</span>';
       }
-    }
+
+      var subtasks = S.tasks.filter(function(sub) { return sub.parent_id === t.id; });
+      var subtasksHtml = "";
+      subtasks.forEach(function(sub) {
+        subtasksHtml += '<div class="subtask-row">' +
+          '<span class="hcheck' + (sub.done ? ' on' : '') + '" data-task-check="' + sub.id + '" onclick="toggleTask(\'' + sub.id + '\',' + !sub.done + ')">' + (sub.done ? '✓' : '') + '</span>' +
+          '<span class="subtask-name' + (sub.done ? ' done' : '') + '" data-task-name="' + sub.id + '" style="flex:1">' + esc(sub.name) + '</span>' +
+          '<button class="btn ghost small" style="padding: 1px 4px; font-size: 10px; margin-right: 4px;" onclick="openTaskModal(\'' + sub.id + '\')">✏️</button>' +
+          '<button class="btn danger small" style="padding:1px 5px; font-size:10px;" onclick="delRow(\'tasks\',\'' + sub.id + '\')">✕</button>' +
+          '</div>';
+      });
+
+      html += '<div class="task-card" draggable="true" data-id="' + t.id + '" ' +
+        'ondragstart="dragTaskStart(event,\'' + t.id + '\')" ' +
+        'ondragover="dragTaskOver(event)" ' +
+        'ondrop="dropTask(event,\'' + t.id + '\')" ' +
+        'ondragend="dragTaskEnd(event)">' +
+        '<div class="task-header">' +
+          '<span class="task-drag-handle" style="cursor:grab; color:var(--muted)">☰</span>' +
+          '<span class="hcheck' + (t.done ? ' on' : '') + '" data-task-check="' + t.id + '" onclick="toggleTask(\'' + t.id + '\',' + !t.done + ')">' + (t.done ? '✓' : '') + '</span>' +
+          '<span class="task-name' + (t.done ? ' done' : '') + '" data-task-name="' + t.id + '" style="flex:1">' + esc(t.name) + '</span>' +
+          categoryBadge + dueBadge +
+          '<button class="btn ghost small" style="padding: 2px 6px; margin-right: 4px;" onclick="openTaskModal(\'' + t.id + '\')">✏️</button>' +
+          '<button class="btn danger small" onclick="delRow(\'tasks\',\'' + t.id + '\')">✕</button>' +
+        '</div>' +
+        '<div class="subtasks-container">' +
+          '<div class="subtasks-list">' + subtasksHtml + '</div>' +
+          '<div class="subtask-add-row" style="display:flex; gap:6px; margin-top:6px;">' +
+            '<input type="text" placeholder="Add subtask..." class="subtask-input" id="subtask-input-' + t.id + '" style="font-size:12px; padding:2px 6px; flex:1" onkeydown="if(event.key===\'Enter\')addSubtask(\'' + t.id + '\')">' +
+            '<button class="btn small" style="padding:2px 8px;" onclick="addSubtask(\'' + t.id + '\')">+</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+
+    document.getElementById("taskList").innerHTML = html || '<div class="muted">Nothing to do. Nice.</div>';
   });
 }
 
-var categoriesModalEl = document.getElementById("categoriesModal");
-if (categoriesModalEl) {
-  categoriesModalEl.addEventListener("click", function(e) {
-    if (e.target === this) {
-      window.dispatchEvent(new CustomEvent('close-categories-modal'));
+// Global listener for localized DOM patching
+window.addEventListener("tylo:task-updated", function(e) {
+  const { id, done } = e.detail;
+  
+  // Patch checkboxes
+  const checkEls = document.querySelectorAll(`[data-task-check="${id}"]`);
+  checkEls.forEach(function(el) {
+    if (done) {
+      el.classList.add("on");
+      el.textContent = "✓";
+    } else {
+      el.classList.remove("on");
+      el.textContent = "";
+    }
+    // Update onclick handler with new state
+    el.setAttribute("onclick", `toggleTask('${id}', ${!done})`);
+  });
+
+  // Patch task names
+  const nameEls = document.querySelectorAll(`[data-task-name="${id}"]`);
+  nameEls.forEach(function(el) {
+    if (done) {
+      el.classList.add("done");
+    } else {
+      el.classList.remove("done");
     }
   });
-}
-
-document.addEventListener("keydown", function(e) {
-  if (e.key === "Escape") {
-    var taskModal = document.getElementById("taskModal");
-    if (taskModal && taskModal.style.display === "flex") {
-      window.dispatchEvent(new CustomEvent('close-task-modal'));
-    }
-    var catsModal = document.getElementById("categoriesModal");
-    if (catsModal && catsModal.style.display !== "none") {
-      window.dispatchEvent(new CustomEvent('close-categories-modal'));
-    }
-  }
 });
+
+

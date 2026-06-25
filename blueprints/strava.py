@@ -1,16 +1,17 @@
 """
 Strava blueprint — OAuth flow, API key config, activity sync, disconnect.
 """
+import os
 import time
 from datetime import datetime
 from urllib.parse import urlencode
 
 import requests
-from flask import Blueprint, request, jsonify, redirect
+from flask import Blueprint, request, jsonify, redirect, current_app
 
 import helpers
 from helpers import (
-    db, uid, kv_get, kv_set, kv_del, APP_URL, local_now,
+    db, uid, kv_get, kv_set, kv_del, APP_URL, local_now, db_retry, http_get, http_post,
 )
 
 bp = Blueprint("strava", __name__)
@@ -42,7 +43,7 @@ def strava_access_token():
     refresh = kv_get("strava_refresh")
     if not refresh:
         return None
-    r = requests.post(STRAVA_TOKEN, data={
+    r = http_post(STRAVA_TOKEN, data={
         "client_id": strava_client_id(),
         "client_secret": strava_client_secret(),
         "grant_type": "refresh_token",
@@ -96,7 +97,7 @@ def strava_callback():
     code = request.args.get("code")
     if not code:
         return redirect("/?strava=denied")
-    r = requests.post(STRAVA_TOKEN, data={
+    r = http_post(STRAVA_TOKEN, data={
         "client_id": strava_client_id(),
         "client_secret": strava_client_secret(),
         "code": code,
@@ -111,20 +112,20 @@ def strava_callback():
     return redirect("/?strava=connected")
 
 
-@bp.post("/api/strava/sync")
-def strava_sync():
+@db_retry()
+def do_strava_sync():
     token = strava_access_token()
     if not token:
-        return jsonify({"error": "not connected to Strava"}), 400
+        raise ValueError("Not connected to Strava: no refresh token or failed to refresh access token.")
     added, page = 0, 1
     headers = {"Authorization": "Bearer " + token}
-    with db() as con:
+    with db(write=True) as con:
         while page <= 10:  # up to 1000 activities
-            r = requests.get(STRAVA_API + "/athlete/activities",
+            r = http_get(STRAVA_API + "/athlete/activities",
                              params={"per_page": 100, "page": page},
                              headers=headers, timeout=30)
             if r.status_code != 200:
-                return jsonify({"error": "Strava API error: " + r.text[:200]}), 502
+                raise ValueError("Strava API error: " + r.text[:200])
             acts = r.json()
             if not acts:
                 break
@@ -147,7 +148,30 @@ def strava_sync():
                 break
             page += 1
     kv_set("strava_last_sync", local_now().isoformat(timespec="seconds"))
-    return jsonify({"added": added})
+    return {"added": added}
+
+
+@bp.post("/api/strava/sync")
+def strava_sync():
+    token = strava_access_token()
+    if not token:
+        return jsonify({"error": "not connected to Strava"}), 400
+    
+    from scheduler import enqueue_task, execute_queued_task
+    import json
+    
+    task_id = enqueue_task("strava_sync")
+    if (current_app.testing and request.args.get("async") != "true") or request.args.get("sync") == "true":
+        execute_queued_task(task_id)
+        with db() as con:
+            row = con.execute("SELECT result, status, error_message FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
+        if row and row["status"] == "completed" and row["result"]:
+            return jsonify(json.loads(row["result"]))
+        else:
+            err = (row["error_message"] if row else None) or "Sync failed"
+            return jsonify({"error": err}), 500
+            
+    return jsonify({"status": "queued", "task_id": task_id})
 
 
 @bp.post("/api/strava/disconnect")

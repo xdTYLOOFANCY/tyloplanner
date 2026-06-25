@@ -7,6 +7,8 @@
 Your planner events and exams are published as an iCal feed. Copy the secret
 feed URL from **Settings → Calendar export**, then:
 
+- All timed events are automatically converted to UTC and exported with the `Z` suffix, ensuring consistent timezone rendering across all devices. All-day events remain date-only.
+- Event metadata including `LOCATION`, `DESCRIPTION`, and recurrence rules (`RRULE` with `UNTIL` limits) are fully exported using standard ICS attributes.
 - **Google Calendar:** *Other calendars → + → From URL*. Google's servers
   must be able to reach your instance, so this needs a public address.
 - **Apple Calendar:** *File → New Calendar Subscription*.
