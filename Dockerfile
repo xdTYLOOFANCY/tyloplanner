@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py helpers.py scheduler.py ./
 COPY blueprints/ blueprints/
 COPY static/ static/
+COPY migrations/ migrations/
 
 ENV DB_PATH=/data/tyloplanner.db
 ENV PORT=8000

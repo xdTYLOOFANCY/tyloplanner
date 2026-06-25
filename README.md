@@ -56,7 +56,7 @@
 Most planner apps want a subscription, your data, or both. TyloPlanner is a
 single lightweight container you run yourself: no accounts, no tracking, no
 cloud. Everything lives in one SQLite file on your machine, and the whole
-codebase is small enough to read in an afternoon and make your own.
+codebase is under 20,000 lines of clean, modular code, making it easy to understand in a weekend and make your own.
 
 ## Features
 
