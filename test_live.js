@@ -2,31 +2,18 @@ import puppeteer from 'puppeteer';
 import { spawn } from 'child_process';
 
 (async () => {
-  const backend = spawn('python3', ['app.py']);
+  const backend = spawn('python3', ['app.py'], { env: { ...process.env, AUTH_PASSWORD: '' }});
   await new Promise(r => setTimeout(r, 2000));
 
   const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
   const page = await browser.newPage();
   
   page.on('console', msg => console.log('BROWSER CONSOLE:', msg.type(), msg.text()));
+  page.on('pageerror', err => console.log('PAGE ERROR:', err.toString()));
   
-  await page.goto('http://127.0.0.1:5000/login', { waitUntil: 'networkidle0' });
-  
-  console.log("At login page!");
-  await page.evaluate(async () => {
-      await fetch('/api/register', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({username: 'testuser4', password: 'testpass'})
-      });
-      await fetch('/api/login', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({username: 'testuser4', password: 'testpass'})
-      });
-  });
-  
+  console.log("Navigating to /...");
   await page.goto('http://127.0.0.1:5000/', { waitUntil: 'networkidle0' });
+  
   console.log("At dashboard!");
   
   try {
@@ -42,6 +29,9 @@ import { spawn } from 'child_process';
       return el ? el.tagName + '#' + el.id + '.' + el.className : null;
   });
   console.log("Top element at center:", topEl);
+
+  await page.screenshot({ path: 'test_live.png' });
+  console.log("Screenshot saved to test_live.png");
 
   await browser.close();
   backend.kill();

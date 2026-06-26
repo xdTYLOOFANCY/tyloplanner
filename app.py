@@ -257,7 +257,7 @@ def create_app():
 
     @application.after_request
     def add_security_headers(response):
-        response.headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data: blob: https://www.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline'; script-src 'self';"
+        response.headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data: blob: https://www.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval';"
         response.headers['X-Content-Type-Options'] = "nosniff"
         response.headers['X-Frame-Options'] = "SAMEORIGIN"
         return response
