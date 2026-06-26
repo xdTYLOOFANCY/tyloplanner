@@ -310,5 +310,9 @@ export function renderAnalytics() {
 }
 
 window.addEventListener('theme-changed', () => {
+  Object.values(chartInstances).forEach(chart => {
+    if (chart) chart.destroy();
+  });
+  chartInstances = {};
   renderAnalytics();
 });

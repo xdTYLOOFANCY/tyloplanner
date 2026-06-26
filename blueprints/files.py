@@ -39,7 +39,13 @@ def download_file(fid):
         row = con.execute("SELECT * FROM files WHERE id=?", (fid,)).fetchone()
     if not row:
         return jsonify({"error": "not found"}), 404
-    disk_path = os.path.join(UPLOAD_DIR, fid)
+        
+    base_dir = os.path.abspath(UPLOAD_DIR)
+    disk_path = os.path.abspath(os.path.join(base_dir, fid))
+    
+    if not disk_path.startswith(base_dir):
+        return jsonify({"error": "forbidden"}), 403
+        
     if not os.path.exists(disk_path):
         return jsonify({"error": "file missing from disk"}), 404
     return send_file(disk_path, as_attachment=True, download_name=row["filename"],
@@ -52,7 +58,13 @@ def view_file(fid):
         row = con.execute("SELECT * FROM files WHERE id=?", (fid,)).fetchone()
     if not row:
         return jsonify({"error": "not found"}), 404
-    disk_path = os.path.join(UPLOAD_DIR, fid)
+        
+    base_dir = os.path.abspath(UPLOAD_DIR)
+    disk_path = os.path.abspath(os.path.join(base_dir, fid))
+    
+    if not disk_path.startswith(base_dir):
+        return jsonify({"error": "forbidden"}), 403
+        
     if not os.path.exists(disk_path):
         return jsonify({"error": "file missing from disk"}), 404
     return send_file(disk_path, mimetype=row["mimetype"] or "application/octet-stream")

@@ -49,6 +49,7 @@ export const PRESETS = {
 export let currentVersion = null;
 let syncInterval = null;
 let lastCheckTime = 0;
+let visibilityListenerAdded = false;
 const ACTIVE_INTERVAL = 5000;
 const INACTIVE_INTERVAL = 30000;
 
@@ -84,11 +85,14 @@ export function startLiveSync() {
   
   syncInterval = setInterval(loop, 1000);
   
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
-      loop();
-    }
-  });
+  if (!visibilityListenerAdded) {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        loop();
+      }
+    });
+    visibilityListenerAdded = true;
+  }
 }
 
 export async function refresh(renderAll) {

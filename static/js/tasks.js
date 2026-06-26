@@ -1,7 +1,7 @@
 // TyloPlanner — tasks (to-do) module.
 
 import { S, SET, safeRender } from './state.js';
-import { todayStr, esc, api } from './utils.js';
+import { todayStr, esc, api, debounce } from './utils.js';
 import { getTaskCategories } from './settings.js';
 
 export async function addTask(refresh) {
@@ -160,6 +160,11 @@ export async function deleteModalCategory(catName, refresh) {
   }
 }
 
+const saveModalCategoryColorsDebounced = debounce(async function(obj, refresh) {
+  await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
+  if (refresh) await refresh();
+}, 500);
+
 export async function updateModalCategoryColor(name, color, refresh) {
   var cats = getTaskCategories();
   var cat = cats.find(function(c) { return c.name === name; });
@@ -169,8 +174,7 @@ export async function updateModalCategoryColor(name, color, refresh) {
     cats.forEach(function(c) {
       obj[c.name] = c.color;
     });
-    await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
-    await refresh();
+    saveModalCategoryColorsDebounced(obj, refresh);
   }
 }
 
@@ -287,62 +291,246 @@ export function renderTasks() {
       return (a.order_index || 0) - (b.order_index || 0);
     });
 
-    var html = "";
-    parentTasks.forEach(function(t) {
-      var catObj = cats.find(function(c) { return c.name === t.category; });
-      var color = catObj ? catObj.color : '#4f8cff';
-      var categoryBadge = t.category ? '<span class="badge" style="margin-right:8px; background-color:' + esc(color) + '; color:#fff; font-weight:600; padding:3px 8px; border-radius:4px;">' + esc(t.category) + '</span>' : '';
-      
-      var dueBadge = '';
-      if (t.due_date) {
-        var now = new Date();
-        var dueDt = new Date(t.due_date);
-        var isOverdue = !t.done && (dueDt < now);
-        var formattedDue = t.due_date.replace("T", " ");
-        var badgeClass = isOverdue ? 'red' : 'gray';
-        dueBadge = '<span class="badge ' + badgeClass + '" style="margin-right:8px">' + esc(formattedDue) + '</span>';
-      } else if (t.due) {
-        var nowStr = todayStr();
-        var isOverdue = !t.done && (t.due < nowStr);
-        var badgeClass = isOverdue ? 'red' : 'gray';
-        dueBadge = '<span class="badge ' + badgeClass + '" style="margin-right:8px">' + esc(t.due) + '</span>';
+    var taskList = document.getElementById("taskList");
+    if (!taskList) return;
+
+    if (parentTasks.length === 0) {
+      taskList.innerHTML = '<div class="muted">Nothing to do. Nice.</div>';
+      return;
+    }
+
+    if (taskList.firstElementChild && taskList.firstElementChild.classList.contains("muted")) {
+      taskList.innerHTML = '';
+    }
+
+    var existingCards = Array.from(taskList.querySelectorAll(".task-card"));
+    var parentIds = new Set(parentTasks.map(function(t) { return String(t.id); }));
+
+    existingCards.forEach(function(card) {
+      if (!parentIds.has(card.dataset.id)) {
+        card.remove();
+      }
+    });
+
+    parentTasks.forEach(function(t, index) {
+      var card = taskList.querySelector('.task-card[data-id="' + t.id + '"]');
+      if (!card) {
+        card = document.createElement("div");
+        card.className = "task-card";
+        card.dataset.id = t.id;
+        card.draggable = true;
+
+        card.addEventListener("dragstart", function(e) { window.dragTaskStart(e, t.id); });
+        card.addEventListener("dragover", window.dragTaskOver);
+        card.addEventListener("drop", function(e) { window.dropTask(e, t.id); });
+        card.addEventListener("dragend", window.dragTaskEnd);
+
+        var header = document.createElement("div");
+        header.className = "task-header";
+
+        var dragHandle = document.createElement("span");
+        dragHandle.className = "task-drag-handle";
+        dragHandle.style.cursor = "grab";
+        dragHandle.style.color = "var(--muted)";
+        dragHandle.textContent = "☰";
+
+        var checkSpan = document.createElement("span");
+        checkSpan.dataset.taskCheck = t.id;
+        checkSpan.addEventListener("click", function() {
+          var task = S.tasks.find(function(x) { return x.id === t.id; });
+          if (task) window.toggleTask(t.id, !task.done);
+        });
+
+        var nameSpan = document.createElement("span");
+        nameSpan.dataset.taskName = t.id;
+        nameSpan.style.flex = "1";
+
+        var badgeContainer = document.createElement("span");
+        badgeContainer.className = "badge-container";
+
+        var editBtn = document.createElement("button");
+        editBtn.className = "btn ghost small";
+        editBtn.style.padding = "2px 6px";
+        editBtn.style.marginRight = "4px";
+        editBtn.textContent = "✏️";
+        editBtn.addEventListener("click", function() { window.openTaskModal(t.id); });
+
+        var delBtn = document.createElement("button");
+        delBtn.className = "btn danger small";
+        delBtn.textContent = "✕";
+        delBtn.addEventListener("click", function() { window.delRow('tasks', t.id); });
+
+        header.appendChild(dragHandle);
+        header.appendChild(checkSpan);
+        header.appendChild(nameSpan);
+        header.appendChild(badgeContainer);
+        header.appendChild(editBtn);
+        header.appendChild(delBtn);
+
+        var subsContainer = document.createElement("div");
+        subsContainer.className = "subtasks-container";
+
+        var subList = document.createElement("div");
+        subList.className = "subtasks-list";
+
+        var addRow = document.createElement("div");
+        addRow.className = "subtask-add-row";
+        addRow.style.display = "flex";
+        addRow.style.gap = "6px";
+        addRow.style.marginTop = "6px";
+
+        var subInput = document.createElement("input");
+        subInput.type = "text";
+        subInput.placeholder = "Add subtask...";
+        subInput.className = "subtask-input";
+        subInput.id = "subtask-input-" + t.id;
+        subInput.style.fontSize = "12px";
+        subInput.style.padding = "2px 6px";
+        subInput.style.flex = "1";
+        subInput.addEventListener("keydown", function(e) {
+          if (e.key === 'Enter') window.addSubtask(t.id);
+        });
+
+        var addBtn = document.createElement("button");
+        addBtn.className = "btn small";
+        addBtn.style.padding = "2px 8px";
+        addBtn.textContent = "+";
+        addBtn.addEventListener("click", function() { window.addSubtask(t.id); });
+
+        addRow.appendChild(subInput);
+        addRow.appendChild(addBtn);
+
+        subsContainer.appendChild(subList);
+        subsContainer.appendChild(addRow);
+
+        card.appendChild(header);
+        card.appendChild(subsContainer);
+      }
+
+      var checkSpan = card.querySelector('[data-task-check="' + t.id + '"]');
+      if (checkSpan) {
+        checkSpan.className = "hcheck" + (t.done ? " on" : "");
+        checkSpan.textContent = t.done ? "✓" : "";
+      }
+
+      var nameSpan = card.querySelector('[data-task-name="' + t.id + '"]');
+      if (nameSpan) {
+        nameSpan.className = "task-name" + (t.done ? " done" : "");
+        nameSpan.textContent = t.name;
+      }
+
+      var badgeContainer = card.querySelector('.badge-container');
+      if (badgeContainer) {
+        badgeContainer.innerHTML = '';
+        var catObj = cats.find(function(c) { return c.name === t.category; });
+        var color = catObj ? catObj.color : '#4f8cff';
+        if (t.category) {
+          var catBadge = document.createElement("span");
+          catBadge.className = "badge";
+          catBadge.style.marginRight = "8px";
+          catBadge.style.backgroundColor = color;
+          catBadge.style.color = "#fff";
+          catBadge.style.fontWeight = "600";
+          catBadge.style.padding = "3px 8px";
+          catBadge.style.borderRadius = "4px";
+          catBadge.textContent = t.category;
+          badgeContainer.appendChild(catBadge);
+        }
+
+        if (t.due_date || t.due) {
+          var dueBadge = document.createElement("span");
+          var isOverdue = false;
+          var badgeText = "";
+          if (t.due_date) {
+            var now = new Date();
+            var dueDt = new Date(t.due_date);
+            isOverdue = !t.done && (dueDt < now);
+            badgeText = t.due_date.replace("T", " ");
+          } else {
+            var nowStr = todayStr();
+            isOverdue = !t.done && (t.due < nowStr);
+            badgeText = t.due;
+          }
+          dueBadge.className = "badge " + (isOverdue ? "red" : "gray");
+          dueBadge.style.marginRight = "8px";
+          dueBadge.textContent = badgeText;
+          badgeContainer.appendChild(dueBadge);
+        }
       }
 
       var subtasks = S.tasks.filter(function(sub) { return sub.parent_id === t.id; });
-      var subtasksHtml = "";
-      subtasks.forEach(function(sub) {
-        subtasksHtml += '<div class="subtask-row">' +
-          '<span class="hcheck' + (sub.done ? ' on' : '') + '" data-task-check="' + sub.id + '" onclick="toggleTask(\'' + sub.id + '\',' + !sub.done + ')">' + (sub.done ? '✓' : '') + '</span>' +
-          '<span class="subtask-name' + (sub.done ? ' done' : '') + '" data-task-name="' + sub.id + '" style="flex:1">' + esc(sub.name) + '</span>' +
-          '<button class="btn ghost small" style="padding: 1px 4px; font-size: 10px; margin-right: 4px;" onclick="openTaskModal(\'' + sub.id + '\')">✏️</button>' +
-          '<button class="btn danger small" style="padding:1px 5px; font-size:10px;" onclick="delRow(\'tasks\',\'' + sub.id + '\')">✕</button>' +
-          '</div>';
-      });
+      var subList = card.querySelector(".subtasks-list");
+      if (subList) {
+        var existingSubs = Array.from(subList.querySelectorAll(".subtask-row"));
+        var subIds = new Set(subtasks.map(function(s) { return String(s.id); }));
 
-      html += '<div class="task-card" draggable="true" data-id="' + t.id + '" ' +
-        'ondragstart="dragTaskStart(event,\'' + t.id + '\')" ' +
-        'ondragover="dragTaskOver(event)" ' +
-        'ondrop="dropTask(event,\'' + t.id + '\')" ' +
-        'ondragend="dragTaskEnd(event)">' +
-        '<div class="task-header">' +
-          '<span class="task-drag-handle" style="cursor:grab; color:var(--muted)">☰</span>' +
-          '<span class="hcheck' + (t.done ? ' on' : '') + '" data-task-check="' + t.id + '" onclick="toggleTask(\'' + t.id + '\',' + !t.done + ')">' + (t.done ? '✓' : '') + '</span>' +
-          '<span class="task-name' + (t.done ? ' done' : '') + '" data-task-name="' + t.id + '" style="flex:1">' + esc(t.name) + '</span>' +
-          categoryBadge + dueBadge +
-          '<button class="btn ghost small" style="padding: 2px 6px; margin-right: 4px;" onclick="openTaskModal(\'' + t.id + '\')">✏️</button>' +
-          '<button class="btn danger small" onclick="delRow(\'tasks\',\'' + t.id + '\')">✕</button>' +
-        '</div>' +
-        '<div class="subtasks-container">' +
-          '<div class="subtasks-list">' + subtasksHtml + '</div>' +
-          '<div class="subtask-add-row" style="display:flex; gap:6px; margin-top:6px;">' +
-            '<input type="text" placeholder="Add subtask..." class="subtask-input" id="subtask-input-' + t.id + '" style="font-size:12px; padding:2px 6px; flex:1" onkeydown="if(event.key===\'Enter\')addSubtask(\'' + t.id + '\')">' +
-            '<button class="btn small" style="padding:2px 8px;" onclick="addSubtask(\'' + t.id + '\')">+</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+        existingSubs.forEach(function(row) {
+          if (!subIds.has(row.dataset.id)) {
+            row.remove();
+          }
+        });
+
+        subtasks.forEach(function(sub, subIdx) {
+          var row = subList.querySelector('.subtask-row[data-id="' + sub.id + '"]');
+          if (!row) {
+            row = document.createElement("div");
+            row.className = "subtask-row";
+            row.dataset.id = sub.id;
+
+            var subCheck = document.createElement("span");
+            subCheck.dataset.taskCheck = sub.id;
+            subCheck.addEventListener("click", function() {
+              var sTask = S.tasks.find(function(x) { return x.id === sub.id; });
+              if (sTask) window.toggleTask(sub.id, !sTask.done);
+            });
+
+            var subName = document.createElement("span");
+            subName.dataset.taskName = sub.id;
+            subName.style.flex = "1";
+
+            var subEdit = document.createElement("button");
+            subEdit.className = "btn ghost small";
+            subEdit.style.padding = "1px 4px";
+            subEdit.style.fontSize = "10px";
+            subEdit.style.marginRight = "4px";
+            subEdit.textContent = "✏️";
+            subEdit.addEventListener("click", function() { window.openTaskModal(sub.id); });
+
+            var subDel = document.createElement("button");
+            subDel.className = "btn danger small";
+            subDel.style.padding = "1px 5px";
+            subDel.style.fontSize = "10px";
+            subDel.textContent = "✕";
+            subDel.addEventListener("click", function() { window.delRow('tasks', sub.id); });
+
+            row.appendChild(subCheck);
+            row.appendChild(subName);
+            row.appendChild(subEdit);
+            row.appendChild(subDel);
+          }
+
+          var subCheck = row.querySelector('[data-task-check="' + sub.id + '"]');
+          if (subCheck) {
+            subCheck.className = "hcheck" + (sub.done ? " on" : "");
+            subCheck.textContent = sub.done ? "✓" : "";
+          }
+
+          var subName = row.querySelector('[data-task-name="' + sub.id + '"]');
+          if (subName) {
+            subName.className = "subtask-name" + (sub.done ? " done" : "");
+            subName.textContent = sub.name;
+          }
+
+          if (subList.children[subIdx] !== row) {
+            subList.insertBefore(row, subList.children[subIdx]);
+          }
+        });
+      }
+
+      if (taskList.children[index] !== card) {
+        taskList.insertBefore(card, taskList.children[index]);
+      }
     });
-
-    document.getElementById("taskList").innerHTML = html || '<div class="muted">Nothing to do. Nice.</div>';
   });
 }
 
@@ -360,8 +548,10 @@ window.addEventListener("tylo:task-updated", function(e) {
       el.classList.remove("on");
       el.textContent = "";
     }
-    // Update onclick handler with new state
-    el.setAttribute("onclick", `toggleTask('${id}', ${!done})`);
+    // Update onclick handler with new state only if it was inline
+    if (el.hasAttribute("onclick")) {
+      el.setAttribute("onclick", `toggleTask('${id}', ${!done})`);
+    }
   });
 
   // Patch task names

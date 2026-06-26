@@ -3,7 +3,10 @@
   "short_name": "TyloPlanner",
   "description": "Self-hosted personal dashboard: planner, exams, habits, workouts, analytics.",
   "start_url": "/",
+  "id": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay"],
+  "orientation": "portrait",
   "background_color": "#0f1115",
   "theme_color": "#0f1115",
   "icons": [

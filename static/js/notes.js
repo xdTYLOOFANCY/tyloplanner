@@ -1,7 +1,7 @@
 // TyloPlanner — notes module (editor, markdown, search, cross-links).
 
 import { S, safeRender } from './state.js';
-import { esc, api, z } from './utils.js';
+import { esc, api, z, mdToHtml } from './utils.js';
 
 var currentNote = null, noteTimer = null, noteMode = "edit";
 var noteBodySearch = { q: "", idx: 0 };
@@ -47,57 +47,7 @@ function highlightHtml(html, q) {
   return html.replace(re, '<mark>$1</mark>');
 }
 
-var markedConfigured = false;
-function configureMarked() {
-  if (markedConfigured) return;
-  var parser = window.marked || (typeof marked !== 'undefined' ? marked : null);
-  if (parser) {
-    const wikiLink = {
-      name: 'wikiLink',
-      level: 'inline',
-      start(src) { return src.indexOf('[['); },
-      tokenizer(src, tokens) {
-        const rule = /^\[\[([^\]]+)\]\]/;
-        const match = rule.exec(src);
-        if (match) {
-          return {
-            type: 'wikiLink',
-            raw: match[0],
-            title: match[1].trim()
-          };
-        }
-      },
-      renderer(token) {
-        var t = token.title;
-        var note = S && S.notes && S.notes.find(function(n) {
-          return esc(n.title || "").toLowerCase() === t.toLowerCase();
-        });
-        if (note) return '<a href="#" class="note-link" onclick="openNote(\'' + note.id + '\');return false;">' + esc(t) + '</a>';
-        return '<span class="note-link-missing">' + esc(token.raw) + '</span>';
-      }
-    };
-    
-    parser.use({
-      extensions: [wikiLink],
-      renderer: {
-        html(html) {
-          return esc(html);
-        }
-      }
-    });
-    markedConfigured = true;
-  }
-}
 
-function mdToHtml(text) {
-  if (!text) return "";
-  configureMarked();
-  var parser = window.marked || (typeof marked !== 'undefined' ? marked : null);
-  if (parser && typeof parser.parse === "function") {
-    return parser.parse(text);
-  }
-  return esc(text);
-}
 
 function formatTime(timestamp) {
   var d = new Date(timestamp);
@@ -296,16 +246,36 @@ export function selectNote(id) {
     clearTimeout(noteTimer);
     noteTimer = null;
     
+    var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
+    var lastUpdated = n ? n.updated : 0;
     var updatedTime = Date.now();
+    
     api("PUT", "/api/notes/" + pendingNoteId, {
       title: pendingTitle,
       body: pendingBody,
-      updated: updatedTime
+      updated: updatedTime,
+      last_updated: lastUpdated
     }).then(function() {
       var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
       if (n) { n.title = pendingTitle; n.body = pendingBody; n.updated = updatedTime; }
       renderNoteList();
-    }).catch(console.error);
+    }).catch(function(err) {
+      if (err.message && err.message.includes("conflict")) {
+        var choice = prompt("This note was modified elsewhere. Overwrite or Reload?", "Reload");
+        if (choice && choice.toLowerCase().startsWith("o")) {
+          api("PUT", "/api/notes/" + pendingNoteId, {
+            title: pendingTitle,
+            body: pendingBody,
+            updated: updatedTime,
+            last_updated: Date.now() // force overwrite next time
+          });
+        } else {
+          window.refreshApp && window.refreshApp();
+        }
+      } else {
+        console.error(err);
+      }
+    });
   }
   currentNote = id;
   localStorage.setItem("active_note_id", id);
@@ -339,17 +309,20 @@ export function noteChanged() {
     }
     
     try {
+      var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
+      var lastUpdated = n ? n.updated : 0;
       var updatedTime = Date.now();
       await api("PUT", "/api/notes/" + pendingNoteId, {
         title: pendingTitle,
         body: pendingBody,
-        updated: updatedTime
+        updated: updatedTime,
+        last_updated: lastUpdated
       });
-      var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
-      if (n) {
-        n.title = pendingTitle;
-        n.body = pendingBody;
-        n.updated = updatedTime;
+      var n2 = S.notes.find(function(x) { return x.id === pendingNoteId; });
+      if (n2) {
+        n2.title = pendingTitle;
+        n2.body = pendingBody;
+        n2.updated = updatedTime;
       }
       renderNoteList();
       
@@ -358,11 +331,41 @@ export function noteChanged() {
         statusEl.className = "note-status saved";
       }
     } catch (err) {
-      if (statusEl && currentNote === pendingNoteId) {
-        statusEl.textContent = "Error saving";
-        statusEl.className = "note-status danger";
+      if (err.message === "conflict") {
+        if (statusEl && currentNote === pendingNoteId) {
+          statusEl.textContent = "Conflict! Modified elsewhere.";
+          statusEl.className = "note-status danger";
+        }
+        var choice = prompt("This note was modified elsewhere. Overwrite or Reload?", "Reload");
+        if (choice && choice.toLowerCase().startsWith("o")) {
+          var updatedTime2 = Date.now();
+          await api("PUT", "/api/notes/" + pendingNoteId, {
+            title: pendingTitle,
+            body: pendingBody,
+            updated: updatedTime2,
+            last_updated: updatedTime2 // force overwrite
+          });
+          var n3 = S.notes.find(function(x) { return x.id === pendingNoteId; });
+          if (n3) {
+            n3.title = pendingTitle;
+            n3.body = pendingBody;
+            n3.updated = updatedTime2;
+          }
+          renderNoteList();
+          if (statusEl && currentNote === pendingNoteId) {
+            statusEl.textContent = "Saved at " + formatTime(updatedTime2);
+            statusEl.className = "note-status saved";
+          }
+        } else {
+          window.refreshApp && window.refreshApp();
+        }
+      } else {
+        if (statusEl && currentNote === pendingNoteId) {
+          statusEl.textContent = "Error saving";
+          statusEl.className = "note-status danger";
+        }
+        console.error(err);
       }
-      console.error(err);
     }
   }, 500);
 }

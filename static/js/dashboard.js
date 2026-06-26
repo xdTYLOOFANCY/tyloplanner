@@ -1,7 +1,7 @@
 // TyloPlanner — dashboard module.
 
 import { S, habitSet, SET, PRESETS, safeRender } from './state.js';
-import { todayStr, fmtShort, esc, daysUntil, api, z, MONTHS } from './utils.js';
+import { todayStr, fmtShort, esc, daysUntil, api, z, MONTHS, mdToHtml } from './utils.js';
 import { examBadge } from './exams.js';
 import { streak } from './habits.js';
 import { weekTotals } from './workouts.js';
@@ -38,18 +38,7 @@ function saveWidgetsData() {
   }, 1000);
 }
 
-function mdToHtml(text) {
-  if (!text) return "";
-  var parser = window.marked || (typeof marked !== 'undefined' ? marked : null);
-  if (parser) {
-    if (typeof parser.parse === "function") {
-      return parser.parse(text);
-    } else if (typeof parser === "function") {
-      return parser(text);
-    }
-  }
-  return esc(text);
-}
+
 
 function initLayoutAndStyle() {
   

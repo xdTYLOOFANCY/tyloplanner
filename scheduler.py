@@ -459,6 +459,8 @@ def scheduler_loop():
             if current_minute != last_tick_minute:
                 scheduler_tick()
                 last_tick_minute = current_minute
+            time.sleep(10)
         except Exception as e:
             print("scheduler loop error:", e)
-        time.sleep(10)
+            traceback.print_exc()
+            time.sleep(60)

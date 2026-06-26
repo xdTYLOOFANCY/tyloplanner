@@ -1,3 +1,5 @@
+import { S } from './state.js';
+
 // TyloPlanner — shared utility functions.
 
 // ---------- date helpers ----------
@@ -295,4 +297,67 @@ export function isInputFocused() {
   return false;
 }
 
+// ---------- Markdown ----------
+var markedConfigured = false;
+export function configureMarked() {
+  if (markedConfigured) return;
+  var parser = window.marked || (typeof marked !== 'undefined' ? marked : null);
+  if (parser) {
+    const wikiLink = {
+      name: 'wikiLink',
+      level: 'inline',
+      start(src) { return src.indexOf('[['); },
+      tokenizer(src, tokens) {
+        const rule = /^\[\[([^\]]+)\]\]/;
+        const match = rule.exec(src);
+        if (match) {
+          return {
+            type: 'wikiLink',
+            raw: match[0],
+            title: match[1].trim()
+          };
+        }
+      },
+      renderer(token) {
+        var t = token.title;
+        var note = S && S.notes && S.notes.find(function(n) {
+          return esc(n.title || "").toLowerCase() === t.toLowerCase();
+        });
+        if (note) return '<a href="#" class="note-link" onclick="openNote(\'' + note.id + '\');return false;">' + esc(t) + '</a>';
+        return '<span class="note-link-missing">' + esc(token.raw) + '</span>';
+      }
+    };
+    
+    parser.use({
+      extensions: [wikiLink],
+      renderer: {
+        html(html) {
+          return esc(html);
+        }
+      }
+    });
+    markedConfigured = true;
+  }
+}
 
+export function mdToHtml(text) {
+  if (!text) return "";
+  configureMarked();
+  var parser = window.marked || (typeof marked !== 'undefined' ? marked : null);
+  if (parser && typeof parser.parse === "function") {
+    return parser.parse(text);
+  }
+  return esc(text);
+}
+
+export function debounce(func, wait) {
+  var timeout;
+  return function() {
+    var context = this, args = arguments;
+    clearTimeout(timeout);
+    timeout = setTimeout(function() {
+      timeout = null;
+      func.apply(context, args);
+    }, wait);
+  };
+}

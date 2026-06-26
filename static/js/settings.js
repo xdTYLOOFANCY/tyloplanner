@@ -1,7 +1,7 @@
 // TyloPlanner — settings module (notifications, calendar, security, Strava).
 
 import { S, SET, safeRender } from './state.js';
-import { esc, api, toast } from './utils.js';
+import { esc, api, toast, debounce } from './utils.js';
 import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
 
@@ -670,6 +670,11 @@ export function getTaskCategories() {
   });
 }
 
+const saveCategoryColorsDebounced = debounce(async function(obj, refresh) {
+  await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
+  if (refresh) await refresh();
+}, 500);
+
 export async function updateCategoryColor(name, color, refresh) {
   var cats = getTaskCategories();
   var cat = cats.find(function(c) { return c.name === name; });
@@ -679,8 +684,7 @@ export async function updateCategoryColor(name, color, refresh) {
     cats.forEach(function(c) {
       obj[c.name] = c.color;
     });
-    await api("POST", "/api/settings", { task_categories: JSON.stringify(obj) });
-    await refresh();
+    saveCategoryColorsDebounced(obj, refresh);
   }
 }
 

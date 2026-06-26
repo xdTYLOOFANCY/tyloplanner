@@ -388,6 +388,9 @@ def update_row(table, rid):
     if table not in TABLES:
         return jsonify({"error": "unknown table"}), 404
     raw = request.get_json(force=True) or {}
+    
+    last_updated = raw.get("last_updated")
+    
     # Keep only whitelisted columns, then validate
     raw = {c: raw[c] for c in TABLES[table] if c in raw}
     if not raw:
@@ -398,6 +401,15 @@ def update_row(table, rid):
     cols = list(data.keys())
     sql = "UPDATE %s SET %s WHERE id=?" % (table, ",".join(q(c) + "=?" for c in cols))
     with db(write=True) as con:
+        if table in ("notes", "tasks") and last_updated is not None:
+            current = con.execute(f"SELECT * FROM {table} WHERE id=?", (rid,)).fetchone()
+            if current and "updated" in current.keys() and current["updated"] is not None:
+                try:
+                    if int(current["updated"]) > int(last_updated):
+                        return jsonify({"error": "conflict", "current_data": dict(current)}), 409
+                except ValueError:
+                    pass
+                    
         con.execute(sql, [data[c] for c in cols] + [rid])
 
     if table == "exams":

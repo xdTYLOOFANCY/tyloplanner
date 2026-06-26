@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>TyloPlanner</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.json">
@@ -791,9 +791,9 @@
     <span class="nav-icon">☑️</span>
     <span class="nav-label">To-do</span>
   </button>
-  <button data-tab="settings">
-    <span class="nav-icon">⚙️</span>
-    <span class="nav-label">More</span>
+  <button onclick="window.dispatchEvent(new CustomEvent('open-mobile-menu-modal'))">
+    <span class="nav-icon">☰</span>
+    <span class="nav-label">Menu</span>
   </button>
 </nav>
 <script src="js/bottom_nav.js"></script>
@@ -811,6 +811,22 @@
         <button class="btn ghost small" @click="open = false" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
       </div>
       <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:12px;"></div>
+    </div>
+  </dialog>
+  <dialog id="mobileMenuModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-mobile-menu-modal.window="open = true" @close-mobile-menu-modal.window="open = false" @click="if($event.target === $el) open = false">
+    <div class="modal-content" style="padding-bottom: env(safe-area-inset-bottom);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:16px;">More</h3>
+        <button class="btn ghost small" @click="open = false" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+      </div>
+      <div class="menu-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'analytics\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">📊 Analytics</button>
+        <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'workouts\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">🏋️ Workouts</button>
+        <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'exams\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">🎓 Exams</button>
+        <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'notes\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">📝 Notes</button>
+        <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'files\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">📁 Files</button>
+        <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'settings\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">⚙️ Settings</button>
+      </div>
     </div>
   </dialog>
 </body>

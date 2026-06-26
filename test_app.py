@@ -2197,6 +2197,14 @@ class CliAdminTests(unittest.TestCase):
         con = sqlite3.connect(test_db)
         con.row_factory = sqlite3.Row
 
+        # Verify user_version pragma matches the latest migration number
+        user_version = con.execute("PRAGMA user_version").fetchone()[0]
+        self.assertEqual(user_version, 12)
+        
+        # Verify schema version in kv table matches
+        row = con.execute("SELECT value FROM kv WHERE key='schema_version'").fetchone()
+        self.assertEqual(row["value"], "12")
+        
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()
         self.assertTrue(row)
