@@ -56,12 +56,14 @@ _FIELD_RULES = {
     # ---- common date / time fields ----
     "date":             ("date",),
     "created":          ("date",),
-    "updated":          ("date",),
+    # `updated` (notes) and `uploaded` (files) are epoch-millisecond INTEGER
+    # columns (the frontend sends Date.now()), NOT YYYY-MM-DD strings.
+    "updated":          ("int", 0, 9_999_999_999_999),
     "completed_at":     ("datetime",),
     "due":              ("date",),
     "due_date":         ("datetime",),
     "recurrence_until": ("date",),
-    "uploaded":         ("date",),
+    "uploaded":         ("int", 0, 9_999_999_999_999),
     "start":            ("time",),
     "end":              ("time",),
     # ---- exams ----

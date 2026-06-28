@@ -2,6 +2,11 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.27 — 2026-06-28
+
+- **Fixed: Notes could not be created or edited (regression).** The input validation added in 1.5.26 classified the `updated` (notes) and `uploaded` (files) columns as `YYYY-MM-DD` date strings. Both are actually epoch-millisecond `INTEGER` columns (the frontend sends `Date.now()`), so every `POST`/`PUT /api/notes` was rejected with `400 'updated' must be a string in YYYY-MM-DD format`, breaking note creation, auto-save, and editing. `blueprints/api.py` now validates `updated` and `uploaded` as bounded integers (epoch milliseconds), restoring all notes functionality. The cross-device edit-conflict detection (`409`) continues to work correctly.
+- **Fixed: Missing database indexes after the foreign-key migration.** Migration `012_add_foreign_keys.sql` rebuilt the `tasks`, `notes`, and `files` tables (to add `ON DELETE CASCADE`). SQLite drops every index attached to a table when that table is dropped, so the version indexes (migration 009) and foreign-key indexes (migration 010) on those three tables were silently lost — degrading incremental-sync and cascade-delete query performance. New migration `013_restore_indexes_after_table_rebuild.sql` recreates the six affected indexes idempotently (`CREATE INDEX IF NOT EXISTS`), applying automatically to both fresh and already-upgraded databases.
+
 ## 1.5.26 — 2026-06-25
 
 - **Backend Input Validation for Generic CRUD Endpoints:** The `POST /api/<table>` and `PUT /api/<table>/<rid>` endpoints now validate every accepted field before touching the database. A new `_validate_fields()` helper in `blueprints/api.py` enforces: date format (`YYYY-MM-DD`) for date columns, datetime format (`YYYY-MM-DDTHH:MM`) for `due_date` / `completed_at`, time format (`HH:MM`) for `start` / `end`, numeric ranges for `ects` (0–999), `grade` (0–10), `dur`, `dist`, `duration` (0–1 000 000), boolean coercion for `done`, `is_pinned`, `completed`, integer bounds for `order_index`, `size`, `reminder_offset`, an allowed-set enum for the `events.type` column (including dynamic `ics_N` types), and max-length checks for all string / URL fields. Malformed payloads now return a descriptive `400 Bad Request` JSON error instead of a database exception or silent data corruption. No new dependencies were added — validation uses stdlib only.

@@ -1362,7 +1362,7 @@ class DatabaseMigrationTests(unittest.TestCase):
         with helpers.db() as con:
             row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row["value"], "11")
+            self.assertEqual(row["value"], "13")
 
             notes_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
             self.assertIsNotNone(notes_fts)
@@ -2197,14 +2197,11 @@ class CliAdminTests(unittest.TestCase):
         con = sqlite3.connect(test_db)
         con.row_factory = sqlite3.Row
 
-        # Verify user_version pragma matches the latest migration number
-        user_version = con.execute("PRAGMA user_version").fetchone()[0]
-        self.assertEqual(user_version, 12)
-        
-        # Verify schema version in kv table matches
-        row = con.execute("SELECT value FROM kv WHERE key='schema_version'").fetchone()
-        self.assertEqual(row["value"], "12")
-        
+        # Verify the schema version was tracked in the kv table (the app's
+        # source of truth is kv['db_version'], not PRAGMA user_version).
+        row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
+        self.assertEqual(row["value"], "13")
+
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()
         self.assertTrue(row)
