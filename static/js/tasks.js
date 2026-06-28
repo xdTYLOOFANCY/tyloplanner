@@ -214,14 +214,20 @@ export async function renameModalCategory(oldName, newName, refresh) {
 
 // --- Task Editing Modal ---
 export function openTaskModal(id) {
-  var t = S.tasks.find(function(x) { return x.id === id; });
-  if (!t) return;
-  
-  document.getElementById("editTaskId").value = t.id;
-  document.getElementById("editTaskName").value = t.name || "";
-  document.getElementById("editTaskCategory").value = t.category || "";
-  document.getElementById("editTaskDue").value = t.due_date || "";
-  
+  // With an id we edit an existing task; without one (e.g. the dashboard /
+  // tasks quick-create FAB) we open the modal in "create" mode with blank
+  // fields. saveTaskModal() decides POST vs PUT from whether editTaskId is set.
+  var t = id ? S.tasks.find(function(x) { return x.id === id; }) : null;
+  if (id && !t) return;
+
+  document.getElementById("editTaskId").value = t ? t.id : "";
+  document.getElementById("editTaskName").value = t ? (t.name || "") : "";
+  document.getElementById("editTaskCategory").value = t ? (t.category || "") : "";
+  document.getElementById("editTaskDue").value = t ? (t.due_date || "") : "";
+
+  var titleEl = document.getElementById("taskModalTitle");
+  if (titleEl) titleEl.textContent = t ? "Edit Task" : "Add Task";
+
   window.dispatchEvent(new CustomEvent('open-task-modal'));
 }
 
@@ -233,14 +239,33 @@ export async function saveTaskModal(refresh) {
   var due = due_date ? due_date.substring(0, 10) : null;
   
   if (!name) return;
-  
-  await api("PUT", "/api/tasks/" + id, {
-    name: name,
-    category: category,
-    due_date: due_date,
-    due: due
-  });
-  
+
+  if (id) {
+    await api("PUT", "/api/tasks/" + id, {
+      name: name,
+      category: category,
+      due_date: due_date,
+      due: due
+    });
+  } else {
+    // Create mode (opened from the quick-create FAB with no task id).
+    var maxOrder = -1;
+    if (S.tasks && S.tasks.length) {
+      S.tasks.forEach(function(t) {
+        if (!t.parent_id && t.order_index > maxOrder) maxOrder = t.order_index;
+      });
+    }
+    await api("POST", "/api/tasks", {
+      name: name,
+      done: 0,
+      created: todayStr(),
+      due: due,
+      due_date: due_date,
+      category: category,
+      order_index: maxOrder + 1
+    });
+  }
+
   window.dispatchEvent(new CustomEvent('close-task-modal'));
   await refresh();
 }

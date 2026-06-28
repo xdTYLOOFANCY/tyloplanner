@@ -2388,6 +2388,24 @@ body.dark .drop-overlay {
     white-space: nowrap;
   }
 
+  /* Folder action toolbar wraps instead of running off the right edge
+     (Rename / Icon / Delete / + Folder / Upload / Camera) */
+  .folder-actions-group { flex-wrap: wrap; }
+  .folder-actions-group .btn { flex: 1 1 auto; }
+
+  /* File rows: a long filename used to push the Download/✕ buttons off-screen.
+     Put the name (and meta) on the first line and force the action buttons onto
+     their own full-width, right-aligned line below — everything stays reachable
+     and the filename gets the full width so it wraps by word, not per character. */
+  .file-item { flex-wrap: wrap; }
+  .file-item .grow { min-width: 0; }
+  .file-item .grow > div { overflow-wrap: anywhere; }
+  .file-item .file-actions {
+    flex: 0 0 100%;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
   /* Settings: better section layout */
   .settings-section {
     padding: 14px;

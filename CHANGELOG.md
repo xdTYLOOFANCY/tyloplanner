@@ -2,6 +2,13 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.30 — 2026-06-28
+
+Follow-up fixes from on-device mobile testing of 1.5.29.
+
+- **Fixed: dashboard/tasks quick-create "Add Task" did nothing.** The FAB called `openTaskModal()` with no id; that function was edit-only (`S.tasks.find(id)` → `if (!t) return`), so it bailed silently. `openTaskModal()` now opens the modal in **create mode** (blank fields, "Add Task" title) when called without an id, and `saveTaskModal()` POSTs a new task instead of PUTting when there's no id. Editing existing tasks is unchanged.
+- **Fixed: Files section overflowed off the right edge on mobile.** Long filenames pushed the `Download`/`✕` buttons off-screen (a long filename's longest word set a `min-width` that stopped the row from shrinking), and the folder action toolbar (`Rename / Icon / Delete / + Folder / Upload / Camera`) ran past the screen edge. On mobile the folder toolbar now wraps, and each file row puts the name + meta on the first line with the action buttons on their own right-aligned line below — so the filename wraps by word (not per character) and every button stays on-screen and tappable.
+
 ## 1.5.29 — 2026-06-28
 
 Second-pass mobile PWA overhaul focused on the sections that were still

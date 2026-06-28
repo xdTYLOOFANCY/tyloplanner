@@ -501,7 +501,7 @@
 
   <dialog id="taskModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-task-modal.window="open = true" @close-task-modal.window="open = false" @click="if($event.target === $el) open = false" @keydown.enter="if($event.target.tagName !== 'BUTTON') { $event.preventDefault(); saveTaskModal(); }">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
-      <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>
+      <h3 id="taskModalTitle" style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>
       <input type="hidden" id="editTaskId">
       
       <div style="display:flex; flex-direction:column; gap:12px;">
