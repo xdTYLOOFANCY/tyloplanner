@@ -310,6 +310,13 @@ tabsNav.addEventListener("click", function(e) {
   if (typeof window.updateFAB === "function") {
     window.updateFAB(newTab);
   }
+  if (newTab === "planner" && window.innerWidth <= 640) {
+    var pvSel = document.getElementById("plannerView");
+    if (pvSel && (pvSel.value === "7" || pvSel.value === "5")) {
+      pvSel.value = "1";
+      changePlannerView("1");
+    }
+  }
 });
 
 // ---------- Floating Action Button (FAB) ----------
@@ -443,6 +450,14 @@ if (savedTab) {
 } else {
   var activeBtn = document.querySelector("#tabs button.active");
   window.updateFAB(activeBtn ? activeBtn.dataset.tab : "dashboard");
+}
+
+if (window.innerWidth <= 640) {
+  var pvInitSel = document.getElementById("plannerView");
+  if (pvInitSel && (pvInitSel.value === "7" || pvInitSel.value === "5")) {
+    pvInitSel.value = "1";
+    changePlannerView("1");
+  }
 }
 
 initSwipeGestures();

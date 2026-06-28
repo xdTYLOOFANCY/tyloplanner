@@ -2265,15 +2265,23 @@ body.dark .drop-overlay {
     display: none;
   }
 
-  /* Planner: smaller controls */
+  /* Planner: horizontal-scroll weeknav (no wrapping) */
   .weeknav {
     gap: 6px;
     margin-bottom: 10px;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
   }
+  .weeknav .label { white-space: nowrap; flex-shrink: 0; }
+  #plannerView { flex-shrink: 0; }
 
-  /* Time grid: reduce height for mobile */
+  /* Time grid: dynamic height so it fills viewport without inner scroll trap */
   .time-grid-wrapper {
-    height: 580px;
+    height: calc(100dvh - 205px);
+    min-height: 300px;
   }
 
   /* Month calendar: reduce min cell height */
@@ -2313,10 +2321,22 @@ body.dark .drop-overlay {
     min-width: 480px;
   }
 
+  /* Habits: larger touch targets for checkboxes */
+  .hcheck { width: 28px !important; height: 28px !important; border-radius: 8px !important; }
+  table.habits th, table.habits td { padding: 8px 3px; }
+
   /* Analytics: hide chart labels that overflow */
   .chartlabels div {
     font-size: 9px;
   }
+
+  /* Analytics: single-column bento grid on mobile */
+  .analytics-bento-grid { grid-template-columns: 1fr; gap: 12px; }
+  .analytics-totals-grid { grid-column: 1; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .chart-item, .table-item { grid-column: 1; min-height: 200px; }
+  .stat-card { min-height: 80px; padding: 14px 16px; }
+  .stat-card-val { font-size: 26px; }
+  .stat-card-label { margin-top: 8px; }
 
   /* File toolbar: stack on mobile */
   .file-toolbar {
@@ -2355,6 +2375,14 @@ body.dark .drop-overlay {
   .wstats {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* Notes: mobile usability improvements */
+  #noteBody { min-height: 42dvh !important; resize: none !important; }
+  .note-toolbar { overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; padding-bottom: 2px; }
+  .note-toolbar button { flex-shrink: 0; white-space: nowrap; min-height: 36px !important; }
+  .note-header-bar { flex-direction: column; gap: 8px; align-items: stretch; }
+  .note-stats { display: none !important; }
+  .note-control-grid { justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
 
   /* Notes: panel-switching on mobile */
   .noteslayout {

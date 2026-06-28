@@ -2,6 +2,10 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.28 — 2026-06-28
+
+- **Mobile PWA UI Overhaul:** Major improvements to the mobile experience across all major sections. Planner now auto-switches to Day view on mobile (instead of the unusable 7-column week grid) and the weeknav bar scrolls horizontally without wrapping. The time grid height is now dynamic (`100dvh - 205px`) so it fills the viewport cleanly without a scroll-within-scroll trap. Analytics section switches to a single-column bento grid on mobile so charts are full-width and readable. Habit checkboxes are enlarged to 28×28 px for comfortable touch interaction. Notes: the textarea `min-height` is reduced to `42dvh` so it no longer swallows the whole screen, the formatting toolbar scrolls horizontally instead of overflowing, and the header bar stacks vertically on narrow screens. Fixed a bug where creating a new note via the FAB didn't apply the `.note-editing` class to the notes layout, causing the note list and editor to be shown simultaneously on mobile in single-column view.
+
 ## 1.5.27 — 2026-06-28
 
 - **Fixed: Notes could not be created or edited (regression).** The input validation added in 1.5.26 classified the `updated` (notes) and `uploaded` (files) columns as `YYYY-MM-DD` date strings. Both are actually epoch-millisecond `INTEGER` columns (the frontend sends `Date.now()`), so every `POST`/`PUT /api/notes` was rejected with `400 'updated' must be a string in YYYY-MM-DD format`, breaking note creation, auto-save, and editing. `blueprints/api.py` now validates `updated` and `uploaded` as bounded integers (epoch milliseconds), restoring all notes functionality. The cross-device edit-conflict detection (`409`) continues to work correctly.

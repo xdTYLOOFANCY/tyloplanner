@@ -636,7 +636,9 @@ export function renderNotes() {
     return;
   }
   if (ed) ed.style.display = "block";
-  
+  var layout = document.querySelector(".noteslayout");
+  if (layout) layout.classList.add("note-editing");
+
   var titleEl = document.getElementById("noteTitle");
   var bodyEl = document.getElementById("noteBody");
   if (titleEl) titleEl.value = n.title || "";
