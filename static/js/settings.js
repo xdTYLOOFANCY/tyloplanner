@@ -8,6 +8,7 @@ import { renderBackupList } from './backup.js';
 
 var stravaEditing = false;
 var tfaPending = false;
+var sessionsNeedReload = false;
 
 function setVal(id, v) {
   var el = document.getElementById(id);
@@ -411,9 +412,23 @@ function renderSecurity() {
       '<h4 style="margin-bottom:12px;font-size:14px;color:var(--text)">📱 Active Sessions</h4>' +
       '<div id="activeSessionsBox"><p class="muted" style="font-size:13px">Loading active sessions...</p></div>';
   }
+
+  // Preserve existing sessions content across re-renders to avoid jitter
+  var existingSessionsEl = document.getElementById("activeSessionsBox");
+  var existingSessionsHtml = existingSessionsEl ? existingSessionsEl.innerHTML : null;
+  var sessionsAlreadyLoaded = !sessionsNeedReload && existingSessionsHtml &&
+    !existingSessionsHtml.includes("Loading active sessions");
+
   box.innerHTML = html;
+
   if (S.auth.enabled) {
-    loadActiveSessions();
+    if (sessionsAlreadyLoaded) {
+      var newSessionsEl = document.getElementById("activeSessionsBox");
+      if (newSessionsEl) newSessionsEl.innerHTML = existingSessionsHtml;
+    } else {
+      sessionsNeedReload = false;
+      loadActiveSessions();
+    }
   }
 }
 
@@ -477,6 +492,7 @@ export async function revokeSession(sid, refresh) {
         }, 1000);
       } else {
         toast("Session revoked.");
+        sessionsNeedReload = true;
         await refresh();
       }
     } catch(e) {

@@ -2,6 +2,11 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.28 — 2026-06-28
+
+- **Fixed: Note preview ignored single line breaks.** Pressing Enter once in the editor moved the cursor to a new line in the textarea, but the read/preview pane rendered the lines run together on one line. The markdown renderer (`configureMarked()` in `static/js/utils.js`) used marked's defaults, where a single newline is collapsed to a space (standard Markdown) and only a blank line starts a new paragraph. Enabled `breaks: true` (plus explicit `gfm: true`) so every single newline becomes a `<br>`, matching what's typed — the behavior people expect from a notes app. Affects the live preview, read mode, exported HTML, and compiled notebooks (all route through `mdToHtml`).
+- **Fixed: Raw HTML / angle-bracket text rendered as `[object Object]`.** Typing literal HTML (e.g. `<div>`, `<TODO>`) into a note produced the text `[object Object]` in the preview. The custom `html` renderer was written for an older marked API and treated marked v15's token *object* as a string. It now reads `token.text` and escapes it, so embedded tags display as safe literal text (preserving the existing XSS protection). Inline `<` in prose (e.g. `a < b`) is unaffected.
+
 ## 1.5.27 — 2026-06-28
 
 - **Fixed: Notes could not be created or edited (regression).** The input validation added in 1.5.26 classified the `updated` (notes) and `uploaded` (files) columns as `YYYY-MM-DD` date strings. Both are actually epoch-millisecond `INTEGER` columns (the frontend sends `Date.now()`), so every `POST`/`PUT /api/notes` was rejected with `400 'updated' must be a string in YYYY-MM-DD format`, breaking note creation, auto-save, and editing. `blueprints/api.py` now validates `updated` and `uploaded` as bounded integers (epoch milliseconds), restoring all notes functionality. The cross-device edit-conflict detection (`409`) continues to work correctly.

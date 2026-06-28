@@ -329,10 +329,15 @@ export function configureMarked() {
     };
     
     parser.use({
+      breaks: true,
+      gfm: true,
       extensions: [wikiLink],
       renderer: {
-        html(html) {
-          return esc(html);
+        html(token) {
+          // marked v15 passes a token object here, not a raw string.
+          // Escape its text so embedded HTML shows as literal text (and can't inject markup).
+          var raw = token && typeof token === "object" ? (token.text != null ? token.text : token.raw) : token;
+          return esc(raw);
         }
       }
     });
