@@ -1284,11 +1284,16 @@ body.dark .drop-overlay {
     min-height: 200px;
   }
 
-  /* Quick-add and notepad benefit from more height */
-  .dashboard-grid .card:has(.quick-add-form),
-  .dashboard-grid .card:has(.note-textarea) {
+  /* Quick-add benefits from more height */
+  .dashboard-grid .card:has(.quick-add-form) {
     min-height: 220px;
   }
+
+  /* Notepad: flex-grow doesn't resolve in auto-height mobile cards, which left
+     the textarea at 44px inside a 220px card (big empty gap). Give the textarea
+     a real writing area and let the card hug it. */
+  .dashboard-grid .card:has(.note-textarea) { min-height: 0; }
+  .dashboard-grid .note-textarea { min-height: 150px !important; }
 
   /* Dashboard header row */
   .dash-header {
@@ -2260,9 +2265,10 @@ body.dark .drop-overlay {
     text-align: center;
   }
 
-  /* Footer: hide on mobile */
+  /* Footer: hide on mobile (the element carries an inline display:flex, so we
+     need !important to win over it) */
   footer {
-    display: none;
+    display: none !important;
   }
 
   /* Planner: horizontal-scroll weeknav (no wrapping) */
@@ -2278,11 +2284,40 @@ body.dark .drop-overlay {
   .weeknav .label { white-space: nowrap; flex-shrink: 0; }
   #plannerView { flex-shrink: 0; }
 
-  /* Time grid: dynamic height so it fills viewport without inner scroll trap */
+  /* Time grid: dynamic height so it fills viewport without inner scroll trap.
+     Also enable horizontal scrolling so multi-day views become swipeable
+     instead of crushing 7 columns into the screen. */
   .time-grid-wrapper {
-    height: calc(100dvh - 205px);
-    min-height: 300px;
+    height: calc(100dvh - 200px);
+    min-height: 320px;
+    overflow: auto;
+    overscroll-behavior: contain;
   }
+
+  /* Pin the hour axis to the left while swiping across days */
+  .time-axis {
+    position: sticky;
+    left: 0;
+    z-index: 21;
+  }
+  .time-axis-spacer { z-index: 22; }
+
+  /* Single-day view (no .multiday) keeps the column full-width (flex:1).
+     Multi-day views give each day a comfortable, snap-scrollable width so
+     event titles are readable and you swipe one day at a time. */
+  .time-grid-inner:has(.day-columns.multiday) { width: max-content; }
+  .day-columns.multiday { scroll-snap-type: x proximity; }
+  .day-columns.multiday .day-col {
+    flex: 0 0 80vw;
+    min-width: 80vw;
+    scroll-snap-align: start;
+  }
+
+  /* Readable event blocks on the now-wider mobile columns */
+  .event.absolute { font-size: 12px; padding: 5px 8px; }
+  .event.absolute .event-title { font-size: 12.5px !important; }
+  .day-col-header { padding: 11px 8px; font-size: 13px; }
+  .day-col-header .btn { min-height: 30px; padding: 2px 10px; }
 
   /* Month calendar: reduce min cell height */
   .month-cell {
@@ -2376,57 +2411,65 @@ body.dark .drop-overlay {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  /* Notes: mobile usability improvements */
-  #noteBody { min-height: 42dvh !important; resize: none !important; }
-  .note-toolbar { overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; padding-bottom: 2px; }
-  .note-toolbar button { flex-shrink: 0; white-space: nowrap; min-height: 36px !important; }
-  .note-header-bar { flex-direction: column; gap: 8px; align-items: stretch; }
-  .note-stats { display: none !important; }
-  .note-control-grid { justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+  /* ================= Notes: mobile editor ================= */
+  /* Compact single-row header: save status left, actions right */
+  .note-header-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  /* Keep only the save status; hide word/char counters to reclaim space */
+  .note-stats { display: flex !important; flex: 0 1 auto; min-width: 0; gap: 0; }
+  .note-stats #noteWordCount,
+  .note-stats #noteCharCount,
+  .note-stats .note-stats-divider { display: none !important; }
+  .note-control-grid { justify-content: flex-end; flex-wrap: nowrap; gap: 6px; }
 
-  /* Notes: panel-switching on mobile */
+  /* Formatting toolbar: horizontally scrollable with comfy tap targets */
+  .note-toolbar { overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; padding-bottom: 2px; }
+  .note-toolbar::-webkit-scrollbar { display: none; }
+  .note-toolbar button { flex-shrink: 0; white-space: nowrap; min-height: 38px !important; padding: 6px 11px; }
+
+  /* In-note search: collapsed by default, revealed via the 🔍 toolbar button */
+  .note-search-bar { display: none; }
+  #noteEditor.note-search-open .note-search-bar { display: flex; }
+  .note-search-bar input { min-height: 40px; }
+  .note-search-btn { min-width: 42px; min-height: 40px; }
+
+  /* Roomy, iOS-zoom-safe writing area (16px font stops focus auto-zoom) */
+  #noteTitle { font-size: 18px; padding: 10px 12px; }
+  #noteBody { min-height: 52dvh !important; resize: none !important; font-size: 16px; line-height: 1.6; padding: 12px; }
+  #noteView { min-height: 52dvh; }
+
+  /* Notes: panel-switching on mobile (list <-> editor) */
   .noteslayout {
     grid-template-columns: 1fr;
     position: relative;
     overflow: hidden;
   }
+  .noteslayout .notelist { display: block; }
+  .noteslayout.note-editing .notelist { display: none !important; }
+  .noteslayout.note-editing #noteEditor { display: block !important; }
 
-  /* Default: show list, hide editor */
-  .noteslayout .notelist {
-    display: block;
-  }
+  /* Single column pane — JS (applyNoteLayout) toggles textarea vs. preview, so
+     the old `#noteView { display:none !important }` (which broke Read Mode) is
+     intentionally gone. */
+  #noteEditor .note-split-pane { grid-template-columns: 1fr !important; }
+  #noteEditor .note-toolbar .note-control-grid { display: none; } /* hide split toggle */
 
-  .noteslayout #noteEditor {
-    /* Editor is shown via JS (style="display:block"), 
-       but on mobile we also need it full-viewport */
-  }
-
-  /* When a note is selected (note-editing class set by JS) */
-  .noteslayout.note-editing .notelist {
-    display: none !important;
-  }
-
-  .noteslayout.note-editing #noteEditor {
-    display: block !important;
-  }
-
-  /* Mobile noteEditor: remove max-height constraint, scroll naturally */
-  #noteEditor .note-split-pane {
-    grid-template-columns: 1fr !important;
-  }
-
-  #noteEditor #noteView {
-    display: none !important;  /* hide preview in mobile edit mode — too cramped */
-  }
-
-  #noteEditor .note-toolbar .note-control-grid {
-    display: none; /* hide split view toggle on mobile */
-  }
+  /* Hide the floating + button while a note is open (it overlapped the text) */
+  body.note-open #globalFab { display: none !important; }
 
   /* Subtasks container: less indent */
   .subtasks-container {
     margin-left: 16px;
   }
+
+  /* Tasks: let the header wrap so the edit/delete buttons and date badge never
+     get pushed off the right edge of the screen */
+  .task-header { flex-wrap: wrap; row-gap: 6px; }
+  .task-header .badge-container { flex-wrap: wrap; }
 
   /* Drag handles in edit mode: larger touch target */
   .card-drag-handle {
@@ -2469,6 +2512,17 @@ body.dark .drop-overlay {
   main, .card-scroll, .weekgrid, .subtasks-container, .noteslayout, .modal-content, .bento-table-wrapper {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Gentle fade when switching tabs (opacity only — a transform here would
+     break position:sticky inside the planner). */
+  main > section.active {
+    animation: tabFadeIn 0.18s ease;
+  }
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Tablet-only adjustments (641px – 768px) */

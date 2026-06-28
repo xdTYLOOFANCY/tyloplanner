@@ -110,10 +110,17 @@ export function toggleNoteSplitOnly() {
 export function applyNoteLayout() {
   var readToggle = document.getElementById("noteReadToggle");
   var splitCheck = document.getElementById("noteSplitCheck");
-  
+
   var isRead = readToggle ? readToggle.checked : false;
   var isSplit = splitCheck ? splitCheck.classList.contains("on") : true;
-  
+
+  // On phones the split preview is too cramped, so we never show editor +
+  // preview side by side. Edit mode = textarea only; Read mode = preview only.
+  // This also lets Read Mode actually work on mobile (the old CSS hard-hid the
+  // preview with !important, which broke the read toggle entirely).
+  var isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  if (isMobile) isSplit = false;
+
   var ta = document.getElementById("noteBody");
   var view = document.getElementById("noteView");
   var toolbar = document.getElementById("noteToolbar");
@@ -632,12 +639,14 @@ export function renderNotes() {
     // On mobile: exit editor-panel mode
     var layout = document.querySelector(".noteslayout");
     if (layout) layout.classList.remove("note-editing");
+    document.body.classList.remove("note-open");
     if (ed) ed.style.display = "none";
     return;
   }
   if (ed) ed.style.display = "block";
   var layout = document.querySelector(".noteslayout");
   if (layout) layout.classList.add("note-editing");
+  document.body.classList.add("note-open");
 
   var titleEl = document.getElementById("noteTitle");
   var bodyEl = document.getElementById("noteBody");
@@ -677,14 +686,35 @@ export function renderNotes() {
   });
 }
 
+// Toggle the in-note search bar. On mobile it is collapsed by default to give
+// the textarea maximum room; this reveals/hides it and focuses the field.
+export function toggleNoteSearchBar() {
+  var ed = document.getElementById("noteEditor");
+  if (!ed) return;
+  var open = ed.classList.toggle("note-search-open");
+  var input = document.getElementById("noteBodySearch");
+  if (open) {
+    if (input) input.focus();
+  } else if (input) {
+    input.value = "";
+    noteBodySearch.q = "";
+    input.blur();
+    updateCountersAndPreview();
+  }
+}
+
 // Mobile panel navigation: go back from editor to note list
 export function notesGoBack() {
   currentNote = null;
   localStorage.removeItem("active_note_id");
   var layout = document.querySelector(".noteslayout");
   if (layout) layout.classList.remove("note-editing");
+  document.body.classList.remove("note-open");
   var ed = document.getElementById("noteEditor");
-  if (ed) ed.style.display = "none";
+  if (ed) {
+    ed.style.display = "none";
+    ed.classList.remove("note-search-open");
+  }
   renderNoteList();
 }
 

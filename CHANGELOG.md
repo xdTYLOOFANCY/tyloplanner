@@ -2,6 +2,21 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.29 — 2026-06-28
+
+Second-pass mobile PWA overhaul focused on the sections that were still
+unusable. **All changes are scoped to `≤640px` media queries or `matchMedia`
+mobile branches, so the desktop UI is unchanged** (verified side-by-side).
+No new dependencies — vanilla CSS/JS only.
+
+- **Planner week/multi-day views are usable again.** The old behavior crushed 7 day-columns into a phone screen, truncating every event to "B…". On mobile, multi-day views now render each day at `80vw` inside a horizontally **scroll-snapping** grid (`.day-columns.multiday`), so you swipe one readable day at a time — Google-Calendar style — while the hour axis stays pinned via `position: sticky` (`.time-axis`). Single-day view fills the width. The initial view also defaults to **Day** on phones (`planner.js` reads `matchMedia('(max-width: 640px)')`). Desktop keeps the full 7-column week grid (the `.multiday` class is inert above 640px).
+- **Notes editor: working Read Mode + reclaimed space.** Read Mode was **broken on mobile** — `#noteView` was hidden with `display:none !important`, which overrode the read-mode toggle and showed a blank pane. `applyNoteLayout()` now forces single-pane on phones (edit = textarea only, read = preview only) and the `!important` hide is gone. The editor chrome was streamlined into one compact row (save status + Read/Export/Delete), the in-note search bar is **collapsed behind a 🔍 toolbar button** (`toggleNoteSearchBar()`) instead of permanently eating a row, and the textarea uses a roomy `52dvh` at a 16px font (which also stops iOS focus auto-zoom).
+- **Quick-create "New Note" now works from anywhere.** Tapping **New Note** in the dashboard quick-create FAB created a note but never navigated to it, so nothing visibly happened. `window.newNote` now switches to the Notes tab first, so it always lands you in the new note's editor with the title focused.
+- **FAB no longer overlaps the note text.** The floating `+` button covered the bottom-right of the editor (and "new note while editing" was a confusing action). It is now hidden while a note is open (`body.note-open #globalFab`).
+- **Dashboard notepad reclaimed ~150px of dead space.** `flex-grow` doesn't resolve in the auto-height mobile cards, so the notepad textarea collapsed to 44px inside a 220px card — a tiny field floating in empty space. The textarea now gets a real 150px writing area and the card hugs it.
+- **To-do cards no longer clip their buttons.** When a task had category/date badges, the edit/delete buttons were pushed off the right edge. The task header now wraps on mobile (`.task-header { flex-wrap: wrap }`) so everything stays reachable.
+- **Polish:** footer is now reliably hidden on mobile (its inline `display:flex` needed an `!important` override); gentle opacity-only fade when switching tabs (`tabFadeIn` — opacity only, since a transform would break the planner's `position:sticky`).
+
 ## 1.5.28 — 2026-06-28
 
 - **Fixed: Note preview ignored single line breaks.** Pressing Enter once in the editor moved the cursor to a new line in the textarea, but the read/preview pane rendered the lines run together on one line. The markdown renderer (`configureMarked()` in `static/js/utils.js`) used marked's defaults, where a single newline is collapsed to a space (standard Markdown) and only a blank line starts a new paragraph. Enabled `breaks: true` (plus explicit `gfm: true`) so every single newline becomes a `<br>`, matching what's typed — the behavior people expect from a notes app. Affects the live preview, read mode, exported HTML, and compiled notebooks (all route through `mdToHtml`).

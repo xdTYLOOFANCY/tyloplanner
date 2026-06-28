@@ -3,7 +3,18 @@ import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused } fro
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 
-var dateOffset = 0, plannerRefresh = null, currentView = '7', scrolledToCurrentTimeThisSession = false, isResizing = false, lastScrollTop = null, activeReminders = [], isRendering = false, lastRenderToday = todayStr();
+// Default to a single-day agenda on phones (the multi-day grid is unreadable
+// at <=640px); desktop keeps the week view. Scoped to initial load only.
+var _isMobileViewport = (typeof window !== 'undefined' && window.matchMedia)
+  ? window.matchMedia('(max-width: 640px)').matches : false;
+var dateOffset = 0, plannerRefresh = null, currentView = _isMobileViewport ? '1' : '7', scrolledToCurrentTimeThisSession = false, isResizing = false, lastScrollTop = null, activeReminders = [], isRendering = false, lastRenderToday = todayStr();
+// Keep the view <select> in sync with the mobile default chosen above.
+if (_isMobileViewport) {
+  document.addEventListener('DOMContentLoaded', function () {
+    var _pv = document.getElementById('plannerView');
+    if (_pv) _pv.value = currentView;
+  });
+}
 var draggingEventId = null, draggingOffsetY = 0, currentUndoAction = null, undoToastTimeout = null, dragPreviewEl = null;
 var isTouchDragging = false, touchDragPointerId = null, touchDragStartClientX = 0, touchDragStartClientY = 0, touchDragLongPressTimer = null, justTouchDragged = false, lastTouchTime = 0;
 
@@ -301,8 +312,8 @@ export function renderPlanner() {
       html += '<div style="height:60px; position:relative;"><span class="time-label">' + h + ':00</span></div>';
     }
     html += '</div>';
-    html += '<div class="day-columns">';
-    
+    html += '<div class="day-columns' + (dates.length > 1 ? ' multiday' : '') + '">';
+
     dates.forEach(function(d) {
       var iso = toISO(d);
       var evs = allInstances.filter(function(e) { return e.virtualDate === iso; }).sort(function(a, b) { return (a.start || "").localeCompare(b.start || ""); });

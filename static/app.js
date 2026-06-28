@@ -39,7 +39,7 @@ import {
   renderNotes, newNote as _newNote, selectNote, openNote, noteChanged, deleteNote as _deleteNote,
   toggleNotePin, noteSearchInput, noteBodySearchInput, noteBodySearchNav,
   toggleNoteMode, noteInsert, toggleNoteReadMode, toggleNoteSplitOnly,
-  handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack,
+  handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack, toggleNoteSearchBar,
   navigateToNoteFolder, createNoteFolderPrompt, renameNoteFolderPrompt, changeNoteFolderIconPrompt, deleteNoteFolderConfirm,
   onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
   onNoteFolderDragStart, onNoteFolderDragEnd,
@@ -133,7 +133,13 @@ window.renameModalCategory = function(oldName, newName) { _renameModalCategory(o
 
 window.openTaskModal = openTaskModal;
 window.saveTaskModal = function() { _saveTaskModal(R); };
-window.newNote = function() { _newNote(R); };
+window.newNote = function() {
+  // Ensure we're on the Notes tab before creating, so the new note's editor is
+  // visible (e.g. when triggered from the dashboard quick-create FAB).
+  var notesBtn = document.querySelector("#tabs button[data-tab='notes']");
+  if (notesBtn && !notesBtn.classList.contains("active")) notesBtn.click();
+  _newNote(R);
+};
 window.deleteNote = function() { _deleteNote(R); };
 window.navigateToNoteFolder = navigateToNoteFolder;
 window.createNoteFolderPrompt = function() { createNoteFolderPrompt(R); };
@@ -235,6 +241,7 @@ window.resetShortcutsToDefault = resetShortcutsToDefault;
 window.selectNote = selectNote;
 window.openNote = openNote;
 window.notesGoBack = notesGoBack;
+window.toggleNoteSearchBar = toggleNoteSearchBar;
 window.noteChanged = noteChanged;
 window.noteSearchInput = noteSearchInput;
 window.noteBodySearchInput = noteBodySearchInput;

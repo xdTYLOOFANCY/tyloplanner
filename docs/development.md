@@ -121,3 +121,37 @@ fire once per day even across restarts. Add your own job by appending a block to
   with the `esc()` helper when injecting HTML.
 - SQL: always parameterized; table/column names only ever come from the
   hard-coded whitelists.
+
+## Mobile / responsive design
+
+The app is a single responsive layout, not a separate mobile build. The
+hard rule: **desktop must stay unchanged.** Scope every mobile tweak so it
+can't leak upward.
+
+- **The breakpoint is `640px`.** `≤640px` is "mobile" (bottom nav, FAB,
+  single-column). `≥641px` is "desktop". Tablet gets a couple of nudges in
+  the `641–768px` range. Put mobile-only CSS inside `@media (max-width: 640px)`
+  and mobile-only JS behind `window.matchMedia('(max-width: 640px)').matches`.
+- **Desktop nav vs. mobile nav.** The top `.nav-tabs` is hidden ≤640px and the
+  fixed `#bottomNav` + a global `#globalFab` take over. Elements that should
+  only appear on one side use the `.header-desktop-only` / `.mobile-only`
+  helper classes.
+- **Planner.** Multi-day time-grid views are unreadable when 7 columns share a
+  phone screen, so on mobile each `.day-col` inside `.day-columns.multiday`
+  gets `80vw` width with `scroll-snap`, the grid scrolls horizontally, and the
+  `.time-axis` is `position: sticky; left: 0`. `renderPlanner()` tags the
+  container with `multiday` only when more than one day is shown; the planner
+  also defaults to **Day** view on phones. None of this affects desktop (the
+  `.multiday` rules live in the mobile media query).
+- **Notes editor.** On phones the editor is single-pane: `applyNoteLayout()`
+  forces `isSplit = false` so edit mode is the textarea and read mode is the
+  rendered preview (never side-by-side). Do **not** re-introduce a
+  `#noteView { display: none !important }` rule — it silently breaks Read Mode.
+- **Sticky + transforms don't mix.** `position: sticky` breaks inside an
+  ancestor with a `transform`/`filter`. The tab-switch animation is therefore
+  opacity-only (`tabFadeIn`); keep it that way or the planner axis unsticks.
+- **Touch & iOS.** Aim for ≥44px tap targets (there's a blanket rule in the
+  mobile block). Inputs that can receive focus should be ≥16px font to avoid
+  iOS auto-zoom. Respect the safe area with `env(safe-area-inset-bottom)`.
+- **Verify both widths.** After any UI change, check it at ~375px *and* at
+  desktop width before calling it done.
