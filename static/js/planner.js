@@ -212,6 +212,7 @@ function calculateOverlaps(events) {
   }
 
   clusters.forEach(function(cluster) {
+    // Pass 1 — column assignment (greedy leftmost-fit).
     var cols = [];
     cluster.forEach(function(e) {
       var placed = false;
@@ -231,10 +232,25 @@ function calculateOverlaps(events) {
       }
     });
 
+    // Pass 2 — span expansion. Each event grows rightward across columns
+    // until it reaches one holding a time-overlapping event, so non-conflicting
+    // events fill the available width (matching Google Calendar's layout).
     var totalCols = cols.length;
     cluster.forEach(function(e) {
-      e._width = 100 / totalCols;
-      e._left = e._col * e._width;
+      var startVal = parseTime(e.start);
+      var endVal = parseTime(e.end);
+      var span = totalCols - e._col;
+      for (var c = e._col + 1; c < totalCols; c++) {
+        var blocked = cols[c].some(function(other) {
+          return parseTime(other.start) < endVal && parseTime(other.end) > startVal;
+        });
+        if (blocked) {
+          span = c - e._col;
+          break;
+        }
+      }
+      e._left = (e._col / totalCols) * 100;
+      e._width = (span / totalCols) * 100;
     });
   });
 }
@@ -325,7 +341,8 @@ export function renderPlanner() {
       calculateOverlaps(timedEvs);
       
       html += '<div class="day-col' + (iso === today ? ' today' : '') + '" data-iso="' + iso + '">';
-      html += '<div class="day-col-header"><span class="dname">' + DAYS[(d.getDay()+6)%7] + ' ' + d.getDate() + '</span><button class="btn ghost small" onclick="openAdd(\'' + iso + '\')">+</button></div>';
+      var dateNum = (iso === today) ? '<span class="today-circle">' + d.getDate() + '</span>' : String(d.getDate());
+      html += '<div class="day-col-header"><span class="dname">' + DAYS[(d.getDay()+6)%7] + ' ' + dateNum + '</span><button class="btn ghost small" onclick="openAdd(\'' + iso + '\')">+</button></div>';
       
       html += '<div class="all-day-bar" onclick="if (event.target === this) openAdd(\'' + iso + '\')">';
       tDue.forEach(function(t) {
@@ -354,22 +371,20 @@ export function renderPlanner() {
         var height = endMin - startMin;
         if (height < 15) height = 15;
         var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-        var timeStr = esc(e.start) + ' - ' + esc(e.end);
+        var timeStr = esc(e.start) + ' – ' + esc(e.end);
         var hasLoc = e.location && e.location.trim() !== '';
         var locStr = hasLoc ? esc(e.location.trim()) : '';
-        var detailsHtml = '';
-        if (height >= 50 && hasLoc) {
-            detailsHtml = '<div class="event-time muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
-            detailsHtml += '<div class="event-loc muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>';
-        } else {
-            var combined = timeStr + (hasLoc ? ', ' + locStr : '');
-            detailsHtml = '<div class="event-details muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + combined + '</div>';
-        }
+        // Google-style hierarchy: small time line, then bold title, then the
+        // location only when the card is tall enough to show it.
+        var locHtml = (height >= 50 && hasLoc)
+          ? '<div class="event-loc muted" style="font-size:10px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>'
+          : '';
         html += '<div class="event absolute ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')" ';
         html += 'style="--original-height:' + height + 'px; top:' + startMin + 'px; height:' + height + 'px; left:' + e._left + '%; width:calc(' + e._width + '% - 2px);">';
         html += '<div class="resize-handle top"></div>';
-        html += '<div class="event-title" style="font-weight:600; font-size:11.5px; margin-bottom:2px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(e.title) + repeatIcon + '</div>';
-        html += detailsHtml;
+        html += '<div class="event-time" style="font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
+        html += '<div class="event-title" style="font-weight:600; font-size:11px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(e.title) + repeatIcon + '</div>';
+        html += locHtml;
         html += '<div class="resize-handle bottom"></div>';
         html += '</div>';
       });
@@ -442,17 +457,12 @@ export function renderPlanner() {
                 var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
                 var hasLoc = e.location && e.location.trim() !== '';
                 var locStr = hasLoc ? esc(e.location.trim()) : '';
-                var timeStr = startStr + ' - ' + endStr;
-                var detailsHtml = '';
-                if (dur >= 50 && hasLoc) {
-                    detailsHtml = '<div class="event-time muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
-                    detailsHtml += '<div class="event-loc muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>';
-                } else {
-                    var combined = timeStr + (hasLoc ? ', ' + locStr : '');
-                    detailsHtml = '<div class="event-details muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + combined + '</div>';
-                }
-                
-                dragPreviewEl.innerHTML = '<div class="event-title" style="font-weight:600; font-size:11.5px; margin-bottom:2px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>' + detailsHtml;
+                var timeStr = startStr + ' – ' + endStr;
+                var timeHtml = '<div class="event-time" style="font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
+                var titleHtml = '<div class="event-title" style="font-weight:600; font-size:11px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>';
+                var locHtml = (dur >= 50 && hasLoc) ? '<div class="event-loc muted" style="font-size:10px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>' : '';
+
+                dragPreviewEl.innerHTML = timeHtml + titleHtml + locHtml;
                 tgc.appendChild(dragPreviewEl);
               }
               
@@ -463,7 +473,7 @@ export function renderPlanner() {
               dragPreviewEl.style.left = '0%';
               dragPreviewEl.style.width = 'calc(100% - 2px)';
               
-              var timeDiv = dragPreviewEl.querySelector('.muted');
+              var timeDiv = dragPreviewEl.querySelector('.event-time');
               if (timeDiv) {
                 timeDiv.textContent = startStr + ' – ' + endStr;
               }
@@ -1149,7 +1159,7 @@ function attachTimeGridInteractivity() {
           var startStr = (sh < 10 ? '0'+sh : sh) + ':' + (sm < 10 ? '0'+sm : sm);
           var endStr = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
 
-          var timeDiv = el.querySelector('.muted');
+          var timeDiv = el.querySelector('.event-time');
           if (timeDiv) {
             timeDiv.textContent = startStr + ' – ' + endStr;
           }
@@ -1770,16 +1780,11 @@ function updateTouchDrag(ev) {
             var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
             var hasLoc = e.location && e.location.trim() !== '';
             var locStr = hasLoc ? esc(e.location.trim()) : '';
-            var timeStr = startStr + ' - ' + endStr;
-            var detailsHtml = '';
-            if (dur >= 50 && hasLoc) {
-                detailsHtml = '<div class="event-time muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
-                detailsHtml += '<div class="event-loc muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>';
-            } else {
-                var combined = timeStr + (hasLoc ? ', ' + locStr : '');
-                detailsHtml = '<div class="event-details muted" style="font-size:10.5px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + combined + '</div>';
-            }
-            dragPreviewEl.innerHTML = '<div class="event-title" style="font-weight:600; font-size:11.5px; margin-bottom:2px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>' + detailsHtml;
+            var timeStr = startStr + ' – ' + endStr;
+            var timeHtml = '<div class="event-time" style="font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
+            var titleHtml = '<div class="event-title" style="font-weight:600; font-size:11px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>';
+            var locHtml = (dur >= 50 && hasLoc) ? '<div class="event-loc muted" style="font-size:10px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>' : '';
+            dragPreviewEl.innerHTML = timeHtml + titleHtml + locHtml;
             tgc.appendChild(dragPreviewEl);
           }
           
@@ -1791,7 +1796,7 @@ function updateTouchDrag(ev) {
           dragPreviewEl.style.left = '0%';
           dragPreviewEl.style.width = 'calc(100% - 2px)';
           
-          var timeDiv = dragPreviewEl.querySelector('.muted');
+          var timeDiv = dragPreviewEl.querySelector('.event-time');
           if (timeDiv) {
             timeDiv.textContent = startStr + ' – ' + endStr;
           }

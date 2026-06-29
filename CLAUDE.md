@@ -16,8 +16,8 @@ for architecture and the full API reference — read it before making changes.
 pip3 install -r requirements.txt       # deps
 python3 app.py                         # run dev server on :8000 (no login)
 AUTH_PASSWORD=dev python3 app.py       # run with login enabled
-python3 -m py_compile app.py           # syntax-check backend
-node --check static/app.js             # syntax-check frontend
+python3 -m py_compile app.py           # syntax-check backend (also runs automatically after every edit)
+node --check static/app.js             # syntax-check frontend (also runs automatically after every edit)
 docker compose up -d --build           # production build/run
 ```
 
@@ -52,7 +52,7 @@ User settings live in the `kv` table with a `set_` prefix.
   guard; anything that must be reachable before login goes in `LOGIN_ASSETS`.
 - Asset versioning is automated on startup. No need to manually bump cache versions in static/sw.js or query params in index.html.
 - Update `CHANGELOG.md` and the relevant file in `docs/` with user-facing
-  changes.
+  changes. Use `/changelog-entry` to draft and prepend a versioned entry automatically.
 
 ## Adding a feature
 

@@ -2,6 +2,22 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.31 — 2026-06-29
+
+Desktop calendar visual overhaul — the planner week/day grid now matches Google
+Calendar's density and layout while staying fully theme-driven (CSS variables
+only, so every theme works automatically). Scoped to `static/js/planner.js` and
+`static/style.css`; no backend, template, or dependency changes.
+
+- **Events expand into free space (two-pass overlap layout).** `calculateOverlaps()` previously split every event in an overlap cluster into equal `100% / columns` widths, so a lone event stuck in a 3-wide cluster stayed at 33% even when the columns beside it were empty at its time. A new second pass lets each event grow rightward across adjacent columns until it reaches one holding a genuinely time-overlapping event — so non-conflicting events fill the available width, exactly like Google Calendar. Truly conflicting events are unaffected.
+- **Event cards: time-first hierarchy, tighter density.** Timed event cards now show the time on a small (`10px`, 75 %-opacity) line *above* the bold title (`11px`), with the location below only when the card is tall enough (`≥50px`) — matching Google's convention. Padding dropped to `3px 6px` and the base font to `11px` so cards read cleanly at narrow column widths. The drag-preview and resize live-update labels were updated to match (they now target `.event-time`).
+- **Today indicator + column tint.** Today's date number in the day header sits inside an accent-filled circle (`.today-circle`), the day-name font ticked up to 13px, and today's time-grid column gets a ~4 % accent wash (`rgba(var(--accent-rgb), 0.04)`) — a subtle highlight that reads in every theme.
+- **Half-hour grid lines.** Each hour cell renders a faint dashed `::after` line at its midpoint, giving the grid the same 30-minute rhythm as Google Calendar without extra DOM.
+- **Month view: solid pill chips.** Month-view events switched from a `var(--panel2)` background with a 3px colored left border to full-color pills (type-color background, white text, 3px radius), matching Google's month layout. Type colors map to the same theme variables as the week view (`--accent2` study, `--red` work, `--orange` personal, `--green` workout, etc.).
+
+Drag-and-drop, resize, touch-drag, all-day events, recurrence, ICS
+import/export, and the mobile responsive rules are unchanged.
+
 ## 1.5.30 — 2026-06-28
 
 Follow-up fixes from on-device mobile testing of 1.5.29.

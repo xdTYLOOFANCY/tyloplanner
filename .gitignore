@@ -18,3 +18,10 @@ take_screenshots.js
 node_modules/
 package.json
 package-lock.json
+
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# Test cache
+.pytest_cache/

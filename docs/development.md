@@ -143,6 +143,17 @@ can't leak upward.
   container with `multiday` only when more than one day is shown; the planner
   also defaults to **Day** view on phones. None of this affects desktop (the
   `.multiday` rules live in the mobile media query).
+- **Calendar layout (desktop).** Timed events are positioned by
+  `calculateOverlaps()` in `planner.js`: pass 1 assigns each event to the
+  leftmost free column (greedy fit); pass 2 lets every event span rightward
+  across adjacent columns until it reaches a time-overlapping event, so
+  non-conflicting events widen to fill free space (Google-Calendar style).
+  Each card renders `.event-time` (small) above `.event-title` (bold) with an
+  optional `.event-loc`; the drag-preview and resize handlers live-update the
+  time by targeting `.event-time`. Today gets a `.today-circle` in the header
+  and a `rgba(var(--accent-rgb), 0.04)` wash on its column; month-view chips are
+  solid type-colored pills. All calendar colors come from theme CSS variables —
+  never hard-code one.
 - **Notes editor.** On phones the editor is single-pane: `applyNoteLayout()`
   forces `isSplit = false` so edit mode is the textarea and read mode is the
   rendered preview (never side-by-side). Do **not** re-introduce a
