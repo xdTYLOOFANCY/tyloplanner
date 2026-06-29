@@ -18,36 +18,7 @@
 
 ---
 
-## Preview
-
-### 🎨 Modular Dashboard (Dark Theme / Glassmorphism Style)
-<p align="center">
-  <img src="docs/images/dashboard_dark_glass.png" width="100%" alt="TyloPlanner Dashboard (Dark / Glassmorphism)">
-</p>
-
-### 📅 Week Planner (Dark / Default Style) & 📊 Analytics Dashboard (Dark / Glass Style)
-<p align="center">
-  <img src="docs/images/planner_dark_default.png" width="49%" alt="TyloPlanner Week Planner (Dark / Default)">
-  <img src="docs/images/analytics_dark_glass.png" width="49%" alt="TyloPlanner Analytics (Dark / Glassmorphism)">
-</p>
-
-### 📝 Notes Split-Editor (Light / Default Style) & 📁 File Manager (Light / Cyberpunk Style)
-<p align="center">
-  <img src="docs/images/notes_light_default.png" width="49%" alt="TyloPlanner Notes Split Editor (Light / Default)">
-  <img src="docs/images/files_light_cyberpunk.png" width="49%" alt="TyloPlanner File Manager (Light / Cyberpunk)">
-</p>
-
-### 🎓 Exams & Grades (Light / Material Style) & ⚡ Habit Tracker (Dark / Cyberpunk Style)
-<p align="center">
-  <img src="docs/images/exams_light_material.png" width="49%" alt="TyloPlanner Exams (Light / Material)">
-  <img src="docs/images/habits_dark_cyberpunk.png" width="49%" alt="TyloPlanner Habits (Dark / Cyberpunk)">
-</p>
-
-### 📋 To-Do & Task List (Dark / Material Style) & 🏃 Workout Log (Light / Glass Style)
-<p align="center">
-  <img src="docs/images/tasks_dark_material.png" width="49%" alt="TyloPlanner Tasks (Dark / Material)">
-  <img src="docs/images/workouts_light_glass.png" width="49%" alt="TyloPlanner Workouts (Light / Glass)">
-</p>
+**[tyloplanner.brambiemans.com](https://tyloplanner.brambiemans.com/)** — screenshots, feature overview, and live demo.
 
 ---
 

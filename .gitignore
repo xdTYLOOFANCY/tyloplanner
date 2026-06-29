@@ -6,6 +6,12 @@ __pycache__/
 *.pyc
 *.db
 
+# Dev scratch scripts and local backups
+scratch/
+
+# Claude Code editor config
+.claude/
+
 # Landing Page & Marketing (Hosted separately on Cloudflare Pages)
 landing-page/
 take_screenshots.js

@@ -6,7 +6,8 @@ Project context for Claude Code (and other AI coding agents).
 
 TyloPlanner: a self-hosted personal dashboard for students. Modular Flask
 backend (`app.py`, `blueprints/`, `helpers.py`), modular vanilla-JS frontend
-(`static/`), SQLite storage, Docker deployment. See `docs/development.md`
+(`static/`), SQLite storage, Docker deployment. Landing page and feature
+overview at **https://tyloplanner.brambiemans.com/**. See `docs/development.md`
 for architecture and the full API reference — read it before making changes.
 
 ## Commands

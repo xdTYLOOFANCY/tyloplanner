@@ -3060,6 +3060,238 @@ html.transition-backward::view-transition-new(root) {
   --scrollbar-thumb-hover: var(--accent2);
 }
 
+/* =========================================
+   Claude Desktop Dark Theme
+   Matches Claude desktop / Claude Code dark mode aesthetic:
+   warm charcoal background, minimal borders, orange accent.
+   ========================================= */
+
+[data-theme-style="claude"] {
+  --bg: #1c1c1c;
+  --panel: #242424;
+  --panel2: #2c2c2c;
+  --border: #353535;
+  --text: #ececec;
+  --muted: #888888;
+  --accent: #d97757;
+  --accent2: #c96442;
+  --accent-rgb: 217, 119, 87;
+  --green: #22c55e;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --radius: 10px;
+  --scrollbar-thumb: #3a3a3a;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: #d97757;
+}
+
+/* body & background */
+[data-theme-style="claude"] body {
+  background: var(--bg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* nav: nearly flush with background, very subtle border */
+[data-theme-style="claude"] .top-nav-container {
+  background: #1c1c1c;
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+[data-theme-style="claude"] .nav-brand h1 {
+  background: linear-gradient(135deg, #d97757 0%, #e8a87c 50%, #c96442 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* active tab: warm underline, not filled */
+[data-theme-style="claude"] .nav-tabs button {
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+[data-theme-style="claude"] .nav-tabs button.active {
+  background: #2a2a2a;
+  color: #ececec;
+  border: 1px solid #3a3a3a;
+  box-shadow: none;
+}
+
+[data-theme-style="claude"] .nav-tabs button:hover:not(.active) {
+  background: #262626;
+  color: #d0d0d0;
+}
+
+/* cards: clean, tight border, subtle lift shadow */
+[data-theme-style="claude"] .card {
+  background: #242424;
+  border: 1px solid #333333;
+  border-radius: var(--radius);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme-style="claude"] .card h3 {
+  color: #777777;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* inputs & selects */
+[data-theme-style="claude"] input,
+[data-theme-style="claude"] select,
+[data-theme-style="claude"] textarea {
+  background: #1c1c1c;
+  border: 1px solid #3a3a3a;
+  color: #ececec;
+  border-radius: 7px;
+}
+
+[data-theme-style="claude"] input:focus,
+[data-theme-style="claude"] select:focus,
+[data-theme-style="claude"] textarea:focus {
+  border-color: #d97757;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.15);
+}
+
+/* buttons */
+[data-theme-style="claude"] .btn {
+  background: #2c2c2c;
+  border: 1px solid #3a3a3a;
+  color: #ececec;
+  border-radius: 7px;
+  font-weight: 500;
+}
+
+[data-theme-style="claude"] .btn:hover {
+  background: #333333;
+  border-color: #444444;
+}
+
+[data-theme-style="claude"] .btn.ghost {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  color: #adadad;
+}
+
+[data-theme-style="claude"] .btn.ghost:hover {
+  background: #2a2a2a;
+  color: #ececec;
+}
+
+/* list items */
+[data-theme-style="claude"] .list-item {
+  border-bottom: 1px solid #2e2e2e;
+  padding: 9px 0;
+}
+
+/* modal */
+[data-theme-style="claude"] .modal-content {
+  background: #242424;
+  border: 1px solid #353535;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme-style="claude"] .modal-content h3,
+[data-theme-style="claude"] .modal-content h2 {
+  color: #ececec;
+  font-weight: 600;
+}
+
+/* calendar & time-grid */
+[data-theme-style="claude"] .time-grid-wrapper,
+[data-theme-style="claude"] .time-axis,
+[data-theme-style="claude"] .day-col-header,
+[data-theme-style="claude"] .all-day-bar,
+[data-theme-style="claude"] .month-header-cell,
+[data-theme-style="claude"] .month-cell {
+  border-color: #2e2e2e;
+}
+
+[data-theme-style="claude"] .time-grid-wrapper {
+  background: #1e1e1e;
+}
+
+[data-theme-style="claude"] .day-col-header,
+[data-theme-style="claude"] .all-day-bar,
+[data-theme-style="claude"] .month-header-cell {
+  background: #242424;
+  color: #888888;
+}
+
+[data-theme-style="claude"] .month-cell {
+  background: #1e1e1e;
+}
+
+[data-theme-style="claude"] .month-cell.other-month {
+  background: #1a1a1a;
+  color: #555555;
+}
+
+[data-theme-style="claude"] .month-cell.today {
+  background: rgba(217, 119, 87, 0.08);
+}
+
+[data-theme-style="claude"] .event.absolute,
+[data-theme-style="claude"] .event {
+  border-radius: 5px;
+}
+
+/* stat cards */
+[data-theme-style="claude"] .stat {
+  background: #242424;
+  border: 1px solid #333333;
+  border-radius: 8px;
+}
+
+/* ios toggles */
+[data-theme-style="claude"] .ios-toggle {
+  background: #3a3a3a;
+}
+
+[data-theme-style="claude"] .ios-toggle:checked {
+  background: #d97757;
+}
+
+/* hcheck habit checkboxes */
+[data-theme-style="claude"] .hcheck {
+  border-color: #3a3a3a;
+  background: #1c1c1c;
+}
+
+[data-theme-style="claude"] .hcheck.on {
+  background: #d97757;
+  border-color: #d97757;
+}
+
+/* shortcut buttons */
+[data-theme-style="claude"] .shortcut-btn {
+  background: #242424;
+  border: 1px solid #333333;
+  border-radius: 7px;
+  color: #adadad;
+}
+
+[data-theme-style="claude"] .shortcut-btn:hover {
+  background: #2c2c2c;
+  border-color: #d97757;
+  color: #ececec;
+}
+
+/* badges */
+[data-theme-style="claude"] .badge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+
 /* 4 ── High-contrast accessibility override */
 @media (prefers-contrast: more) {
   :root,
