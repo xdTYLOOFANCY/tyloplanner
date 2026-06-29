@@ -374,16 +374,16 @@ export function renderPlanner() {
         var timeStr = esc(e.start) + ' – ' + esc(e.end);
         var hasLoc = e.location && e.location.trim() !== '';
         var locStr = hasLoc ? esc(e.location.trim()) : '';
-        // Google-style hierarchy: small time line, then bold title, then the
-        // location only when the card is tall enough to show it.
+        // Google-Calendar hierarchy: bold title first (wraps so the full name
+        // stays readable), then the time, then the location when there's room.
         var locHtml = (height >= 50 && hasLoc)
-          ? '<div class="event-loc muted" style="font-size:10px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>'
+          ? '<div class="event-loc">' + locStr + '</div>'
           : '';
         html += '<div class="event absolute ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')" ';
         html += 'style="--original-height:' + height + 'px; top:' + startMin + 'px; height:' + height + 'px; left:' + e._left + '%; width:calc(' + e._width + '% - 2px);">';
         html += '<div class="resize-handle top"></div>';
-        html += '<div class="event-time" style="font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
-        html += '<div class="event-title" style="font-weight:600; font-size:11px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(e.title) + repeatIcon + '</div>';
+        html += '<div class="event-title">' + esc(e.title) + repeatIcon + '</div>';
+        html += '<div class="event-time">' + timeStr + '</div>';
         html += locHtml;
         html += '<div class="resize-handle bottom"></div>';
         html += '</div>';
@@ -458,11 +458,11 @@ export function renderPlanner() {
                 var hasLoc = e.location && e.location.trim() !== '';
                 var locStr = hasLoc ? esc(e.location.trim()) : '';
                 var timeStr = startStr + ' – ' + endStr;
-                var timeHtml = '<div class="event-time" style="font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
-                var titleHtml = '<div class="event-title" style="font-weight:600; font-size:11px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>';
-                var locHtml = (dur >= 50 && hasLoc) ? '<div class="event-loc muted" style="font-size:10px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>' : '';
+                var titleHtml = '<div class="event-title">' + esc(title) + repeatIcon + '</div>';
+                var timeHtml = '<div class="event-time">' + timeStr + '</div>';
+                var locHtml = (dur >= 50 && hasLoc) ? '<div class="event-loc">' + locStr + '</div>' : '';
 
-                dragPreviewEl.innerHTML = timeHtml + titleHtml + locHtml;
+                dragPreviewEl.innerHTML = titleHtml + timeHtml + locHtml;
                 tgc.appendChild(dragPreviewEl);
               }
               
@@ -725,14 +725,13 @@ export function renderPlanner() {
         if (lastScrollTop !== null) {
           wrapper.scrollTop = lastScrollTop;
         } else if (!scrolledToCurrentTimeThisSession) {
-          var now = new Date();
-          var nowMin = now.getHours() * 60 + now.getMinutes();
-          var targetScroll = allDayH + nowMin - (wrapper.clientHeight - headerH) / 3;
-          wrapper.scrollTop = Math.max(0, targetScroll);
+          // Open on the morning (~7am, or the earliest event) so the bulk of
+          // the day is visible at a glance — like Google Calendar.
+          wrapper.scrollTop = Math.max(0, allDayH + minStart - 8);
           scrolledToCurrentTimeThisSession = true;
           lastScrollTop = wrapper.scrollTop;
         } else {
-          wrapper.scrollTop = Math.max(0, minStart - 20);
+          wrapper.scrollTop = Math.max(0, allDayH + minStart - 8);
           lastScrollTop = wrapper.scrollTop;
         }
         isRendering = false;
@@ -743,10 +742,8 @@ export function renderPlanner() {
             if (lastScrollTop !== null) {
               wrapper.scrollTop = lastScrollTop;
             } else if (!scrolledToCurrentTimeThisSession) {
-              var now = new Date();
-              var nowMin = now.getHours() * 60 + now.getMinutes();
-              var targetScroll = allDayH + nowMin - (wrapper.clientHeight - headerH) / 3;
-              wrapper.scrollTop = Math.max(0, targetScroll);
+              // Open on the morning (~7am, or the earliest event), like GCal.
+              wrapper.scrollTop = Math.max(0, allDayH + minStart - 8);
               scrolledToCurrentTimeThisSession = true;
               lastScrollTop = wrapper.scrollTop;
             }
@@ -779,11 +776,8 @@ function scrollToCurrentTimeLineIfVisible() {
   document.querySelectorAll('.day-col-header').forEach(function(el) { if (el.offsetHeight > headerH) headerH = el.offsetHeight; });
   document.querySelectorAll('.all-day-bar').forEach(function(el) { if (el.offsetHeight > allDayH) allDayH = el.offsetHeight; });
   
-  var now = new Date();
-  var nowMin = now.getHours() * 60 + now.getMinutes();
-  var targetScroll = allDayH + nowMin - (wrapper.clientHeight - headerH) / 3;
-  
-  wrapper.scrollTop = Math.max(0, targetScroll);
+  // Open on the morning (~7am) so the day is visible from the top, like GCal.
+  wrapper.scrollTop = Math.max(0, allDayH + 7 * 60 - 8);
   scrolledToCurrentTimeThisSession = true;
   lastScrollTop = wrapper.scrollTop;
 }
@@ -1781,10 +1775,10 @@ function updateTouchDrag(ev) {
             var hasLoc = e.location && e.location.trim() !== '';
             var locStr = hasLoc ? esc(e.location.trim()) : '';
             var timeStr = startStr + ' – ' + endStr;
-            var timeHtml = '<div class="event-time" style="font-size:10px; color:rgba(255,255,255,0.75); pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + timeStr + '</div>';
-            var titleHtml = '<div class="event-title" style="font-weight:600; font-size:11px; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(title) + repeatIcon + '</div>';
-            var locHtml = (dur >= 50 && hasLoc) ? '<div class="event-loc muted" style="font-size:10px; color:inherit; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📍 ' + locStr + '</div>' : '';
-            dragPreviewEl.innerHTML = timeHtml + titleHtml + locHtml;
+            var titleHtml = '<div class="event-title">' + esc(title) + repeatIcon + '</div>';
+            var timeHtml = '<div class="event-time">' + timeStr + '</div>';
+            var locHtml = (dur >= 50 && hasLoc) ? '<div class="event-loc">' + locStr + '</div>' : '';
+            dragPreviewEl.innerHTML = titleHtml + timeHtml + locHtml;
             tgc.appendChild(dragPreviewEl);
           }
           

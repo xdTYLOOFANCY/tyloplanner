@@ -2,6 +2,29 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.32 — 2026-06-29
+
+Calendar readability pass — a second round on the planner to make it read and
+behave like Google Calendar, based on a side-by-side comparison. Scoped to
+`static/js/planner.js` and `static/style.css`; no backend or dependency changes.
+
+- **Whole day visible at a glance.** The desktop time grid was a fixed `730px`
+  tall, so only ~8:00–18:00 fit on screen. It now fills the viewport
+  (`height: calc(100vh - 130px)`, `min-height: 520px`), and the planner opens
+  scrolled to ~7am (top-aligned on the morning, or the earliest event) instead
+  of centering on the current time — so on a normal desktop you see roughly
+  7:00–midnight without scrolling, like Google Calendar.
+- **Event cards read like Google.** The bold **title now comes first and
+  wraps** onto multiple lines so the full event name is readable, instead of
+  being truncated to "BA3B13 - BA3 - VO.2 Neuro Onc…". The time sits below the
+  title and the location below that (the 📍 pin was dropped for a cleaner look),
+  both in a lighter weight. Card overflow still clips cleanly, and hovering a
+  short event expands it to show everything. (This reverses the time-first
+  ordering from 1.5.31 — real Google Calendar is title-first.)
+
+Drag-and-drop, resize, touch-drag, the overlap layout, today indicator, and the
+mobile responsive rules are unchanged.
+
 ## 1.5.31 — 2026-06-29
 
 Desktop calendar visual overhaul — the planner week/day grid now matches Google
