@@ -129,26 +129,28 @@
   </section>
 
   <section id="tab-planner">
-    <div class="weeknav">
-      <select id="plannerView" class="btn ghost small" onchange="changePlannerView(this.value)" style="margin-right:8px; padding-top:4px; padding-bottom:4px; border:none; outline:none; height:26px;">
+    <div class="weeknav" x-data>
+      <select id="plannerView" class="btn ghost" onchange="changePlannerView(this.value)">
         <option value="1">Day</option>
         <option value="3">3 Days</option>
         <option value="5">5 Days</option>
         <option value="7" selected>Week</option>
         <option value="month">Month</option>
       </select>
-      <div x-data class="row" style="display:inline-flex; align-items:center; gap:4px;">
-        <button class="btn ghost small" onclick="moveWeek(-1)">&#8249;</button>
-        <button class="btn ghost small" onclick="moveWeek(0)">Today</button>
-        <button class="btn ghost small" onclick="moveWeek(1)">&#8250;</button>
-        <button class="btn ghost small header-desktop-only" @click="$dispatch('open-shortcuts-modal')" style="margin-left:4px;">⌨️ Shortcuts</button>
-        <button class="btn ghost small" @click="renderPlannerCalendarsPanel(); $dispatch('open-planner-calendars-modal')" style="margin-left:4px;">⚙️ Calendars</button>
-      </div>
-      <div style="position:relative; display:inline-block; vertical-align:middle;" class="header-desktop-only">
-        <input id="plannerSearch" placeholder="Search events..." style="margin-left:8px; padding:4px 8px; font-size:12px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text); width:150px; height:26px; box-sizing:border-box;" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
-        <div id="plannerSearchResults" style="display:none; position:absolute; top:28px; left:8px; width:300px; max-height:250px; overflow-y:auto; background:var(--panel); border:1px solid var(--border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.15); z-index:1000; padding:4px 0; text-align:left;"></div>
+      <div class="weeknav-nav">
+        <button class="btn ghost icon" onclick="moveWeek(-1)" aria-label="Previous">&#8249;</button>
+        <button class="btn ghost" onclick="moveWeek(0)">Today</button>
+        <button class="btn ghost icon" onclick="moveWeek(1)" aria-label="Next">&#8250;</button>
       </div>
       <span class="label" id="weekLabel"></span>
+      <div class="weeknav-actions">
+        <button class="btn ghost header-desktop-only" @click="$dispatch('open-shortcuts-modal')">⌨️ Shortcuts</button>
+        <button class="btn ghost" @click="renderPlannerCalendarsPanel(); $dispatch('open-planner-calendars-modal')">⚙️ Calendars</button>
+        <div class="planner-search">
+          <input id="plannerSearch" placeholder="🔍  Search events…" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
+          <div id="plannerSearchResults" class="search-results"></div>
+        </div>
+      </div>
     </div>
     <div class="weekgrid" id="weekGrid"></div>
   </section>
@@ -547,7 +549,7 @@
 
   <dialog id="eventModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-event-modal.window="open = true" @close-event-modal.window="open = false" @click="if($event.target === $el) open = false">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
-      <h3 id="evModalTitleText" style="margin-bottom:16px; font-size:16px; font-weight:700;">Event Details</h3>
+      <h3 id="evModalTitleText" tabindex="-1" autofocus style="margin-bottom:16px; font-size:16px; font-weight:700; outline:none;">Event Details</h3>
       <input type="hidden" id="evModalId">
       
       <div style="display:flex; flex-direction:column; gap:12px;">

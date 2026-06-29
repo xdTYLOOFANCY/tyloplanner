@@ -6,7 +6,7 @@
 import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
 import { todayStr, esc, delRow as _delRow, navigateWithTransition } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
-import { applyTheme, toggleTheme, applyAccentFromSettings } from './js/theme.js';
+import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings } from './js/theme.js';
 import { exportData, importData } from './js/backup.js';
 import { 
   renderDashboard, 
@@ -517,6 +517,8 @@ window.addEventListener("offline", function() {
 });
 
 refresh(renderAll).then(function() {
+  applyThemeStyleFromSettings(SET);
+  applyAccentFromSettings(SET);
   setPlannerRefresh(R);
   updateOfflineBanner();
   startLiveSync();

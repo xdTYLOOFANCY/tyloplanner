@@ -157,6 +157,15 @@ can't leak upward.
   130px)`) and the planner opens scrolled to ~7am (`renderPlanner()` and
   `scrollToCurrentTimeLineIfVisible()`) so most of the day shows at a glance.
   All calendar colors come from theme CSS variables — never hard-code one.
+- **Planner toolbar & modal focus.** The `.weeknav` toolbar wraps (`flex-wrap`)
+  on mobile instead of side-scrolling, and `.planner-search` goes full-width
+  there. Search results call `navigateToAndEditEvent(id, date, false)` — the
+  third arg is `false`, so it jumps to the event and pulses it (`.event-flash`)
+  **without** opening the editor; the dashboard omits the arg to keep opening it.
+  The event modal's `<h3>` has `autofocus` so the native `<dialog>.showModal()`
+  lands focus on the heading, not the title input — `openAdd()`/`editEvent()`
+  only focus the title on desktop (`isMobileViewport()` guard) so phones don't
+  pop the keyboard before the user picks a field.
 - **Notes editor.** On phones the editor is single-pane: `applyNoteLayout()`
   forces `isSplit = false` so edit mode is the textarea and read mode is the
   rendered preview (never side-by-side). Do **not** re-introduce a

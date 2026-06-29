@@ -261,6 +261,14 @@ function parseTime(t) {
   return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
 }
 
+// Live check (the viewport can change after load), used to avoid auto-focusing
+// inputs on phones — that pops the on-screen keyboard before the user has
+// chosen which field to fill.
+function isMobileViewport() {
+  return typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(max-width: 640px)').matches : false;
+}
+
 export function renderPlanner() {
   safeRender("planner", () => {
     isRendering = true;
@@ -1368,7 +1376,12 @@ export function openAdd(iso, defaultStart, defaultEnd) {
   updateDurationFromTimes();
   updateRecurrenceVisibility();
   
-  document.getElementById('evModalTitle').focus();
+  // Desktop: focus the title for quick typing. Mobile: leave focus on the
+  // dialog heading (autofocus in index.html) so the keyboard stays down and the
+  // user can pick which field to fill first.
+  if (!isMobileViewport()) {
+    setTimeout(function () { var t = document.getElementById('evModalTitle'); if (t) t.focus(); }, 50);
+  }
 }
 
 export function editEvent(id) {
@@ -1401,7 +1414,12 @@ export function editEvent(id) {
   updateDurationFromTimes();
   updateRecurrenceVisibility();
 
-  document.getElementById('evModalTitle').focus();
+  // Desktop: focus the title for quick typing. Mobile: leave focus on the
+  // dialog heading (autofocus in index.html) so the keyboard stays down and the
+  // user can pick which field to fill first.
+  if (!isMobileViewport()) {
+    setTimeout(function () { var t = document.getElementById('evModalTitle'); if (t) t.focus(); }, 50);
+  }
 }
 
 
@@ -1646,7 +1664,7 @@ export function searchEvents() {
       var locStr = e.location ? ' 📍 ' + e.location : '';
       
       html += '<div class="search-result-item" style="padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--border); transition:background 0.2s;" ' +
-              'onclick="navigateToAndEditEvent(\'' + e.id + '\', \'' + e.date + '\')">' +
+              'onclick="navigateToAndEditEvent(\'' + e.id + '\', \'' + e.date + '\', false)">' +
               '<div style="font-weight:600; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(e.title) + '</div>' +
               '<div style="font-size:11px; color:var(--muted); margin-top:2px;">' + dateStr + ' • ' + timeStr + esc(locStr) + '</div>' +
               '</div>';
@@ -1676,7 +1694,7 @@ export function hideSearchSoon() {
   }, 200);
 }
 
-export function navigateToAndEditEvent(id, date) {
+export function navigateToAndEditEvent(id, date, openEditor) {
   var tabBtn = document.querySelector('#tabs button[data-tab="planner"]');
   if (tabBtn) {
     tabBtn.click();
@@ -1715,12 +1733,30 @@ export function navigateToAndEditEvent(id, date) {
   }
   
   renderPlanner();
-  editEvent(id);
-  
+  // Search just jumps to the event and flags it; it does NOT open the editor.
+  // The dashboard still passes openEditor !== false to open it directly.
+  if (openEditor !== false) {
+    editEvent(id);
+  } else {
+    highlightEvent(id);
+  }
+
   var resultsDiv = document.getElementById("plannerSearchResults");
   if (resultsDiv) resultsDiv.style.display = "none";
   var searchInput = document.getElementById("plannerSearch");
   if (searchInput) searchInput.value = "";
+}
+
+// Briefly pulse an event (after navigating to it from search) and scroll it
+// into view, so the user can spot it without the editor popping open.
+function highlightEvent(id) {
+  setTimeout(function () {
+    var el = document.querySelector('.event[data-id="' + id + '"]');
+    if (!el) return;
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+    el.classList.add('event-flash');
+    setTimeout(function () { el.classList.remove('event-flash'); }, 1600);
+  }, 80);
 }
 
 function preventDefaultTouchMove(e) {

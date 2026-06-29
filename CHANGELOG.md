@@ -2,6 +2,31 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.33 — 2026-06-29
+
+Planner toolbar + interaction fixes from real-use feedback.
+
+- **Planner toolbar redesigned.** The controls row was cramped (tiny buttons, a
+  150px search box) and on phones it was forced into a single horizontally
+  **side-scrolling** line — ugly and easy to miss. The toolbar now uses
+  full-size buttons, a prominent date label, and a larger search box with a 🔍
+  affordance. On mobile it **wraps onto multiple rows** instead of side-scrolling
+  (view + day-nav, then the date label, then actions and a **full-width search**),
+  and search — previously desktop-only — is now available on phones.
+- **Search jumps to an event without editing it.** Picking a search result (or
+  pressing Enter) navigated to the correct week but then **immediately opened the
+  event in edit mode**, which was unwanted. It now just scrolls to the event and
+  briefly **pulses it** (`.event-flash`) so you can find it; you open the editor
+  yourself by tapping it. (The dashboard's "upcoming" list still opens the editor
+  on click — `navigateToAndEditEvent(id, date, openEditor)` gained an optional
+  flag; search passes `false`.)
+- **No keyboard ambush on mobile.** Opening the create/edit event modal on a
+  phone instantly popped the on-screen keyboard because the native
+  `<dialog>.showModal()` auto-focused the title field. Initial focus now goes to
+  the dialog heading (`autofocus` on the `<h3>`), so the keyboard stays down and
+  you choose which field to fill first. Desktop still auto-focuses the title for
+  quick typing.
+
 ## 1.5.32 — 2026-06-29
 
 Calendar readability pass — a second round on the planner to make it read and
