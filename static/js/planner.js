@@ -7,7 +7,7 @@ import { renderDashboard } from './dashboard.js';
 // at <=640px); desktop keeps the week view. Scoped to initial load only.
 var _isMobileViewport = (typeof window !== 'undefined' && window.matchMedia)
   ? window.matchMedia('(max-width: 640px)').matches : false;
-var dateOffset = 0, plannerRefresh = null, currentView = _isMobileViewport ? '1' : '7', scrolledToCurrentTimeThisSession = false, isResizing = false, lastScrollTop = null, activeReminders = [], isRendering = false, lastRenderToday = todayStr();
+var dateOffset = 0, plannerRefresh = null, currentView = _isMobileViewport ? '1' : '7', scrolledToCurrentTimeThisSession = false, isResizing = false, isDragCreating = false, lastScrollTop = null, activeReminders = [], isRendering = false, lastRenderToday = todayStr();
 // Keep the view <select> in sync with the mobile default chosen above.
 if (_isMobileViewport) {
   document.addEventListener('DOMContentLoaded', function () {
@@ -383,6 +383,7 @@ function isMobileViewport() {
 }
 
 export function renderPlanner() {
+  if (isDragCreating) return;
   safeRender("planner", () => {
     isRendering = true;
   lastRenderToday = todayStr();
@@ -484,7 +485,7 @@ export function renderPlanner() {
       var dateNum = (iso === today) ? '<span class="today-circle">' + d.getDate() + '</span>' : String(d.getDate());
       html += '<div class="day-col-header"><span class="dname">' + DAYS[(d.getDay()+6)%7] + ' ' + dateNum + '</span><button class="btn ghost small" onclick="openAdd(\'' + iso + '\')">+</button></div>';
       
-      html += '<div class="all-day-bar" onclick="if (event.target === this) openAdd(\'' + iso + '\')">';
+      html += '<div class="all-day-bar" onclick="if (event.target === this) openAdd(\'' + iso + '\', \'\', \'\', true)">';
       tDue.forEach(function(t) {
         html += '<div class="event" style="border-left-color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:6px"><span class="hcheck' + (t.done ? ' on' : '') + '" onclick="toggleTask(\'' + t.id + '\',' + !t.done + ')" style="flex-shrink:0; width:16px; height:16px; line-height:16px; border-radius:4px; font-size:10px;">' + (t.done ? '✓' : '') + '</span> <span>' + esc(t.name) + '</span></div>';
       });
@@ -1112,10 +1113,10 @@ function initTabListener() {
       e.preventDefault();
       var select = document.getElementById('plannerView');
       if (select) { select.value = 'month'; changePlannerView('month'); }
-    } else if (key === shortcuts.next) {
+    } else if (key === shortcuts.next || key === 'ArrowRight') {
       e.preventDefault();
       moveWeek(1);
-    } else if (key === shortcuts.prev) {
+    } else if (key === shortcuts.prev || key === 'ArrowLeft') {
       e.preventDefault();
       moveWeek(-1);
     } else if (key === shortcuts.create) {
@@ -1183,7 +1184,8 @@ function attachTimeGridInteractivity() {
       if (Date.now() - lastTouchTime < 1000) return;
       if (e.target.closest('.event')) return;
       e.preventDefault();
-      
+      isDragCreating = true;
+
       var rect = node.getBoundingClientRect();
       var startY = e.clientY - rect.top;
       var startMin = Math.max(0, Math.round(startY / 15) * 15);
@@ -1235,7 +1237,8 @@ function attachTimeGridInteractivity() {
       function onMouseUp(upEvent) {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-        
+        isDragCreating = false;
+
         var finalY = upEvent.clientY - rect.top;
         var finalMin = Math.max(0, Math.round(finalY / 15) * 15);
         var actualStart = Math.min(startMin, finalMin);
@@ -1347,13 +1350,21 @@ function attachTimeGridInteractivity() {
           var endStr = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
           
           var e = S.events.find(function(x) { return x.id == id; });
+
+          // No-op: handle was pressed but times didn't change — just re-render, no toast, no save.
+          if (startStr === originalStart && endStr === originalEnd) {
+            renderPlanner();
+            setTimeout(function() { isResizing = false; }, 50);
+            return;
+          }
+
           if (e) {
             e.start = startStr;
             e.end = endStr;
           }
           renderPlanner();
           renderDashboard();
-          
+
           if (e) {
             var undoCallback = async function() {
               var eventToRestore = S.events.find(function(x) { return x.id == id; });
@@ -1373,7 +1384,7 @@ function attachTimeGridInteractivity() {
             };
             showUndoToast("Event resized", undoCallback);
           }
-          
+
           if (id) {
             api("PUT", "/api/events/" + id, { start: startStr, end: endStr })
               .then(function() {
@@ -1447,12 +1458,18 @@ function updateEndTimeFromDuration() {
   document.getElementById('evModalEnd').value = formatTime(endMin);
 }
 
-// Toggle the time fields when the "All day" checkbox flips. (Exported so the
-// inline onchange in index.html can reach it through app.js.)
+// Toggle the time fields when the "All day" hcheck flips. (Exported so the
+// inline onclick in index.html can reach it through app.js.)
+export function toggleEvModalAllDay() {
+  var cb = document.getElementById('evModalAllDay');
+  if (cb) cb.classList.toggle('on');
+  updateAllDayVisibility();
+}
+
 export function updateAllDayVisibility() {
   var cb = document.getElementById('evModalAllDay');
   var fields = document.getElementById('evModalTimeFields');
-  if (cb && fields) fields.style.display = cb.checked ? 'none' : 'flex';
+  if (cb && fields) fields.style.display = cb.classList.contains('on') ? 'none' : 'flex';
 }
 
 // Per-event color picker: '' = default (use the type color). Highlights the
@@ -1598,7 +1615,7 @@ function renderReminderPills() {
   });
 }
 
-export function openAdd(iso, defaultStart, defaultEnd) {
+export function openAdd(iso, defaultStart, defaultEnd, allDay) {
   editingOccurrenceDate = null;
   window.dispatchEvent(new CustomEvent('open-event-modal'));
   document.getElementById('evModalTitleText').textContent = 'Add Event';
@@ -1612,7 +1629,7 @@ export function openAdd(iso, defaultStart, defaultEnd) {
   document.getElementById('evModalDesc').value = '';
   document.getElementById('evModalLoc').value = '';
   setRecurrenceUI(null);
-  document.getElementById('evModalAllDay').checked = false;
+  document.getElementById('evModalAllDay').classList.toggle('on', !!allDay);
   updateAllDayVisibility();
   setEventColor('');
   document.getElementById('evModalDelBtn').style.display = 'none';
@@ -1645,7 +1662,7 @@ export function editEvent(id, occDate) {
   editingOccurrenceDate = (isRecurring && occDate) ? occDate : null;
   document.getElementById('evModalDate').value = editingOccurrenceDate || e.date || '';
   document.getElementById('evModalEndDate').value = e.end_date || '';
-  document.getElementById('evModalAllDay').checked = !(e.start && e.end);
+  document.getElementById('evModalAllDay').classList.toggle('on', !(e.start && e.end));
   updateAllDayVisibility();
   setEventColor(e.color || '');
   document.getElementById('evModalStart').value = e.start || '';
@@ -1684,7 +1701,7 @@ export async function saveEventModal(refresh) {
   var endDateVal = document.getElementById("evModalEndDate").value;
   // Only keep end_date when it's genuinely a multi-day span.
   if (!(endDateVal && endDateVal > startDateVal)) endDateVal = '';
-  var allDay = document.getElementById("evModalAllDay").checked;
+  var allDay = document.getElementById("evModalAllDay").classList.contains('on');
   var data = Object.assign({
     title: title,
     type: document.getElementById("evModalType").value,

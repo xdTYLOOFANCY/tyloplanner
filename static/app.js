@@ -24,7 +24,7 @@ import {
   showDashboardEventDetails
 } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
@@ -214,6 +214,7 @@ window.closeEventPopover = closeEventPopover;
 window.duplicateEvent = duplicateEvent;
 window.deleteEventById = deleteEventById;
 window.updateAllDayVisibility = updateAllDayVisibility;
+window.toggleEvModalAllDay = toggleEvModalAllDay;
 window.setEventColor = setEventColor;
 window.handleQuickAddKeydown = handleQuickAddKeydown;
 window.quickAddOpen = quickAddOpen;

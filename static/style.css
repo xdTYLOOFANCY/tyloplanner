@@ -749,13 +749,13 @@ dialog.modal::backdrop {
   position: absolute;
   left: 0;
   width: calc(100% - 2px);
-  background: rgba(79, 140, 255, 0.2);
-  border: 1px dashed var(--accent);
-  border-left: 4px solid var(--accent);
+  background: var(--accent);
+  border: 1px dashed rgba(255,255,255,0.5);
+  border-left: 4px solid rgba(255,255,255,0.7);
   border-radius: 6px;
   pointer-events: none;
-  z-index: 10;
-  color: var(--text);
+  z-index: 30;
+  color: #fff;
   font-size: 11px;
   padding: 4px 6px;
   box-sizing: border-box;
@@ -764,11 +764,11 @@ dialog.modal::backdrop {
   gap: 2px;
   overflow: hidden;
   line-height: 1.2;
+  opacity: 0.9;
 }
 .selection-placeholder .selection-time-label {
   font-size: 10px;
-  color: var(--text);
-  opacity: 0.85;
+  color: rgba(255,255,255,0.85);
 }
 .selection-placeholder.short {
   padding: 1px 6px;
