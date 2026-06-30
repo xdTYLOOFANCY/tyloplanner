@@ -330,7 +330,7 @@ export function renderExams(refresh) {
       html += '<tr class="exam-tr">' +
         '<td class="exam-name-cell" onclick="examInlineEdit(this,\'' + id + '\',\'name\',\'' + esc((e.name || '').replace(/'/g,"\\'")) + '\')">' + esc(e.name) + '</td>' +
         '<td class="muted exam-date-cell" onclick="examInlineEdit(this,\'' + id + '\',\'date\',\'' + esc(e.date) + '\')">' + esc(e.date) + '</td>' +
-        '<td>' + (d >= 0 ? examBadge(d) : '') + '</td>' +
+        '<td>' + examBadge(d) + '</td>' +
         '<td class="exam-ects-cell" onclick="examInlineEdit(this,\'' + id + '\',\'ects\',' + (e.ects != null ? e.ects : 'null') + ')">' + (e.ects || '<span class="muted">—</span>') + '</td>' +
         '<td class="exam-grade-cell">' +
           '<input type="text" class="grade-input" value="' + esc(v || '') + '" placeholder="—" ' +
