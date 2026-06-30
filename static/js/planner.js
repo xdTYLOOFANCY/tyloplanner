@@ -15,7 +15,11 @@ if (_isMobileViewport) {
     if (_pv) _pv.value = currentView;
   });
 }
-var draggingEventId = null, draggingOffsetY = 0, currentUndoAction = null, undoToastTimeout = null, dragPreviewEl = null;
+var draggingEventId = null, draggingOccDate = null, draggingOffsetY = 0, currentUndoAction = null, undoToastTimeout = null, dragPreviewEl = null;
+// Occurrence date of the recurring instance currently being edited (null for a
+// non-recurring event or the whole series), so Save can ask "this / following /
+// all events" and apply the change to the right scope.
+var editingOccurrenceDate = null;
 var isTouchDragging = false, touchDragPointerId = null, touchDragStartClientX = 0, touchDragStartClientY = 0, touchDragLongPressTimer = null, justTouchDragged = false, lastTouchTime = 0;
 
 var defaultShortcuts = {
@@ -48,30 +52,137 @@ export function moveWeek(d) {
   renderPlanner();
 }
 
+// Parse a "YYYY-MM-DD" string into a local-midnight Date (avoids the UTC-parse
+// off-by-one that `new Date("YYYY-MM-DD")` causes near timezone boundaries).
+function parseLocalDate(iso) {
+  var p = String(iso).split('-');
+  return new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+}
+function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+
+// recurrence_days is a CSV of JS getDay() indices (0=Sun … 6=Sat).
+function parseRecDays(s) {
+  if (!s) return [];
+  return String(s).split(',').map(function (x) { return parseInt(x.trim(), 10); }).filter(function (x) { return !isNaN(x) && x >= 0 && x <= 6; });
+}
+// excluded_dates is a CSV of ISO dates to skip (deleted/overridden occurrences).
+function parseExcluded(s) {
+  var set = {};
+  if (s) String(s).split(',').forEach(function (x) { var v = x.trim(); if (v) set[v] = true; });
+  return set;
+}
+
+// Inline override for a per-event color (re-validated as hex client-side before
+// it touches a style attribute). Empty when the event uses its type color.
+function eventColorStyle(e) {
+  return (e.color && /^#[0-9a-fA-F]{3,8}$/.test(e.color)) ? 'background-color:' + e.color + ' !important;' : '';
+}
+
+// Expand an event into its occurrences within [startIso, endIso]. Honors
+// recurrence type (daily/weekly/monthly/yearly), interval ("every N"), weekly
+// multi-day (recurrence_days), end-by-date (recurrence_until) or end-after-N
+// (recurrence_count), and single-occurrence exclusions (excluded_dates).
 function getInstances(e, startIso, endIso) {
-  var instances = [];
-  var d = new Date(startIso);
-  var eDate = new Date(e.date);
-  for (var i = 0; i < 42; i++) {
-    var cur = new Date(d);
-    cur.setDate(d.getDate() + i);
-    var curIso = toISO(cur);
-    if (curIso > endIso) break;
-    if (curIso < e.date) continue;
-    if (e.recurrence_until && curIso > e.recurrence_until) continue;
-    var match = false;
-    if (!e.recurrence || e.recurrence === 'none') {
-      match = (curIso === e.date);
-    } else if (e.recurrence === 'daily') {
-      match = true;
-    } else if (e.recurrence === 'weekly') {
-      match = (cur.getDay() === eDate.getDay());
-    } else if (e.recurrence === 'monthly') {
-      match = (cur.getDate() === eDate.getDate());
-    }
-    if (match) instances.push(Object.assign({}, e, {virtualDate: curIso}));
+  var out = [];
+  if (!e.date) return out;
+
+  // Multi-day span (end_date after date): each occurrence is expanded into one
+  // segment per day. spanDays = number of extra days beyond the start day.
+  var spanDays = 0;
+  if (e.end_date && e.end_date > e.date) {
+    spanDays = Math.round((parseLocalDate(e.end_date) - parseLocalDate(e.date)) / 86400000);
+    if (!(spanDays > 0)) spanDays = 0;
+    if (spanDays > 366) spanDays = 366;
   }
-  return instances;
+  function seg(dayIso, occIso, role) {
+    var s = Object.assign({}, e, { virtualDate: dayIso, _occDate: occIso, _multiRole: role });
+    if (e.start && role !== 'single') {
+      // Timed segment: show the real span times, but position within this day.
+      s._origTime = (e.start || '') + ' – ' + (e.end || '');
+      s.start = (role === 'start') ? e.start : '00:00';
+      s.end = (role === 'end') ? (e.end || '23:59') : '24:00';
+    }
+    return s;
+  }
+  function emit(occIso) {
+    if (spanDays <= 0) {
+      if (occIso >= startIso && occIso <= endIso) out.push(seg(occIso, occIso, 'single'));
+      return;
+    }
+    var occDate = parseLocalDate(occIso);
+    for (var k = 0; k <= spanDays; k++) {
+      var dayIso = toISO(addDays(occDate, k));
+      if (dayIso < startIso || dayIso > endIso) continue;
+      out.push(seg(dayIso, occIso, k === 0 ? 'start' : (k === spanDays ? 'end' : 'middle')));
+    }
+  }
+
+  var rec = e.recurrence || 'none';
+  if (rec === 'none') { emit(e.date); return out; }
+
+  var excluded = parseExcluded(e.excluded_dates);
+  var interval = Math.max(1, parseInt(e.recurrence_interval, 10) || 1);
+  var count = (e.recurrence_count != null && String(e.recurrence_count) !== '') ? parseInt(e.recurrence_count, 10) : null;
+  if (count != null && (isNaN(count) || count < 1)) count = null;
+  var until = e.recurrence_until || null;
+  var startDate = parseLocalDate(e.date);
+  var dset = parseRecDays(e.recurrence_days);
+  if (rec === 'weekly' && !dset.length) dset = [startDate.getDay()];
+
+  function matches(cur) {
+    if (cur < startDate) return false;
+    if (rec === 'daily') {
+      return Math.round((cur - startDate) / 86400000) % interval === 0;
+    }
+    if (rec === 'weekly') {
+      if (dset.indexOf(cur.getDay()) === -1) return false;
+      var wd = Math.round((addDays(cur, -cur.getDay()) - addDays(startDate, -startDate.getDay())) / (7 * 86400000));
+      return wd >= 0 && wd % interval === 0;
+    }
+    if (rec === 'monthly') {
+      if (cur.getDate() !== startDate.getDate()) return false;
+      var md = (cur.getFullYear() - startDate.getFullYear()) * 12 + (cur.getMonth() - startDate.getMonth());
+      return md >= 0 && md % interval === 0;
+    }
+    if (rec === 'yearly') {
+      if (cur.getDate() !== startDate.getDate() || cur.getMonth() !== startDate.getMonth()) return false;
+      var yd = cur.getFullYear() - startDate.getFullYear();
+      return yd >= 0 && yd % interval === 0;
+    }
+    return false;
+  }
+
+  // Multi-day occurrences starting up to spanDays before the window can still
+  // have segments inside it, so widen the scan start accordingly.
+  var scanStartIso = spanDays > 0 ? toISO(addDays(parseLocalDate(startIso), -spanDays)) : startIso;
+
+  if (count == null) {
+    // Common case: scan the (slightly widened) visible window — cheap.
+    var winStart = parseLocalDate(scanStartIso);
+    if (winStart < startDate) winStart = startDate;
+    var winEnd = parseLocalDate(endIso);
+    for (var cur = new Date(winStart); cur <= winEnd; cur = addDays(cur, 1)) {
+      var curIso = toISO(cur);
+      if (until && curIso > until) break;
+      if (matches(cur) && !excluded[curIso]) emit(curIso);
+    }
+  } else {
+    // Count-limited: walk from the start counting occurrences (incl. excluded,
+    // matching RRULE COUNT semantics), emitting those whose segments hit the view.
+    var ordinal = 0;
+    var c = new Date(startDate);
+    for (var i = 0; i < 366 * 12 && ordinal < count; i++) {
+      var iso = toISO(c);
+      if (until && iso > until) break;
+      if (iso > endIso) break;
+      if (matches(c)) {
+        ordinal++;
+        if (!excluded[iso]) emit(iso);
+      }
+      c = addDays(c, 1);
+    }
+  }
+  return out;
 }
 
 export function togglePlannerCalendarsPanel() {
@@ -175,6 +286,8 @@ export function applyCalendarColors() {
     if (c) {
       css += `.event.${typeId} { background-color: ${c} !important; }\n`;
       css += `.event.absolute.${typeId} { background-color: ${c} !important; }\n`;
+      css += `.month-event.${typeId} { background-color: ${c} !important; }\n`;
+      css += `.cal-popover-dot.${typeId} { background-color: ${c} !important; }\n`;
     }
   }
   styleTag.innerHTML = css;
@@ -282,7 +395,9 @@ export function renderPlanner() {
     title = (dateOffset === 0 ? "This " + (currentView === '1' ? "day" : (currentView === '7' ? "week" : currentView + " days")) + " · " : "") + fmtShort(dates[0]) + (dates.length > 1 ? " – " + fmtShort(dates[dates.length - 1]) : "") + " " + dates[0].getFullYear();
   }
   document.getElementById("weekLabel").textContent = title;
-  
+  var goToInput = document.getElementById("plannerGoToDate");
+  if (goToInput) goToInput.value = toISO(dates[0]);
+
   var today = todayStr();
   var allInstances = [];
   
@@ -316,14 +431,31 @@ export function renderPlanner() {
       html += '<div class="'+ccls+'" data-iso="'+iso+'">';
       html += '<div class="month-date" onclick="openAdd(\''+iso+'\')" style="cursor:pointer">' + d.getDate() + '</div>';
       
-      tDue.forEach(function(t) {
+      // Cap chips per cell; overflow collapses into a "+N more" that opens a
+      // day popover (Google-style), so busy days don't blow out the row height.
+      var MONTH_CAP = 4;
+      var totalItems = tDue.length + evs.length;
+      var taskShown = tDue, evShown = evs, moreCount = 0;
+      if (totalItems > MONTH_CAP) {
+        var limit = MONTH_CAP - 1;
+        taskShown = tDue.slice(0, limit);
+        evShown = evs.slice(0, Math.max(0, limit - taskShown.length));
+        moreCount = totalItems - (taskShown.length + evShown.length);
+      }
+      taskShown.forEach(function(t) {
         html += '<div class="month-event ics" onclick="toggleTask(\'' + t.id + '\',true)">☑ ' + esc(t.name) + '</div>';
       });
-      evs.forEach(function(e) {
+      evShown.forEach(function(e) {
         var rep = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-        var tstr = e.start ? e.start + ' ' : '';
-        html += '<div class="month-event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" onclick="editEvent(\'' + e.id + '\')">' + esc(tstr + e.title) + rep + '</div>';
+        var isMulti = e._multiRole && e._multiRole !== 'single';
+        var isCont = isMulti && e._multiRole !== 'start';
+        var tstr = (e.start && !isCont) ? e.start + ' ' : '';
+        var mcls = isMulti ? ' multi multi-' + e._multiRole : '';
+        html += '<div class="month-event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + mcls + '" data-occ="' + (e._occDate || e.virtualDate || e.date) + '" style="' + eventColorStyle(e) + '" onclick="showEventPopover(\'' + e.id + '\', this)">' + esc(tstr + e.title) + rep + '</div>';
       });
+      if (moreCount > 0) {
+        html += '<div class="month-more" onclick="showDayPopover(\'' + iso + '\', this)">+' + moreCount + ' more</div>';
+      }
       html += '</div>';
     });
     html += '</div>';
@@ -358,7 +490,9 @@ export function renderPlanner() {
       });
       allDayEvs.forEach(function(e) {
         var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-        html += '<div class="event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')">' + esc(e.title) + repeatIcon + '</div>';
+        var isMulti = e._multiRole && e._multiRole !== 'single';
+        var mcls = isMulti ? ' multi multi-' + e._multiRole : '';
+        html += '<div class="event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + mcls + '" draggable="' + (isMulti ? 'false' : 'true') + '" data-id="' + e.id + '" data-occ="' + (e._occDate || e.virtualDate || e.date) + '" style="' + eventColorStyle(e) + '" onclick="showEventPopover(\'' + e.id + '\', this)">' + esc(e.title) + repeatIcon + '</div>';
       });
       html += '</div>';
       
@@ -379,7 +513,10 @@ export function renderPlanner() {
         var height = endMin - startMin;
         if (height < 15) height = 15;
         var repeatIcon = (e.recurrence && e.recurrence !== 'none') ? ' 🔄' : '';
-        var timeStr = esc(e.start) + ' – ' + esc(e.end);
+        // Multi-day timed segments show the real span times (_origTime).
+        var timeStr = e._origTime ? esc(e._origTime) : (esc(e.start) + ' – ' + esc(e.end));
+        var isMulti = e._multiRole && e._multiRole !== 'single';
+        var mcls = isMulti ? ' multi multi-' + e._multiRole : '';
         var hasLoc = e.location && e.location.trim() !== '';
         var locStr = hasLoc ? esc(e.location.trim()) : '';
         // Google-Calendar hierarchy: bold title first (wraps so the full name
@@ -387,8 +524,8 @@ export function renderPlanner() {
         var locHtml = (height >= 50 && hasLoc)
           ? '<div class="event-loc">' + locStr + '</div>'
           : '';
-        html += '<div class="event absolute ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + '" draggable="true" data-id="' + e.id + '" onclick="editEvent(\'' + e.id + '\')" ';
-        html += 'style="--original-height:' + height + 'px; top:' + startMin + 'px; height:' + height + 'px; left:' + e._left + '%; width:calc(' + e._width + '% - 2px);">';
+        html += '<div class="event absolute ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + mcls + '" draggable="' + (isMulti ? 'false' : 'true') + '" data-id="' + e.id + '" data-occ="' + (e._occDate || e.virtualDate || e.date) + '" onclick="showEventPopover(\'' + e.id + '\', this)" ';
+        html += 'style="--original-height:' + height + 'px; top:' + startMin + 'px; height:' + height + 'px; left:' + e._left + '%; width:calc(' + e._width + '% - 2px);' + eventColorStyle(e) + '">';
         html += '<div class="resize-handle top"></div>';
         html += '<div class="event-title">' + esc(e.title) + repeatIcon + '</div>';
         html += '<div class="event-time">' + timeStr + '</div>';
@@ -540,6 +677,15 @@ export function renderPlanner() {
             data.end = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
           }
         }
+        // Recurring event: ask "this / all" instead of moving the whole series.
+        if (e && e.recurrence && e.recurrence !== 'none') {
+          if (dragPreviewEl) { dragPreviewEl.remove(); dragPreviewEl = null; }
+          var occ = draggingOccDate || e.date;
+          var mscope = await promptRecurrenceScope('Move recurring event', false);
+          if (mscope) await applyRecurringMove(mscope, e, occ, data);
+          else renderPlanner();
+          return;
+        }
         if (e) {
           Object.assign(e, data);
         }
@@ -587,6 +733,7 @@ export function renderPlanner() {
       el.addEventListener("dragstart", function(ev) {
         var eventId = el.getAttribute("data-id");
         draggingEventId = eventId;
+        draggingOccDate = el.getAttribute("data-occ");
         ev.dataTransfer.setData("text/plain", eventId);
         var rect = el.getBoundingClientRect();
         var offsetY = ev.clientY - rect.top;
@@ -629,6 +776,7 @@ export function renderPlanner() {
         touchDragLongPressTimer = setTimeout(function() {
           isTouchDragging = true;
           draggingEventId = eventId;
+          draggingOccDate = el.getAttribute("data-occ");
           el.setPointerCapture(ev.pointerId);
           
           var rect = el.getBoundingClientRect();
@@ -830,6 +978,10 @@ function initTabListener() {
 
   if (recSelect) {
     recSelect.addEventListener('change', updateRecurrenceVisibility);
+  }
+  var recEndSelect = document.getElementById('evModalRecEnd');
+  if (recEndSelect) {
+    recEndSelect.addEventListener('change', updateRecurrenceVisibility);
   }
 
   // Reminder list and controls setup
@@ -1295,12 +1447,103 @@ function updateEndTimeFromDuration() {
   document.getElementById('evModalEnd').value = formatTime(endMin);
 }
 
-function updateRecurrenceVisibility() {
-  var recSelect = document.getElementById('evModalRec');
-  var group = document.getElementById('evModalRecUntilGroup');
-  if (recSelect && group) {
-    group.style.display = (recSelect.value === 'none') ? 'none' : 'flex';
+// Toggle the time fields when the "All day" checkbox flips. (Exported so the
+// inline onchange in index.html can reach it through app.js.)
+export function updateAllDayVisibility() {
+  var cb = document.getElementById('evModalAllDay');
+  var fields = document.getElementById('evModalTimeFields');
+  if (cb && fields) fields.style.display = cb.checked ? 'none' : 'flex';
+}
+
+// Per-event color picker: '' = default (use the type color). Highlights the
+// chosen swatch (or the custom one for a non-preset hex).
+export function setEventColor(hex) {
+  hex = hex || '';
+  var input = document.getElementById('evModalColor');
+  if (input) input.value = hex;
+  var matched = false;
+  document.querySelectorAll('#evModalColorSwatches .color-swatch').forEach(function (sw) {
+    if (sw.classList.contains('color-custom')) return;
+    var on = (sw.getAttribute('data-color') || '') === hex;
+    sw.classList.toggle('active', on);
+    if (on) matched = true;
+  });
+  var custom = document.getElementById('evModalColorCustom');
+  if (custom) {
+    if (hex && !matched) { custom.value = hex; custom.classList.add('active'); }
+    else custom.classList.remove('active');
   }
+}
+
+function updateRecurrenceVisibility() {
+  var rec = document.getElementById('evModalRec');
+  var opts = document.getElementById('evModalRecOptions');
+  if (!rec || !opts) return;
+  if (rec.value === 'none') { opts.style.display = 'none'; return; }
+  opts.style.display = 'flex';
+
+  var unit = document.getElementById('evModalRecUnit');
+  var units = { daily: 'days', weekly: 'weeks', monthly: 'months', yearly: 'years' };
+  if (unit) unit.textContent = units[rec.value] || 'times';
+
+  var daysGroup = document.getElementById('evModalRecDaysGroup');
+  if (daysGroup) daysGroup.style.display = (rec.value === 'weekly') ? 'flex' : 'none';
+
+  var endSel = document.getElementById('evModalRecEnd');
+  var endMode = endSel ? endSel.value : 'never';
+  var untilInput = document.getElementById('evModalRecUntil');
+  var countGroup = document.getElementById('evModalRecCountGroup');
+  if (untilInput) untilInput.style.display = (endMode === 'until') ? 'block' : 'none';
+  if (countGroup) countGroup.style.display = (endMode === 'count') ? 'flex' : 'none';
+}
+
+// Populate the recurrence sub-form from an event (blank defaults when e is null).
+function setRecurrenceUI(e) {
+  var rec = (e && e.recurrence) || 'none';
+  document.getElementById('evModalRec').value = rec;
+  document.getElementById('evModalRecInterval').value = (e && e.recurrence_interval) ? e.recurrence_interval : 1;
+
+  var days = parseRecDays(e && e.recurrence_days);
+  if (!days.length && rec === 'weekly' && e && e.date) days = [parseLocalDate(e.date).getDay()];
+  document.querySelectorAll('#evModalRecDays .rec-day').forEach(function (cb) {
+    cb.checked = days.indexOf(parseInt(cb.value, 10)) !== -1;
+  });
+
+  var endSel = document.getElementById('evModalRecEnd');
+  if (e && e.recurrence_count != null && String(e.recurrence_count) !== '') {
+    endSel.value = 'count';
+    document.getElementById('evModalRecCount').value = e.recurrence_count;
+    document.getElementById('evModalRecUntil').value = '';
+  } else if (e && e.recurrence_until) {
+    endSel.value = 'until';
+    document.getElementById('evModalRecUntil').value = e.recurrence_until;
+    document.getElementById('evModalRecCount').value = 10;
+  } else {
+    endSel.value = 'never';
+    document.getElementById('evModalRecUntil').value = '';
+    document.getElementById('evModalRecCount').value = 10;
+  }
+  updateRecurrenceVisibility();
+}
+
+// Read recurrence fields from the sub-form into a payload fragment.
+function readRecurrenceFromUI() {
+  var rec = document.getElementById('evModalRec').value;
+  if (rec === 'none') {
+    return { recurrence: 'none', recurrence_interval: 1, recurrence_days: '', recurrence_until: '', recurrence_count: null };
+  }
+  var interval = Math.max(1, Math.min(999, parseInt(document.getElementById('evModalRecInterval').value, 10) || 1));
+  var days = '';
+  if (rec === 'weekly') {
+    var checked = [];
+    document.querySelectorAll('#evModalRecDays .rec-day:checked').forEach(function (cb) { checked.push(parseInt(cb.value, 10)); });
+    days = checked.sort(function (a, b) { return a - b; }).join(',');
+  }
+  var endMode = document.getElementById('evModalRecEnd').value;
+  var until = '', count = null;
+  if (endMode === 'until') until = document.getElementById('evModalRecUntil').value || '';
+  else if (endMode === 'count') count = Math.max(1, Math.min(10000, parseInt(document.getElementById('evModalRecCount').value, 10) || 1));
+  return { recurrence: rec, recurrence_interval: interval, recurrence_days: days, recurrence_until: until, recurrence_count: count };
 }
 
 function resetReminderControls() {
@@ -1356,26 +1599,29 @@ function renderReminderPills() {
 }
 
 export function openAdd(iso, defaultStart, defaultEnd) {
+  editingOccurrenceDate = null;
   window.dispatchEvent(new CustomEvent('open-event-modal'));
   document.getElementById('evModalTitleText').textContent = 'Add Event';
   document.getElementById('evModalId').value = '';
   document.getElementById('evModalTitle').value = '';
   document.getElementById('evModalType').value = 'study';
   document.getElementById('evModalDate').value = iso;
+  document.getElementById('evModalEndDate').value = '';
   document.getElementById('evModalStart').value = defaultStart || '';
   document.getElementById('evModalEnd').value = defaultEnd || '';
   document.getElementById('evModalDesc').value = '';
   document.getElementById('evModalLoc').value = '';
-  document.getElementById('evModalRec').value = 'none';
-  document.getElementById('evModalRecUntil').value = '';
+  setRecurrenceUI(null);
+  document.getElementById('evModalAllDay').checked = false;
+  updateAllDayVisibility();
+  setEventColor('');
   document.getElementById('evModalDelBtn').style.display = 'none';
-  
+
   activeReminders = [];
   renderReminderPills();
   resetReminderControls();
   updateDurationFromTimes();
-  updateRecurrenceVisibility();
-  
+
   // Desktop: focus the title for quick typing. Mobile: leave focus on the
   // dialog heading (autofocus in index.html) so the keyboard stays down and the
   // user can pick which field to fill first.
@@ -1384,7 +1630,7 @@ export function openAdd(iso, defaultStart, defaultEnd) {
   }
 }
 
-export function editEvent(id) {
+export function editEvent(id, occDate) {
   if (isResizing || justTouchDragged) return;
   var e = S.events.find(function(x) { return x.id === id; });
   if (!e) return;
@@ -1393,13 +1639,20 @@ export function editEvent(id) {
   document.getElementById('evModalId').value = e.id;
   document.getElementById('evModalTitle').value = e.title || '';
   document.getElementById('evModalType').value = e.type || 'other';
-  document.getElementById('evModalDate').value = e.date || '';
+  // When editing one occurrence of a recurring event, show that occurrence's
+  // date (not the series start) and remember it so Save can scope the change.
+  var isRecurring = e.recurrence && e.recurrence !== 'none';
+  editingOccurrenceDate = (isRecurring && occDate) ? occDate : null;
+  document.getElementById('evModalDate').value = editingOccurrenceDate || e.date || '';
+  document.getElementById('evModalEndDate').value = e.end_date || '';
+  document.getElementById('evModalAllDay').checked = !(e.start && e.end);
+  updateAllDayVisibility();
+  setEventColor(e.color || '');
   document.getElementById('evModalStart').value = e.start || '';
   document.getElementById('evModalEnd').value = e.end || '';
   document.getElementById('evModalDesc').value = e.description || '';
   document.getElementById('evModalLoc').value = e.location || '';
-  document.getElementById('evModalRec').value = e.recurrence || 'none';
-  document.getElementById('evModalRecUntil').value = e.recurrence_until || '';
+  setRecurrenceUI(e);
   document.getElementById('evModalDelBtn').style.display = 'block';
 
   activeReminders = [];
@@ -1412,7 +1665,6 @@ export function editEvent(id) {
   renderReminderPills();
   resetReminderControls();
   updateDurationFromTimes();
-  updateRecurrenceVisibility();
 
   // Desktop: focus the title for quick typing. Mobile: leave focus on the
   // dialog heading (autofocus in index.html) so the keyboard stays down and the
@@ -1428,20 +1680,37 @@ export async function saveEventModal(refresh) {
   var id = document.getElementById("evModalId").value;
   var title = document.getElementById("evModalTitle").value.trim();
   if (!title) return;
-  var data = {
+  var startDateVal = document.getElementById("evModalDate").value;
+  var endDateVal = document.getElementById("evModalEndDate").value;
+  // Only keep end_date when it's genuinely a multi-day span.
+  if (!(endDateVal && endDateVal > startDateVal)) endDateVal = '';
+  var allDay = document.getElementById("evModalAllDay").checked;
+  var data = Object.assign({
     title: title,
     type: document.getElementById("evModalType").value,
-    date: document.getElementById("evModalDate").value,
-    start: document.getElementById("evModalStart").value,
-    end: document.getElementById("evModalEnd").value,
+    date: startDateVal,
+    end_date: endDateVal,
+    start: allDay ? '' : document.getElementById("evModalStart").value,
+    end: allDay ? '' : document.getElementById("evModalEnd").value,
     description: document.getElementById("evModalDesc").value,
     location: document.getElementById("evModalLoc").value,
-    recurrence: document.getElementById("evModalRec").value,
-    recurrence_until: document.getElementById("evModalRecUntil").value,
+    color: document.getElementById("evModalColor").value || '',
     reminder_offset: activeReminders.length > 0 ? activeReminders.join(',') : -1,
     source: "local"
-  };
-  
+  }, readRecurrenceFromUI());
+
+  // Editing one occurrence of a recurring event → ask "this / following / all".
+  var master = id ? S.events.find(function (x) { return x.id == id; }) : null;
+  if (master && master.recurrence && master.recurrence !== 'none' && editingOccurrenceDate) {
+    var scope = await promptRecurrenceScope('Edit recurring event', true);
+    if (!scope) return; // cancelled — leave the editor open
+    var occ = editingOccurrenceDate;
+    editingOccurrenceDate = null;
+    window.dispatchEvent(new CustomEvent('close-event-modal'));
+    await applyRecurringEdit(scope, master, occ, data, refresh);
+    return;
+  }
+
   window.dispatchEvent(new CustomEvent('close-event-modal'));
 
   var tempId = null;
@@ -1694,34 +1963,151 @@ export function hideSearchSoon() {
   }, 200);
 }
 
-export function navigateToAndEditEvent(id, date, openEditor) {
-  var tabBtn = document.querySelector('#tabs button[data-tab="planner"]');
-  if (tabBtn) {
-    tabBtn.click();
+// ---------------------------------------------------------------------------
+// Natural-language quick-add. Hand-rolled (no NLP dep): pull a date, time(s),
+// duration and location out of a free-text line; the rest becomes the title.
+// Best-effort — it pre-fills the Add-Event modal so the user can confirm.
+// ---------------------------------------------------------------------------
+export function parseQuickAdd(text) {
+  var out = { title: '', date: '', start: '', end: '', location: '', allDay: false };
+  var raw = String(text || '').trim();
+  if (!raw) return out;
+  var rest = ' ' + raw + ' ';
+
+  function cut(re) {
+    var m = rest.match(re);
+    if (m) rest = rest.slice(0, m.index) + ' ' + rest.slice(m.index + m[0].length);
+    return m;
   }
-  
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function to24(h, m, ap) {
+    h = parseInt(h, 10); m = m ? parseInt(m, 10) : 0;
+    ap = ap ? ap.toLowerCase() : '';
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    if (h > 23) h = 23; if (m > 59) m = 59;
+    return pad(h) + ':' + pad(m);
+  }
+  function addMin(hhmm, mins) {
+    var t = parseInt(hhmm.slice(0, 2), 10) * 60 + parseInt(hhmm.slice(3), 10) + mins;
+    t = Math.max(0, Math.min(1439, t));
+    return pad(Math.floor(t / 60)) + ':' + pad(t % 60);
+  }
+
+  // Location: "@place"
+  var at = cut(/\s@\s?(\S+)/);
+  if (at) out.location = at[1];
+
+  // Time range: "9-11am", "9:00-11:30", "from 9 to 11pm"
+  var range = cut(/\b(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+  if (range) {
+    var ap1 = range[3], ap2 = range[6];
+    if (!ap1 && ap2) ap1 = ap2;
+    if (!ap2 && ap1) ap2 = ap1;
+    out.start = to24(range[1], range[2], ap1);
+    out.end = to24(range[4], range[5], ap2);
+  } else {
+    var t = cut(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i) || cut(/\b(?:at\s+)?(\d{1,2}):(\d{2})\b/);
+    if (t) out.start = to24(t[1], t[2], t[3]);
+    else if (cut(/\bnoon\b/i)) out.start = '12:00';
+    else if (cut(/\bmidnight\b/i)) out.start = '00:00';
+    if (out.start) out.end = addMin(out.start, 60);
+  }
+
+  // Duration override ("for 2h", "90 min")
+  var dur = cut(/\bfor\s+(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minutes)\b/i) || cut(/\b(\d+)\s*(min|mins|minutes)\b/i);
+  if (dur && out.start) {
+    var n = parseFloat(dur[1]); var unit = dur[2].toLowerCase();
+    out.end = addMin(out.start, (unit.charAt(0) === 'h') ? Math.round(n * 60) : Math.round(n));
+  }
+
+  // Date
+  var now = new Date();
+  var dabbr = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  var months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  function fromToday(days) { var d = new Date(now); d.setDate(d.getDate() + days); return toISO(d); }
+  var dm;
+  if (cut(/\btoday\b/i)) out.date = toISO(now);
+  else if (cut(/\btomorrow\b/i)) out.date = fromToday(1);
+  else if ((dm = cut(/\bin\s+(\d+)\s+days?\b/i))) out.date = fromToday(parseInt(dm[1], 10));
+  else if ((dm = cut(/\b(next\s+)?(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/i))) {
+    var target = dabbr.indexOf(dm[2].toLowerCase().slice(0, 3));
+    var delta = (target - now.getDay() + 7) % 7;
+    if (dm[1]) delta += 7; // "next" → following week
+    out.date = fromToday(delta);
+  }
+  else if ((dm = cut(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i)) ||
+           (dm = cut(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\b/i))) {
+    var mo, day;
+    if (/^\d/.test(dm[1])) { day = parseInt(dm[1], 10); mo = months.indexOf(dm[2].toLowerCase().slice(0, 3)); }
+    else { mo = months.indexOf(dm[1].toLowerCase().slice(0, 3)); day = parseInt(dm[2], 10); }
+    var d3 = new Date(now.getFullYear(), mo, day);
+    if (d3 < new Date(now.getFullYear(), now.getMonth(), now.getDate())) d3.setFullYear(now.getFullYear() + 1);
+    out.date = toISO(d3);
+  }
+  else if ((dm = cut(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) {
+    var yr = dm[3] ? parseInt(dm[3], 10) : now.getFullYear();
+    if (yr < 100) yr += 2000;
+    out.date = toISO(new Date(yr, parseInt(dm[2], 10) - 1, parseInt(dm[1], 10))); // day/month (European)
+  }
+  if (!out.date) out.date = toISO(now);
+
+  // Trailing room-code as location (e.g. "Eg-350") when no @ was given
+  if (!out.location) {
+    var room = cut(/\b([A-Za-z]{1,4}-\d{2,4}[A-Za-z]?)\b/);
+    if (room) out.location = room[1];
+  }
+
+  out.title = rest.replace(/\s+/g, ' ').trim();
+  out.allDay = !out.start;
+  return out;
+}
+
+export function quickAddOpen(text) {
+  var p = parseQuickAdd(text);
+  if (!p.title) return;
+  openAdd(p.date, p.start, p.end);
+  document.getElementById('evModalTitle').value = p.title;
+  document.getElementById('evModalLoc').value = p.location || '';
+  if (p.allDay) {
+    document.getElementById('evModalAllDay').checked = true;
+    updateAllDayVisibility();
+  }
+  updateDurationFromTimes();
+}
+
+export function handleQuickAddKeydown(ev) {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    var v = ev.target.value.trim();
+    if (v) { quickAddOpen(v); ev.target.value = ''; }
+  }
+}
+
+// Set the module's dateOffset so the given date is in view for the current
+// view (month / week / N-day). Shared by search-navigation and the toolbar's
+// go-to-date picker.
+function setDateOffsetForDate(date) {
   var now = new Date();
   var target = new Date(date + 'T00:00:00');
   if (isNaN(target.getTime())) {
     target = new Date(date);
   }
-  
+
   if (currentView === 'month') {
-    var monthsDiff = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
-    dateOffset = monthsDiff;
+    dateOffset = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
   } else {
     var days = parseInt(currentView, 10) || 7;
     if (days === 7) {
       var dow = (now.getDay() + 6) % 7;
       var currentMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
       currentMonday.setHours(0,0,0,0);
-      
+
       var targetDow = (target.getDay() + 6) % 7;
       var targetMonday = new Date(target.getFullYear(), target.getMonth(), target.getDate() - targetDow);
       targetMonday.setHours(0,0,0,0);
-      
-      var diffMs = targetMonday - currentMonday;
-      dateOffset = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+
+      dateOffset = Math.round((targetMonday - currentMonday) / (7 * 24 * 60 * 60 * 1000));
     } else {
       var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       todayStart.setHours(0,0,0,0);
@@ -1731,7 +2117,26 @@ export function navigateToAndEditEvent(id, date, openEditor) {
       dateOffset = Math.floor(diffDays / days);
     }
   }
-  
+}
+
+// Toolbar go-to-date: jump the planner to an arbitrary date (Google's
+// mini-calendar equivalent). Resets the saved scroll so the new range scrolls
+// to the morning like a fresh navigation.
+export function goToDate(iso) {
+  if (!iso) return;
+  setDateOffsetForDate(iso);
+  lastScrollTop = null;
+  renderPlanner();
+}
+
+export function navigateToAndEditEvent(id, date, openEditor) {
+  var tabBtn = document.querySelector('#tabs button[data-tab="planner"]');
+  if (tabBtn) {
+    tabBtn.click();
+  }
+
+  setDateOffsetForDate(date);
+
   renderPlanner();
   // Search just jumps to the event and flags it; it does NOT open the editor.
   // The dashboard still passes openEditor !== false to open it directly.
@@ -1757,6 +2162,317 @@ function highlightEvent(id) {
     el.classList.add('event-flash');
     setTimeout(function () { el.classList.remove('event-flash'); }, 1600);
   }, 80);
+}
+
+// ---------------------------------------------------------------------------
+// Lightweight popovers: a Google-style quick read view on event click, and the
+// month-view "+N more" day list. One floating element, repositioned per anchor.
+// ---------------------------------------------------------------------------
+var _popoverEl = null;
+
+export function closeEventPopover() {
+  if (_popoverEl) { _popoverEl.remove(); _popoverEl = null; }
+  document.removeEventListener('mousedown', _onPopoverOutside, true);
+  document.removeEventListener('keydown', _onPopoverEsc, true);
+}
+function _onPopoverOutside(e) {
+  if (_popoverEl && !_popoverEl.contains(e.target)) closeEventPopover();
+}
+function _onPopoverEsc(e) { if (e.key === 'Escape') closeEventPopover(); }
+
+function openPopover(anchorEl, innerHtml) {
+  closeEventPopover();
+  var pop = document.createElement('div');
+  pop.className = 'cal-popover';
+  pop.innerHTML = innerHtml;
+  document.body.appendChild(pop);
+  _popoverEl = pop;
+  // Position next to the anchor, flipping/clamping to stay on screen.
+  var r = anchorEl.getBoundingClientRect();
+  var pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 8;
+  var left = r.right + gap;
+  if (left + pw > window.innerWidth - 8) left = r.left - pw - gap;
+  if (left < 8) left = Math.min(Math.max(8, r.left), window.innerWidth - pw - 8);
+  var top = r.top;
+  if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
+  if (top < 8) top = 8;
+  pop.style.left = Math.round(left) + 'px';
+  pop.style.top = Math.round(top) + 'px';
+  // Defer the outside-click listener so the opening click doesn't close it.
+  setTimeout(function () {
+    document.addEventListener('mousedown', _onPopoverOutside, true);
+    document.addEventListener('keydown', _onPopoverEsc, true);
+  }, 0);
+  return pop;
+}
+
+function fmtDateLabel(iso) {
+  var d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function recurrenceLabel(e) {
+  if (!e.recurrence || e.recurrence === 'none') return '';
+  var interval = Math.max(1, parseInt(e.recurrence_interval, 10) || 1);
+  var unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[e.recurrence] || e.recurrence;
+  var base = interval === 1 ? ('Every ' + unit) : ('Every ' + interval + ' ' + unit + 's');
+  if (e.recurrence === 'weekly') {
+    var days = parseRecDays(e.recurrence_days);
+    if (days.length) {
+      var names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      base += ' on ' + days.sort(function (a, b) { return a - b; }).map(function (d) { return names[d]; }).join(', ');
+    }
+  }
+  if (e.recurrence_count != null && String(e.recurrence_count) !== '') base += ', ' + e.recurrence_count + '×';
+  else if (e.recurrence_until) base += ' until ' + e.recurrence_until;
+  return base;
+}
+
+export function showEventPopover(id, anchorEl) {
+  if (isResizing || justTouchDragged) return;
+  var e = S.events.find(function (x) { return x.id === id; });
+  if (!e) return;
+  // The clicked occurrence date (recurring events render one element per
+  // instance, tagged with data-occ); falls back to the event's own date.
+  var occ = (anchorEl && anchorEl.getAttribute && anchorEl.getAttribute('data-occ')) || e.date;
+  var typeClass = esc(e.source && e.source.startsWith('ics') ? e.source : (e.type || 'other'));
+  var timeStr = (e.start && e.end) ? esc(e.start) + ' – ' + esc(e.end) : 'All day';
+  var rep = recurrenceLabel(e);
+  var dotStyle = (e.color && /^#[0-9a-fA-F]{3,8}$/.test(e.color)) ? ' style="background:' + e.color + '"' : '';
+  var html =
+    '<div class="cal-popover-head">' +
+      '<span class="cal-popover-dot ' + typeClass + '"' + dotStyle + '></span>' +
+      '<div class="cal-popover-title">' + esc(e.title || '(no title)') + '</div>' +
+      '<button class="cal-popover-x" aria-label="Close" onclick="closeEventPopover()">✕</button>' +
+    '</div>' +
+    '<div class="cal-popover-meta">' + esc(fmtDateLabel(occ)) + ' · ' + timeStr + '</div>' +
+    (e.location ? '<div class="cal-popover-row">📍 ' + esc(e.location) + '</div>' : '') +
+    (rep ? '<div class="cal-popover-row">🔄 ' + esc(rep) + '</div>' : '') +
+    (e.description ? '<div class="cal-popover-desc">' + esc(e.description) + '</div>' : '') +
+    '<div class="cal-popover-actions">' +
+      '<button class="btn ghost small" onclick="closeEventPopover(); editEvent(\'' + e.id + '\', \'' + occ + '\')">Edit</button>' +
+      '<button class="btn ghost small" onclick="duplicateEvent(\'' + e.id + '\')">Duplicate</button>' +
+      '<button class="btn danger small" onclick="deleteEventById(\'' + e.id + '\', \'' + occ + '\')">Delete</button>' +
+    '</div>';
+  openPopover(anchorEl, html);
+}
+
+// All non-hidden event instances + due tasks for a single day (used by the
+// month "+N more" popover).
+function getDayItems(iso) {
+  var hiddenTypes = [];
+  if (SET && SET.calendar_hidden_types) { try { hiddenTypes = JSON.parse(SET.calendar_hidden_types); } catch (e) {} }
+  var evs = [];
+  S.events.forEach(function (e) {
+    var eType = (e.source && e.source.startsWith('ics')) ? e.source : e.type;
+    if (hiddenTypes.indexOf(eType) !== -1) return;
+    getInstances(e, iso, iso).forEach(function (inst) { if (inst.virtualDate === iso) evs.push(inst); });
+  });
+  evs.sort(function (a, b) { return (a.start || '').localeCompare(b.start || ''); });
+  var tasks = S.tasks ? S.tasks.filter(function (t) { return t.due === iso && !t.done; }) : [];
+  return { evs: evs, tasks: tasks };
+}
+
+export function showDayPopover(iso, anchorEl) {
+  var items = getDayItems(iso);
+  var rows = '';
+  items.tasks.forEach(function (t) {
+    rows += '<div class="cal-day-row" onclick="toggleTask(\'' + t.id + '\', true)">' +
+            '<span class="cal-popover-dot ics"></span><span class="cal-day-title">☑ ' + esc(t.name) + '</span></div>';
+  });
+  items.evs.forEach(function (e) {
+    var tcls = esc(e.source && e.source.startsWith('ics') ? e.source : (e.type || 'other'));
+    var tm = (e.start) ? esc(e.start) : 'All day';
+    rows += '<div class="cal-day-row" data-occ="' + (e._occDate || e.virtualDate || e.date) + '" onclick="showEventPopover(\'' + e.id + '\', this)">' +
+            '<span class="cal-popover-dot ' + tcls + '"></span>' +
+            '<span class="cal-day-time">' + tm + '</span>' +
+            '<span class="cal-day-title">' + esc(e.title) + '</span></div>';
+  });
+  if (!rows) rows = '<div class="cal-popover-row muted">No events</div>';
+  var html =
+    '<div class="cal-popover-head">' +
+      '<div class="cal-popover-title">' + esc(fmtDateLabel(iso)) + '</div>' +
+      '<button class="cal-popover-x" aria-label="Close" onclick="closeEventPopover()">✕</button>' +
+    '</div>' +
+    '<div class="cal-day-list">' + rows + '</div>' +
+    '<div class="cal-popover-actions"><button class="btn ghost small" onclick="closeEventPopover(); openAdd(\'' + iso + '\')">+ Add event</button></div>';
+  openPopover(anchorEl, html);
+}
+
+export async function duplicateEvent(id) {
+  closeEventPopover();
+  var e = S.events.find(function (x) { return x.id === id; });
+  if (!e) return;
+  var copy = {
+    date: e.date, start: e.start, end: e.end, end_date: e.end_date, title: (e.title || '') + ' (copy)',
+    type: e.type, description: e.description, location: e.location,
+    recurrence: e.recurrence, recurrence_until: e.recurrence_until, recurrence_interval: e.recurrence_interval,
+    recurrence_days: e.recurrence_days, recurrence_count: e.recurrence_count, reminder_offset: e.reminder_offset,
+    color: e.color || ''
+  };
+  try {
+    await api('POST', '/api/events', copy);
+    if (plannerRefresh) await plannerRefresh();
+    renderDashboard();
+  } catch (err) { console.error('Duplicate failed:', err); }
+}
+
+export async function deleteEventById(id, occDate) {
+  closeEventPopover();
+  var e = S.events.find(function (x) { return x.id === id; });
+  if (e && e.recurrence && e.recurrence !== 'none') {
+    var scope = await promptRecurrenceScope('Delete recurring event', true);
+    if (!scope) return;
+    await applyRecurringDelete(scope, e, occDate || e.date);
+    return;
+  }
+  if (!confirm('Delete this event?')) return;
+  try {
+    await api('DELETE', '/api/events/' + id);
+    if (plannerRefresh) await plannerRefresh();
+    renderDashboard();
+  } catch (err) { console.error('Delete failed:', err); }
+}
+
+// ---- Recurring-event scope: "this / this and following / all" ----
+
+function dayBeforeISO(iso) {
+  var d = parseLocalDate(iso);
+  d.setDate(d.getDate() - 1);
+  return toISO(d);
+}
+function addExcludedDate(csv, iso) {
+  var set = parseExcluded(csv);
+  set[iso] = true;
+  return Object.keys(set).sort().join(',');
+}
+
+// Native <dialog> so it stacks above the (also-<dialog>) event modal in the top
+// layer. Resolves 'this' | 'following' | 'all' | null (cancelled).
+function promptRecurrenceScope(actionLabel, withFollowing) {
+  return new Promise(function (resolve) {
+    var dlg = document.createElement('dialog');
+    dlg.className = 'modal scope-modal';
+    var btns = '<button class="btn" data-scope="this">This event</button>';
+    if (withFollowing !== false) btns += '<button class="btn" data-scope="following">This and following events</button>';
+    btns += '<button class="btn" data-scope="all">All events</button>';
+    btns += '<button class="btn ghost" data-scope="">Cancel</button>';
+    dlg.innerHTML =
+      '<div class="modal-content" style="max-width:340px; width:90%;">' +
+        '<h3 style="margin-bottom:6px; font-size:16px; font-weight:700;">' + esc(actionLabel) + '</h3>' +
+        '<p class="muted" style="font-size:13px; margin:0 0 14px;">Apply to:</p>' +
+        '<div style="display:flex; flex-direction:column; gap:8px;">' + btns + '</div>' +
+      '</div>';
+    document.body.appendChild(dlg);
+    function done(val) { try { dlg.close(); } catch (e) {} dlg.remove(); resolve(val || null); }
+    dlg.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-scope]');
+      if (b) { ev.preventDefault(); done(b.getAttribute('data-scope')); }
+      else if (ev.target === dlg) done(null);
+    });
+    dlg.addEventListener('cancel', function (ev) { ev.preventDefault(); done(null); });
+    dlg.showModal();
+  });
+}
+
+// These optimistically mutate S first (so the view is correct immediately,
+// independent of incremental-sync timing), then persist and fire a reconciling
+// sync — the same pattern the move/save/delete handlers use. Newly created
+// override/series events are added with a temp id, swapped for the real id once
+// the POST returns.
+function _eventIdx(id) { return S.events.findIndex(function (x) { return x.id == id; }); }
+
+async function applyRecurringEdit(scope, master, occDate, data, refresh) {
+  var doRefresh = function () { if (refresh) return refresh(); if (plannerRefresh) return plannerRefresh(); };
+  var idx = _eventIdx(master.id);
+  var excluded = addExcludedDate(master.excluded_dates, occDate);
+  try {
+    if (scope === 'all') {
+      var allData = Object.assign({}, data, { date: master.date });
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], allData);
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, allData);
+    } else if (scope === 'this') {
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], { excluded_dates: excluded });
+      var override = Object.assign({}, data, { recurrence: 'none', recurrence_interval: 1, recurrence_days: '', recurrence_until: '', recurrence_count: null });
+      var tempA = 'temp_' + Date.now();
+      S.events.push(Object.assign({ id: tempA }, override));
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, { excluded_dates: excluded });
+      var ra = await api('POST', '/api/events', override);
+      var ia = _eventIdx(tempA);
+      if (ia !== -1 && ra && ra.id) S.events[ia].id = ra.id;
+    } else if (scope === 'following') {
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], { recurrence_until: dayBeforeISO(occDate), recurrence_count: null });
+      var newSeries = Object.assign({}, data, { recurrence_count: null });
+      var tempB = 'temp_' + Date.now();
+      S.events.push(Object.assign({ id: tempB }, newSeries));
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, { recurrence_until: dayBeforeISO(occDate), recurrence_count: null });
+      var rb = await api('POST', '/api/events', newSeries);
+      var ib = _eventIdx(tempB);
+      if (ib !== -1 && rb && rb.id) S.events[ib].id = rb.id;
+    }
+    if (plannerRefresh) plannerRefresh();
+  } catch (err) {
+    console.error('Recurring edit failed:', err);
+    await doRefresh();
+  }
+}
+
+async function applyRecurringDelete(scope, master, occDate) {
+  var idx = _eventIdx(master.id);
+  try {
+    if (scope === 'all') {
+      if (idx !== -1) S.events.splice(idx, 1);
+      renderPlanner(); renderDashboard();
+      await api('DELETE', '/api/events/' + master.id);
+    } else if (scope === 'this') {
+      var ex = addExcludedDate(master.excluded_dates, occDate);
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], { excluded_dates: ex });
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, { excluded_dates: ex });
+    } else if (scope === 'following') {
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], { recurrence_until: dayBeforeISO(occDate), recurrence_count: null });
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, { recurrence_until: dayBeforeISO(occDate), recurrence_count: null });
+    }
+    if (plannerRefresh) plannerRefresh();
+  } catch (err) { console.error('Recurring delete failed:', err); if (plannerRefresh) await plannerRefresh(); }
+}
+
+// Drag a recurring occurrence to a new slot. `data` holds the drop target's
+// {date, start?, end?}. 'this' detaches it; 'all' shifts the whole series.
+async function applyRecurringMove(scope, master, occDate, data) {
+  var idx = _eventIdx(master.id);
+  try {
+    if (scope === 'all') {
+      var deltaDays = Math.round((parseLocalDate(data.date) - parseLocalDate(occDate)) / 86400000);
+      var upd = { date: toISO(addDays(parseLocalDate(master.date), deltaDays)) };
+      if (data.start) upd.start = data.start;
+      if (data.end) upd.end = data.end;
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], upd);
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, upd);
+    } else if (scope === 'this') {
+      var exm = addExcludedDate(master.excluded_dates, occDate);
+      if (idx !== -1) S.events[idx] = Object.assign({}, S.events[idx], { excluded_dates: exm });
+      var ov = {
+        date: data.date, start: data.start || master.start, end: data.end || master.end,
+        title: master.title, type: master.type, description: master.description, location: master.location,
+        recurrence: 'none', reminder_offset: master.reminder_offset, source: 'local'
+      };
+      var tempM = 'temp_' + Date.now();
+      S.events.push(Object.assign({ id: tempM }, ov));
+      renderPlanner(); renderDashboard();
+      await api('PUT', '/api/events/' + master.id, { excluded_dates: exm });
+      var rm = await api('POST', '/api/events', ov);
+      var im = _eventIdx(tempM);
+      if (im !== -1 && rm && rm.id) S.events[im].id = rm.id;
+    }
+    if (plannerRefresh) plannerRefresh();
+  } catch (err) { console.error('Recurring move failed:', err); if (plannerRefresh) await plannerRefresh(); }
 }
 
 function preventDefaultTouchMove(e) {
@@ -1902,19 +2618,28 @@ async function handleTouchDrop(ev) {
         data.end = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
       }
     }
-    
+
+    if (e && e.recurrence && e.recurrence !== 'none') {
+      if (dragPreviewEl) { dragPreviewEl.remove(); dragPreviewEl = null; }
+      var tocc = draggingOccDate || e.date;
+      var tscope = await promptRecurrenceScope('Move recurring event', false);
+      if (tscope) await applyRecurringMove(tscope, e, tocc, data);
+      else renderPlanner();
+      return;
+    }
+
     if (e) {
       Object.assign(e, data);
     }
-    
+
     if (dragPreviewEl) {
       dragPreviewEl.remove();
       dragPreviewEl = null;
     }
-    
+
     renderPlanner();
     renderDashboard();
-    
+
     if (e) {
       var undoCallback = async function() {
         var eventToRestore = S.events.find(function(x) { return x.id == id; });

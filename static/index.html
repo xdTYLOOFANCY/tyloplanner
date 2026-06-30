@@ -141,11 +141,13 @@
         <button class="btn ghost icon" onclick="moveWeek(-1)" aria-label="Previous">&#8249;</button>
         <button class="btn ghost" onclick="moveWeek(0)">Today</button>
         <button class="btn ghost icon" onclick="moveWeek(1)" aria-label="Next">&#8250;</button>
+        <input type="date" id="plannerGoToDate" class="goto-date" onchange="goToDate(this.value)" aria-label="Go to date" title="Jump to date">
       </div>
-      <span class="label" id="weekLabel"></span>
+      <span class="label" id="weekLabel" title="Jump to date" onclick="var g=document.getElementById('plannerGoToDate'); if(g&&g.showPicker){try{g.showPicker()}catch(e){}}"></span>
       <div class="weeknav-actions">
         <button class="btn ghost header-desktop-only" @click="$dispatch('open-shortcuts-modal')">⌨️ Shortcuts</button>
         <button class="btn ghost" @click="renderPlannerCalendarsPanel(); $dispatch('open-planner-calendars-modal')">⚙️ Calendars</button>
+        <input id="plannerQuickAdd" class="planner-quickadd" placeholder="✨ Quick add — e.g. Lunch tomorrow 1pm @Cafe" title="Type an event in plain language, then press Enter" onkeydown="handleQuickAddKeydown(event)">
         <div class="planner-search">
           <input id="plannerSearch" placeholder="🔍  Search events…" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
           <div id="plannerSearchResults" class="search-results"></div>
@@ -566,37 +568,51 @@
           </select>
         </div>
 
-        <!-- Date -->
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Date</label>
-          <input id="evModalDate" type="date" style="width:100%; padding:8px; font-size:14px;">
-        </div>
-
-        <!-- Start Time & Duration -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <!-- Date (+ optional end date for multi-day) -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div style="display:flex; flex-direction:column; gap:4px;">
-            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Start Time</label>
-            <input id="evModalStart" type="time" style="padding:8px; font-size:14px; width:100%;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Date</label>
+            <input id="evModalDate" type="date" style="width:100%; padding:8px; font-size:14px;">
           </div>
           <div style="display:flex; flex-direction:column; gap:4px;">
-            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Duration</label>
-            <select id="evModalDuration" style="padding:8px; font-size:14px; width:100%;">
-              <option value="15">15 min</option>
-              <option value="30">30 min</option>
-              <option value="45">45 min</option>
-              <option value="60">1 hour</option>
-              <option value="90">1.5 hours</option>
-              <option value="120">2 hours</option>
-              <option value="180">3 hours</option>
-              <option value="custom">Custom</option>
-            </select>
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">End date <span style="text-transform:none; font-weight:400;">(optional)</span></label>
+            <input id="evModalEndDate" type="date" style="width:100%; padding:8px; font-size:14px;">
           </div>
         </div>
 
-        <!-- End Time -->
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">End Time</label>
-          <input id="evModalEnd" type="time" style="padding:8px; font-size:14px; width:100%;">
+        <!-- All-day toggle -->
+        <label style="display:flex; align-items:center; gap:8px; font-size:14px; cursor:pointer;">
+          <input type="checkbox" id="evModalAllDay" onchange="updateAllDayVisibility()">
+          <span>All day</span>
+        </label>
+
+        <div id="evModalTimeFields" style="display:flex; flex-direction:column; gap:12px;">
+          <!-- Start Time & Duration -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Start Time</label>
+              <input id="evModalStart" type="time" style="padding:8px; font-size:14px; width:100%;">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Duration</label>
+              <select id="evModalDuration" style="padding:8px; font-size:14px; width:100%;">
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="60">1 hour</option>
+                <option value="90">1.5 hours</option>
+                <option value="120">2 hours</option>
+                <option value="180">3 hours</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- End Time -->
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">End Time</label>
+            <input id="evModalEnd" type="time" style="padding:8px; font-size:14px; width:100%;">
+          </div>
         </div>
 
         <!-- Description -->
@@ -611,20 +627,66 @@
           <input id="evModalLoc" placeholder="Location (optional)" style="width:100%; padding:8px; font-size:14px;">
         </div>
 
-        <!-- Repeat & Until -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div style="display:flex; flex-direction:column; gap:4px;">
-            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Repeat</label>
-            <select id="evModalRec" style="padding:8px; font-size:14px; width:100%;">
-              <option value="none">None</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+        <!-- Color -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Color</label>
+          <div id="evModalColorSwatches" class="color-swatches">
+            <button type="button" class="color-swatch color-default" data-color="" title="Default (use type color)" onclick="setEventColor('')">✕</button>
+            <button type="button" class="color-swatch" data-color="#4f8cff" style="background:#4f8cff" onclick="setEventColor('#4f8cff')"></button>
+            <button type="button" class="color-swatch" data-color="#a371f7" style="background:#a371f7" onclick="setEventColor('#a371f7')"></button>
+            <button type="button" class="color-swatch" data-color="#f85149" style="background:#f85149" onclick="setEventColor('#f85149')"></button>
+            <button type="button" class="color-swatch" data-color="#ffa657" style="background:#ffa657" onclick="setEventColor('#ffa657')"></button>
+            <button type="button" class="color-swatch" data-color="#3fb950" style="background:#3fb950" onclick="setEventColor('#3fb950')"></button>
+            <button type="button" class="color-swatch" data-color="#2dd4bf" style="background:#2dd4bf" onclick="setEventColor('#2dd4bf')"></button>
+            <button type="button" class="color-swatch" data-color="#f778ba" style="background:#f778ba" onclick="setEventColor('#f778ba')"></button>
+            <button type="button" class="color-swatch" data-color="#8b949e" style="background:#8b949e" onclick="setEventColor('#8b949e')"></button>
+            <input type="color" id="evModalColorCustom" class="color-swatch color-custom" title="Custom color" onchange="setEventColor(this.value)">
           </div>
-          <div id="evModalRecUntilGroup" style="display:flex; flex-direction:column; gap:4px;">
-            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Until</label>
-            <input id="evModalRecUntil" type="date" style="padding:8px; font-size:14px; width:100%;">
+          <input type="hidden" id="evModalColor">
+        </div>
+
+        <!-- Repeat -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Repeat</label>
+          <select id="evModalRec" style="padding:8px; font-size:14px; width:100%;">
+            <option value="none">Does not repeat</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div id="evModalRecOptions" style="display:none; flex-direction:column; gap:10px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--panel2);">
+          <div style="display:flex; align-items:center; gap:8px; font-size:14px;">
+            <span>Every</span>
+            <input id="evModalRecInterval" type="number" min="1" max="999" value="1" style="width:64px; padding:6px 8px; font-size:14px;">
+            <span id="evModalRecUnit">days</span>
+          </div>
+          <div id="evModalRecDaysGroup" style="display:none; flex-direction:column; gap:4px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Repeat on</label>
+            <div class="rec-weekdays" id="evModalRecDays">
+              <label><input type="checkbox" class="rec-day" value="1"><span>Mon</span></label>
+              <label><input type="checkbox" class="rec-day" value="2"><span>Tue</span></label>
+              <label><input type="checkbox" class="rec-day" value="3"><span>Wed</span></label>
+              <label><input type="checkbox" class="rec-day" value="4"><span>Thu</span></label>
+              <label><input type="checkbox" class="rec-day" value="5"><span>Fri</span></label>
+              <label><input type="checkbox" class="rec-day" value="6"><span>Sat</span></label>
+              <label><input type="checkbox" class="rec-day" value="0"><span>Sun</span></label>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label class="muted" style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Ends</label>
+            <select id="evModalRecEnd" style="padding:8px; font-size:14px; width:100%;">
+              <option value="never">Never</option>
+              <option value="until">On date</option>
+              <option value="count">After N occurrences</option>
+            </select>
+            <input id="evModalRecUntil" type="date" style="display:none; padding:8px; font-size:14px; width:100%;">
+            <div id="evModalRecCountGroup" style="display:none; align-items:center; gap:8px; font-size:14px;">
+              <span>After</span>
+              <input id="evModalRecCount" type="number" min="1" max="10000" value="10" style="width:72px; padding:6px 8px; font-size:14px;">
+              <span>occurrences</span>
+            </div>
           </div>
         </div>
 

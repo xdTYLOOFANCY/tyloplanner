@@ -66,6 +66,13 @@ _FIELD_RULES = {
     "uploaded":         ("int", 0, 9_999_999_999_999),
     "start":            ("time",),
     "end":              ("time",),
+    # ---- advanced calendar fields (migration 014) ----
+    "end_date":            ("date",),
+    "recurrence_interval": ("int", 1, 999),
+    "recurrence_count":    ("int", 1, 10_000),
+    "recurrence_days":     ("str", 32),
+    "excluded_dates":      ("str", _MAX_STR),
+    "color":               ("color",),
     # ---- exams ----
     "ects":             ("float", 0, 999),
     "grade":            ("float", 0, 10),
@@ -82,7 +89,9 @@ _FIELD_RULES = {
     "is_pinned":        ("bool",),
     "size":             ("int", 0, 10_000_000_000),
     # ---- reminders ----
-    "reminder_offset":  ("int", 0, 100_000),
+    # reminder_offset is -1 (no reminders) or a CSV of non-negative minute
+    # offsets, e.g. "5,15,30" — NOT a plain integer.
+    "reminder_offset":  ("reminder",),
     # ---- event type ----
     "type":             ("enum", frozenset(_EVENT_TYPES)),
     # ---- free-text / URL fields ----
@@ -184,6 +193,42 @@ def _validate_fields(table, data):
             if not (lo <= coerced <= hi):
                 return None, f"'{col}' must be between {lo} and {hi}"
             cleaned[col] = coerced
+
+        elif kind == "reminder":
+            # -1 (or empty) = no reminders; otherwise a CSV of non-negative
+            # minute offsets like "5,15,30". Accept int or string forms and
+            # normalize to a canonical comma-separated string.
+            if isinstance(val, bool):
+                return None, f"'{col}' is invalid"
+            s = str(val).strip()
+            if s == "" or s == "-1":
+                cleaned[col] = val
+            else:
+                out = []
+                for part in s.split(","):
+                    part = part.strip()
+                    if part == "":
+                        continue
+                    try:
+                        n = int(part)
+                    except (TypeError, ValueError):
+                        return None, f"'{col}' must be -1 or comma-separated minute offsets"
+                    if not (0 <= n <= 100_000):
+                        return None, f"'{col}' offsets must be between 0 and 100000"
+                    out.append(n)
+                cleaned[col] = ",".join(str(n) for n in out) if out else -1
+
+        elif kind == "color":
+            # Strict hex (#rgb / #rgba / #rrggbb / #rrggbbaa) or empty — this is
+            # rendered into an inline style, so reject anything else (no XSS).
+            if not isinstance(val, str):
+                return None, f"'{col}' must be a string"
+            if val == "":
+                cleaned[col] = val
+            elif re.match(r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", val):
+                cleaned[col] = val
+            else:
+                return None, f"'{col}' must be a hex color like #a371f7"
 
         elif kind == "float":
             _, lo, hi = rule

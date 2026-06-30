@@ -119,6 +119,42 @@ class CrudTests(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.get_json()["error"], "no valid fields")
 
+    def test_event_reminder_offset_formats(self):
+        # reminder_offset is -1 (none) or a CSV of minute offsets, not a plain int.
+        rid = self.c.post("/api/events", json={"title": "e", "date": "2026-06-10"}).get_json()["id"]
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"reminder_offset": "5,15,30"}).status_code, 200)
+        self.assertEqual(self._rows("events")[0]["reminder_offset"], "5,15,30")
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"reminder_offset": -1}).status_code, 200)
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"reminder_offset": ""}).status_code, 200)
+        # garbage / out-of-range offsets are still rejected
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"reminder_offset": "abc"}).status_code, 400)
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"reminder_offset": "5,999999"}).status_code, 400)
+
+    def test_event_advanced_recurrence_fields(self):
+        rid = self.c.post("/api/events", json={
+            "title": "r", "date": "2026-06-10", "recurrence": "weekly",
+            "recurrence_interval": 2, "recurrence_days": "1,3", "recurrence_count": 6,
+            "end_date": "2026-06-11", "excluded_dates": "2026-06-17",
+        }).get_json()["id"]
+        row = self._rows("events")[0]
+        self.assertEqual(row["recurrence_interval"], 2)
+        self.assertEqual(row["recurrence_days"], "1,3")
+        self.assertEqual(row["recurrence_count"], 6)
+        self.assertEqual(row["end_date"], "2026-06-11")
+        self.assertEqual(row["excluded_dates"], "2026-06-17")
+        # interval is bounded
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"recurrence_interval": 0}).status_code, 400)
+
+    def test_event_color_must_be_hex(self):
+        # color is rendered into an inline style, so only hex / empty is allowed.
+        rid = self.c.post("/api/events", json={"title": "c", "date": "2026-06-10", "color": "#a371f7"}).get_json()["id"]
+        self.assertEqual(self._rows("events")[0]["color"], "#a371f7")
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"color": "#fff"}).status_code, 200)
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"color": ""}).status_code, 200)
+        # anything that could break out of the style attribute is rejected
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"color": "red; x:url(javascript:1)"}).status_code, 400)
+        self.assertEqual(self.c.put("/api/events/%s" % rid, json={"color": "blue"}).status_code, 400)
+
     # ---- delete ----
     def test_delete_removes_row(self):
         rid = self.c.post("/api/tasks", json={"name": "x"}).get_json()["id"]
@@ -1362,7 +1398,7 @@ class DatabaseMigrationTests(unittest.TestCase):
         with helpers.db() as con:
             row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row["value"], "13")
+            self.assertEqual(row["value"], "15")
 
             notes_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
             self.assertIsNotNone(notes_fts)
@@ -2200,7 +2236,7 @@ class CliAdminTests(unittest.TestCase):
         # Verify the schema version was tracked in the kv table (the app's
         # source of truth is kv['db_version'], not PRAGMA user_version).
         row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
-        self.assertEqual(row["value"], "13")
+        self.assertEqual(row["value"], "15")
 
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()

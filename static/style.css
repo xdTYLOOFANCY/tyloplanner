@@ -124,8 +124,11 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .shortcut-btn .name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 6px}
 /* planner */
 .weeknav{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
-.weeknav .label{font-weight:700;font-size:16px;}
+.weeknav .label{font-weight:700;font-size:16px;cursor:pointer;}
 .weeknav-nav{display:inline-flex;align-items:center;gap:6px;}
+.goto-date{height:34px;padding:4px 8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:13px;font-family:inherit;cursor:pointer;color-scheme:dark;}
+[data-theme="light"] .goto-date{color-scheme:light;}
+.goto-date:focus{outline:none;border-color:var(--accent);}
 .weeknav-actions{display:inline-flex;align-items:center;gap:8px;margin-left:auto;}
 .weeknav .btn.icon{padding:6px 11px;font-size:15px;line-height:1;font-weight:600;}
 #plannerView{font-weight:600;}
@@ -133,6 +136,8 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .planner-search{position:relative;}
 .planner-search input{width:240px;max-width:100%;height:36px;padding:7px 12px;font-size:13px;box-sizing:border-box;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);transition:border-color 0.2s, box-shadow 0.2s;}
 .planner-search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(var(--accent-rgb),0.18);}
+.planner-quickadd{width:280px;max-width:100%;height:36px;padding:7px 12px;font-size:13px;box-sizing:border-box;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-family:inherit;transition:border-color 0.2s, box-shadow 0.2s;}
+.planner-quickadd:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(var(--accent-rgb),0.18);}
 .planner-search .search-results{display:none;position:absolute;top:42px;right:0;width:340px;max-width:90vw;max-height:300px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.2);z-index:1000;padding:4px 0;text-align:left;}
 .weekgrid{display:flex;flex-direction:column;}
 
@@ -189,6 +194,55 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
   20%, 60% { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.95); }
 }
 .event.event-flash { animation: eventFlash 1.5s ease; z-index: 20 !important; }
+
+/* Multi-day events: square the joining edges so segments read as one span. */
+.event.multi-start, .month-event.multi-start { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.event.multi-middle, .month-event.multi-middle { border-radius: 0; }
+.event.multi-end, .month-event.multi-end { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.event.absolute.multi-start { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.event.absolute.multi-middle { border-radius: 0; }
+.event.absolute.multi-end { border-top-left-radius: 0; border-top-right-radius: 0; }
+
+/* Calendar popovers: event quick-view + month "+N more" day list */
+.cal-popover { position: fixed; z-index: 2000; min-width: 240px; max-width: min(320px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); padding: 14px 16px; font-size: 13px; color: var(--text); }
+.cal-popover-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.cal-popover-dot { flex-shrink: 0; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); margin-top: 4px; }
+.cal-popover-dot.study { background: var(--accent2); }
+.cal-popover-dot.workout { background: var(--green); }
+.cal-popover-dot.work { background: var(--red); }
+.cal-popover-dot.personal { background: var(--orange); }
+.cal-popover-dot.deadline { background: var(--red); }
+.cal-popover-dot.ics { background: var(--muted); }
+.cal-popover-title { flex: 1; font-weight: 700; font-size: 15px; line-height: 1.3; word-break: break-word; }
+.cal-popover-x { flex-shrink: 0; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
+.cal-popover-x:hover { color: var(--text); }
+.cal-popover-meta { color: var(--muted); margin-bottom: 8px; }
+.cal-popover-row { margin: 4px 0; word-break: break-word; }
+.cal-popover-desc { margin: 8px 0 4px; white-space: pre-wrap; max-height: 140px; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 8px; }
+.cal-popover-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.cal-day-list { max-height: 260px; overflow-y: auto; margin: 4px 0; }
+.cal-day-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; cursor: pointer; }
+.cal-day-row:hover { background: var(--panel2); }
+.cal-day-row .cal-popover-dot { margin-top: 0; }
+.cal-day-time { color: var(--muted); font-size: 12px; flex-shrink: 0; min-width: 38px; }
+.cal-day-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-more { font-size: 10.5px; color: var(--muted); padding: 1px 5px; cursor: pointer; font-weight: 600; border-radius: 3px; }
+.month-more:hover { background: var(--panel2); color: var(--text); }
+
+/* Per-event color swatches */
+.color-swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.color-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
+.color-swatch.active { border-color: var(--text); }
+.color-swatch.color-default { background: var(--panel2); color: var(--muted); font-size: 13px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.color-swatch.color-custom { background: conic-gradient(red, orange, yellow, lime, aqua, blue, magenta, red); -webkit-appearance: none; appearance: none; overflow: hidden; }
+.color-swatch.color-custom::-webkit-color-swatch-wrapper { padding: 0; }
+.color-swatch.color-custom::-webkit-color-swatch { border: none; opacity: 0; }
+.color-swatch.color-custom::-moz-color-swatch { border: none; opacity: 0; }
+
+/* Recurrence sub-form: weekday picker */
+.rec-weekdays { display: flex; flex-wrap: wrap; gap: 6px; }
+.rec-weekdays label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+.rec-weekdays input { margin: 0; }
 .event.absolute.study { background: var(--accent2); }
 .event.absolute.workout { background: var(--green); }
 .event.absolute.work { background: var(--red); }
@@ -527,6 +581,7 @@ dialog.modal::backdrop {
   background: rgba(0, 0, 0, 0.6);
 }
 .modal-content{background:var(--panel);width:90%;max-width:400px;border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.5);border:1px solid var(--border)}
+.scope-modal .btn{width:100%;text-align:center;justify-content:center;}
 
 
 @media (max-width: 640px) {
@@ -2308,6 +2363,7 @@ body.dark .drop-overlay {
   .planner-search { flex: 1 1 100%; }
   .planner-search input { width: 100%; height: 40px; font-size: 16px; }
   .planner-search .search-results { width: 100%; left: 0; right: auto; top: 44px; }
+  .planner-quickadd { flex: 1 1 100%; width: 100%; height: 40px; font-size: 16px; }
 
   /* Time grid: dynamic height so it fills viewport without inner scroll trap.
      Also enable horizontal scrolling so multi-day views become swipeable

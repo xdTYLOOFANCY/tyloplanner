@@ -166,6 +166,46 @@ can't leak upward.
   lands focus on the heading, not the title input — `openAdd()`/`editEvent()`
   only focus the title on desktop (`isMobileViewport()` guard) so phones don't
   pop the keyboard before the user picks a field.
+- **Calendar popovers & go-to-date.** Clicking an event opens a read popover
+  (`showEventPopover`) rather than the editor; the month "+N more" chip opens a
+  day list (`showDayPopover`). Both use one floating `.cal-popover` positioned by
+  `openPopover()` (flips/clamps to the viewport, closes on outside-click/Esc).
+  The toolbar's `#plannerGoToDate` input calls `goToDate()`, which reuses
+  `setDateOffsetForDate()` (shared with search-navigation) and is re-synced to
+  the first visible date on every `renderPlanner()`.
+- **Recurrence model.** Recurrences are expanded client-side by `getInstances()`
+  (`planner.js`) from the master event row — there are no per-occurrence rows.
+  Fields: `recurrence` (none/daily/weekly/monthly/yearly), `recurrence_interval`
+  ("every N"), `recurrence_days` (CSV of JS `getDay()` indices for weekly
+  multi-day), and either `recurrence_until` (end date) or `recurrence_count`
+  (end after N — counted from the start incl. excluded, like RRULE COUNT).
+  `excluded_dates` (CSV of ISO dates) skips single occurrences. `reminder_offset`
+  is **not** a plain int — it's `-1` (none) or a CSV of minute offsets; validated
+  by the `reminder` rule in `blueprints/api.py`.
+- **Recurring single-occurrence edits.** Each rendered event carries `data-occ`
+  (the occurrence date). Editing/deleting/dragging a recurring instance calls
+  `promptRecurrenceScope()` and then `applyRecurringEdit` / `applyRecurringDelete`
+  / `applyRecurringMove`: **this** = add `occ` to `excluded_dates` (+ a standalone
+  override for edit/move); **following** = set the master's `recurrence_until` to
+  the day before `occ` (+ a new series for edit); **all** = mutate the master,
+  keeping its start date. They mutate `S` optimistically first (like the move/save
+  handlers) so the incremental sync's `?since_version=` lag never shows stale UI.
+- **Multi-day events.** `end_date` (after `date`) makes an event span days.
+  `getInstances()` expands each occurrence into one segment per day, tagging each
+  with `_multiRole` (start/middle/end) and `_occDate` (the occurrence start, used
+  for `data-occ`). Timed segments get clipped times (`00:00`/`24:00`) for
+  positioning but show the real span via `_origTime`; all-day segments render in
+  each day's all-day bar. The recurrence scan widens its start by the span so a
+  span beginning just before the view still shows. Continuation segments are
+  `draggable="false"`.
+- **All-day toggle / per-event color / quick-add.** The modal's `#evModalAllDay`
+  checkbox hides `#evModalTimeFields` and saves empty `start`/`end`. `#evModalColor`
+  (set via `setEventColor`) holds an optional hex `color` (column from migration
+  015, validated by the `color` rule in `api.py`); the renderer applies it as an
+  inline `background-color … !important` via `eventColorStyle()` (re-validated
+  client-side). The toolbar `#plannerQuickAdd` runs `parseQuickAdd()` — a
+  dependency-free heuristic parser for dates/times/durations/locations — and
+  `quickAddOpen()` pre-fills the Add-Event modal for confirmation.
 - **Notes editor.** On phones the editor is single-pane: `applyNoteLayout()`
   forces `isSplit = false` so edit mode is the textarea and read mode is the
   rendered preview (never side-by-side). Do **not** re-introduce a

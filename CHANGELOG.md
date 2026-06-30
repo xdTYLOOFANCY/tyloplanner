@@ -2,6 +2,114 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.5.38 — 2026-06-30
+
+Three calendar quality-of-life additions.
+
+- **Explicit "All day" toggle.** The event modal has an **All day** checkbox
+  instead of relying on leaving the time fields blank. Checking it hides the
+  start/end/duration fields and saves the event with no times; editing an
+  existing all-day event ticks it automatically.
+- **Per-event color.** Events can be recolored independently of their type
+  (Google-style). The modal has a **Color** row — a "default" option (use the
+  type color), eight presets, and a custom picker. The chosen color overrides
+  the type color in the week, all-day, month and popover views. New `color`
+  column (migration `015`); validated as a strict hex string in
+  `blueprints/api.py` since it's rendered into an inline style.
+- **Natural-language quick-add.** A toolbar **✨ Quick add** box parses a plain
+  line and opens the Add-Event modal pre-filled for confirmation. It understands
+  dates (`today`, `tomorrow`, `Friday`, `next Mon`, `Jun 5`, `12/06`, `in 3
+  days`), times and ranges (`9am`, `14:30`, `9-11am`, `noon`), durations (`for
+  90 min`), and locations (`@Zoom`, trailing room codes like `Eg-350`); the rest
+  becomes the title. It's a hand-rolled parser (no new dependencies), so it's
+  best-effort — the pre-filled modal lets you fix any mis-parse before saving.
+
+## 1.5.37 — 2026-06-29
+
+Google-Calendar parity, phase 2c (final): multi-day & midnight-spanning events.
+Completes the Tier-1 calendar feature set. Frontend only; uses the `end_date`
+column from migration 014.
+
+- **Events can span multiple days / cross midnight.** The event modal gained an
+  optional **End date** field. `getInstances()` now expands any event whose
+  `end_date` is after its start into one segment per day:
+  - **Multi-day all-day** events (trips, holidays) render as a continuous bar
+    across the week's all-day row and across month cells (squared joining edges
+    via `.multi-start/middle/end`).
+  - **Multi-day / midnight timed** events split into per-day segments — e.g.
+    23:00→01:00 shows 23:00→end-of-day on the first day and start-of-day→01:00
+    on the next — each segment labeled with the real span time. Recurring
+    multi-day events expand correctly (the scan window widens by the span so a
+    span starting just before the view still shows its in-view days).
+  - Continuation segments aren't draggable (dragging one would collapse the
+    span); edit them via the popover.
+
+## 1.5.36 — 2026-06-29
+
+Google-Calendar parity, phase 2b: single-occurrence editing of recurring events
+("This event / This and following / All events"). Frontend only — recurrences
+stay virtual (no per-occurrence rows); single edits are modeled with the
+`excluded_dates` and series-split fields from migration 014.
+
+- **Editing, deleting, or dragging one occurrence now asks for scope.** A
+  Google-style prompt offers **This event**, **This and following events**, or
+  **All events** (drag offers This/All):
+  - **This event** — detaches the occurrence: the date is added to the master's
+    `excluded_dates` and (for edit/move) a standalone event is created with the
+    new details, so the rest of the series is untouched.
+  - **This and following** — ends the master at the day before (`recurrence_until`)
+    and, for edits, starts a fresh series from that date.
+  - **All events** — applies to the whole series (keeping its start date).
+  Each event element now carries its occurrence date (`data-occ`) so the right
+  instance is targeted; changes apply optimistically (no stale-view lag).
+- Clicking an event's popover shows that occurrence's date, and the popover's
+  Edit/Delete route through the scope prompt for recurring events.
+
+## 1.5.35 — 2026-06-29
+
+Google-Calendar parity, phase 2a: richer recurrence (plus a reminder-saving bug
+fix found along the way). New DB migration `014_add_calendar_advanced_fields`
+adds `end_date`, `recurrence_interval`, `recurrence_days`, `recurrence_count`,
+`excluded_dates` to `events` (additive/nullable; whitelisted + validated).
+
+- **Richer recurrence rules.** Repeats can now be **every N** days/weeks/
+  months/years (interval), **weekly on multiple weekdays** (Mon/Wed/Fri…), and
+  **yearly**; and a series can **end after N occurrences** as well as on a date.
+  The event modal gained a recurrence sub-form (interval, weekday picker, and an
+  Ends = Never / On date / After N selector). `getInstances()` was rewritten to
+  expand all of this (and is now timezone-safe via local-date parsing).
+- **Fixed: events with multiple reminders — or no reminders — couldn't be
+  saved.** `reminder_offset` holds a CSV of minute offsets (e.g. `5,15,30`) or
+  the `-1` "none" sentinel, but the backend validated it as a plain integer, so
+  every `POST`/`PUT` with more than one reminder (or with none) was rejected
+  with a `400` and silently reverted. Validation now accepts the real format
+  (`-1`, empty, or a comma-separated list of 0–100000 offsets) and normalizes
+  it; single-reminder saves are unaffected. Pre-existing bug, surfaced while
+  testing recurrence editing.
+
+## 1.5.34 — 2026-06-29
+
+Google-Calendar feature parity, phase 1 (the no-schema-change wins). Frontend
+only — `static/js/planner.js`, `static/index.html`, `static/style.css`, plus
+function wiring in `static/app.js`.
+
+- **Go-to-date picker.** The toolbar gained a date input next to `Today ‹ ›`,
+  and the date label is now clickable, so you can jump to any date instead of
+  paging week-by-week (`goToDate()` reuses the same offset math as
+  search-navigation; the picker stays in sync with the visible range).
+- **Quick event popover.** Clicking an event no longer jumps straight into the
+  full edit modal — it opens a lightweight read popover (title, date/time,
+  location, recurrence, description) with **Edit / Duplicate / Delete** actions,
+  matching Google. The full editor is one click away via Edit. "Duplicate"
+  clones the event (` (copy)`); delete confirms first.
+- **Month "+N more" overflow.** Busy month cells used to render every event and
+  blow out the row height. Cells now cap at 4 chips and collapse the rest into a
+  **"+N more"** that opens a day popover listing all that day's events (each
+  opens its own quick popover), plus a "+ Add event" shortcut.
+
+All of this is theme-driven (CSS variables) and works on mobile (the popover
+clamps to the viewport).
+
 ## 1.5.33 — 2026-06-29
 
 Planner toolbar + interaction fixes from real-use feedback.
