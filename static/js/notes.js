@@ -650,8 +650,12 @@ export function renderNotes() {
 
   var titleEl = document.getElementById("noteTitle");
   var bodyEl = document.getElementById("noteBody");
-  if (titleEl) titleEl.value = n.title || "";
-  if (bodyEl) bodyEl.value = n.body || "";
+  // Don't overwrite textarea while a save is pending — it resets the cursor
+  // position and may inject stale server content over the user's live edits.
+  if (!noteTimer) {
+    if (titleEl) titleEl.value = n.title || "";
+    if (bodyEl) bodyEl.value = n.body || "";
+  }
   
   var statusEl = document.getElementById("noteSaveStatus");
   if (statusEl) {

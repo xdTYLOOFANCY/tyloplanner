@@ -336,10 +336,71 @@ table.habits th:first-child,table.habits td:first-child{text-align:left}
 .chart .bar span{position:absolute;top:-17px;left:-6px;right:-6px;text-align:center;font-size:10px;color:var(--muted)}
 .chartlabels{display:flex;gap:6px;margin-bottom:10px}
 .chartlabels div{flex:1;text-align:center;font-size:10px;color:var(--muted)}
-/* grades table */
+/* grades table (used in analytics) */
 table.grades{width:100%;border-collapse:collapse;font-size:14px}
 table.grades th,table.grades td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--border)}
 table.grades input{width:70px;padding:5px 7px}
+
+/* exam analytics card */
+.exam-analytics-card{padding:14px 18px;margin-bottom:10px;font-size:14px}
+.exam-analytics-card:empty{display:none}
+.exam-analytics-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+
+/* donut layout */
+.da-layout{display:flex;align-items:flex-start;gap:20px}
+.da-right{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.da-top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px}
+.da-stat{display:flex;flex-direction:column;gap:2px}
+.da-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.da-val{font-size:22px;font-weight:700;line-height:1.1}
+.da-section-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:5px}
+.da-section{}
+.da-bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* grade distribution bar */
+.grade-dist-bar{display:flex;height:9px;border-radius:999px;overflow:hidden;gap:2px}
+.dist-seg{min-width:2px;border-radius:999px}
+.dist-seg.excellent{background:var(--accent)}
+.dist-seg.good{background:color-mix(in srgb,var(--accent) 60%,var(--border))}
+.dist-seg.sufficient{background:var(--orange,#f5a623)}
+.dist-seg.fail{background:#ff5c5c}
+.dist-seg.pending{background:var(--border)}
+.dist-legend{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted);margin-top:4px;align-items:center}
+.dist-legend span{display:flex;align-items:center;gap:3px;white-space:nowrap}
+.dist-dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dist-dot.excellent{background:var(--accent)}
+.dist-dot.good{background:color-mix(in srgb,var(--accent) 60%,var(--border))}
+.dist-dot.sufficient{background:var(--orange,#f5a623)}
+.dist-dot.fail{background:#ff5c5c}
+.dist-dot.pending{background:var(--border)}
+
+/* upcoming rows */
+.upcoming-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0}
+.upcoming-name{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px}
+
+/* ECTS by year bars */
+.year-bar-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.year-bar-label{font-size:11px;color:var(--muted);width:38px;flex-shrink:0}
+.year-bar-track{flex:1;height:7px;background:var(--border);border-radius:999px;position:relative;overflow:hidden}
+.year-bar-total{position:absolute;left:0;top:0;height:100%;background:color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:999px}
+.year-bar-earned{position:absolute;left:0;top:0;height:100%;background:var(--accent);border-radius:999px}
+.year-bar-val{font-size:11px;color:var(--muted);white-space:nowrap;min-width:28px;text-align:right}
+
+@media(max-width:600px){
+  .da-layout{flex-direction:column}
+  .da-bottom-grid{grid-template-columns:1fr}
+}
+/* exam table extras */
+.exam-name-cell{width:99%;cursor:text}
+.exam-date-cell,.exam-ects-cell{white-space:nowrap;cursor:text}
+.exam-name-cell:hover,.exam-date-cell:hover,.exam-ects-cell:hover{color:var(--accent)}
+table.grades .exam-del{opacity:0;transition:opacity .15s}
+table.grades tr:hover .exam-del{opacity:1}
+.grade-input{width:72px;padding:4px 6px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px}
+.grade-input:focus{border-color:var(--accent);outline:none}
+.grade-badge-preview{display:none}
+.inline-input{background:var(--card);border:1px solid var(--accent);border-radius:5px;color:var(--text);padding:3px 7px;font-size:13px;outline:none}
+
 /* notes */
 .noteslayout{display:grid;grid-template-columns:260px 1fr;gap:16px}
 @media(max-width:760px){.noteslayout{grid-template-columns:1fr}}

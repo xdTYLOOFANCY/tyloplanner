@@ -158,9 +158,10 @@
   </section>
 
   <section id="tab-exams">
+    <div class="card exam-analytics-card" id="examAnalytics"></div>
     <div class="card">
       <div class="formrow">
-        <input id="examName" placeholder="Exam or deadline name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
+        <input id="examName" placeholder="Exam or assignment name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
         <input id="examDate" type="date" onkeydown="if(event.key==='Enter')addExam()">
         <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS (opt.)" style="width:100px" onkeydown="if(event.key==='Enter')addExam()">
         <button class="btn" onclick="addExam()">Add</button>

@@ -25,7 +25,7 @@ import {
 } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
 import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
-import { addExam as _addExam, setGrade as _setGrade, renderExams } from './js/exams.js';
+import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
 import {
@@ -80,7 +80,7 @@ function renderTab(tab) {
   if (tab === "dashboard") renderDashboard();
   else if (tab === "analytics") renderAnalytics();
   else if (tab === "planner") renderPlanner();
-  else if (tab === "exams") renderExams();
+  else if (tab === "exams") renderExams(R);
   else if (tab === "habits") renderHabits();
   else if (tab === "workouts") renderWorkouts();
   else if (tab === "tasks") renderTasks();
@@ -114,6 +114,9 @@ window.saveEventModal = function() { _saveEventModal(R); };
 window.delEventModal = function() { _delEventModal(R); };
 window.addExam = function() { _addExam(R); };
 window.setGrade = function(id, val) { _setGrade(id, val, R); };
+window.setGradeText = function(id, val) { _setGradeText(id, val, R); };
+window.examInlineEdit = function(el, id, field, currentVal) { examInlineEditFn(el, id, field, currentVal, R); };
+window.saveEctsGoal = function(val) { _saveEctsGoal(val, R); };
 window.addHabit = function() { _addHabit(R); };
 window.delHabit = function(id) { _delHabit(id, R); };
 window.toggleHabit = function(id, iso) { _toggleHabit(id, iso); };

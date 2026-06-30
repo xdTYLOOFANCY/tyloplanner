@@ -38,7 +38,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # whitelisted writable columns per table (id is managed by the server)
 TABLES = {
     "events":   ["date", "start", "end", "title", "type", "source", "description", "location", "recurrence", "recurrence_until", "reminder_offset", "end_date", "recurrence_interval", "recurrence_days", "recurrence_count", "excluded_dates", "color"],
-    "exams":    ["name", "date", "grade", "ects"],
+    "exams":    ["name", "date", "grade", "grade_text", "grading_type", "ects"],
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
     "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id"],
@@ -492,6 +492,7 @@ SETTING_DEFAULTS = {
     "app_timezone": "",
     "calendar_hidden_types": "[]",
     "calendar_colors": "{}",
+    "ects_goal": "",
 }
 
 

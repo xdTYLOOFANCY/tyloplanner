@@ -150,13 +150,17 @@ export function renderAnalytics() {
     });
   }
 
-  var graded = S.exams.filter(function(e) { return e.grade != null; });
+  var dutchGraded = S.exams.filter(function(e) { return (e.grading_type === 'dutch' || !e.grading_type) && e.grade != null; });
   var avg = null;
-  if (graded.length) {
+  if (dutchGraded.length) {
     var wsum = 0, sum = 0;
-    graded.forEach(function(e) { var w = e.ects || 1; wsum += w; sum += e.grade * w; });
+    dutchGraded.forEach(function(e) { var w = e.ects || 1; wsum += w; sum += e.grade * w; });
     avg = Math.round(sum / wsum * 100) / 100;
   }
+  var graded = S.exams.filter(function(e) {
+    if (e.grading_type === 'pass_fail' || e.grading_type === 'letter') return e.grade_text != null;
+    return e.grade != null;
+  });
 
   // --- Populate Summary Items (Grid of 8 Stat Cards) ---
   const stats = [
@@ -167,7 +171,7 @@ export function renderAnalytics() {
     { label: "Study Hrs Planned \uD83D\uDCDA", val: Math.round(totStudyH), icon: "\uD83D\uDCDA" },
     { label: "Study Hrs Actual \u2705", val: Math.round(totStudyActualH), icon: "\u2611\uFE0F" },
     { label: "Habit Check-ins \uD83D\uDD25", val: totChecks, icon: "\uD83D\uDD25" },
-    { label: "Avg Grade (" + graded.length + ")", val: avg != null ? avg : "\u2014", icon: "\uD83C\uDF93" }
+    { label: "Dutch avg (" + dutchGraded.length + ")", val: avg != null ? avg : "\u2014", icon: "\uD83C\uDF93" }
   ];
   
   let gridHtml = '';
@@ -286,9 +290,21 @@ export function renderAnalytics() {
   if (graded.length) {
     gh = '<table class="grades"><tr><th>Exam</th><th>Date</th><th>ECTS</th><th>Grade</th></tr>';
     graded.slice().sort(function(a, b) { return b.date.localeCompare(a.date); }).forEach(function(e) {
-      var cls = e.grade >= 5.5 ? "green" : "red";
-      gh += '<tr><td>' + esc(e.name) + '</td><td class="muted">' + esc(e.date) + '</td><td>' + (e.ects || "\u2014") + '</td>' +
-        '<td><span class="badge ' + cls + '">' + e.grade + '</span></td></tr>';
+      var badgeHtml;
+      var type = e.grading_type || 'dutch';
+      if (type === 'pass_fail') {
+        var pf = e.grade_text === 'pass' ? 'green' : 'red';
+        badgeHtml = '<span class="badge ' + pf + '">' + esc(e.grade_text || '\u2014') + '</span>';
+      } else if (type === 'letter') {
+        var lp = e.grade_text && e.grade_text !== 'F' && !e.grade_text.startsWith('D') ? 'gray' : 'red';
+        badgeHtml = '<span class="badge ' + lp + '">' + esc(e.grade_text || '\u2014') + '</span>';
+      } else {
+        var pass = type === 'percentage' ? e.grade >= 55 : e.grade >= 5.5;
+        var suffix = type === 'percentage' ? '%' : '';
+        badgeHtml = '<span class="badge ' + (pass ? 'green' : 'red') + '">' + e.grade + suffix + '</span>';
+      }
+      gh += '<tr><td>' + esc(e.name) + '</td><td class="muted">' + esc(e.date) + '</td><td>' + (e.ects || '\u2014') + '</td>' +
+        '<td>' + badgeHtml + '</td></tr>';
     });
     gh += '</table>';
   } else gh = '<div class="muted">No grades entered yet \u2014 add them in the Exams &amp; grades tab.</div>';
