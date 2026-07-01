@@ -446,11 +446,33 @@ function renderFabMenu() {
 }
 
 // ---------- boot ----------
-document.addEventListener('alpine:init', () => {
-  Alpine.magic('cleanup', (el, { cleanup }) => cleanup);
-  import('./js/state.js').then(({ S }) => {
-    Alpine.store('state', S || {});
-  });
+// Wire up <dialog> modals: open/close via window CustomEvents, plus backdrop-click-to-close.
+const MODALS = {
+  updateModal: 'update',
+  taskModal: 'task',
+  categoriesModal: 'categories',
+  eventModal: 'event',
+  shortcutsModal: 'shortcuts',
+  mediaPreviewModal: 'media-preview',
+  dashboardEventDetailsModal: 'dashboard-event',
+  plannerCalendarsModal: 'planner-calendars',
+  mobileMenuModal: 'mobile-menu',
+};
+for (const [id, slug] of Object.entries(MODALS)) {
+  const dlg = document.getElementById(id);
+  if (!dlg) continue;
+  window.addEventListener(`open-${slug}-modal`, () => dlg.showModal());
+  window.addEventListener(`close-${slug}-modal`, () => dlg.close());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+}
+document.getElementById('mediaPreviewModal')?.addEventListener('close', () => {
+  document.getElementById('mediaPreviewContainer').innerHTML = '';
+});
+document.getElementById('taskModal')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
+    e.preventDefault();
+    window.saveTaskModal();
+  }
 });
 
 document.getElementById("wDate").value = todayStr();

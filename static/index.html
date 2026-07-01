@@ -12,7 +12,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css?v=85">
-<script defer src="js/alpine.min.js"></script>
 <script src="js/marked.min.js"></script>
 <script src="js/chart.umd.js"></script>
 <script type="module" src="app.js?v=85"></script>
@@ -129,7 +128,7 @@
   </section>
 
   <section id="tab-planner">
-    <div class="weeknav" x-data>
+    <div class="weeknav">
       <select id="plannerView" class="btn ghost" onchange="changePlannerView(this.value)">
         <option value="1">Day</option>
         <option value="3">3 Days</option>
@@ -145,8 +144,8 @@
       </div>
       <span class="label" id="weekLabel" title="Jump to date" onclick="var g=document.getElementById('plannerGoToDate'); if(g&&g.showPicker){try{g.showPicker()}catch(e){}}"></span>
       <div class="weeknav-actions">
-        <button class="btn ghost header-desktop-only" @click="$dispatch('open-shortcuts-modal')">⌨️ Shortcuts</button>
-        <button class="btn ghost" @click="renderPlannerCalendarsPanel(); $dispatch('open-planner-calendars-modal')">⚙️ Calendars</button>
+        <button class="btn ghost header-desktop-only" onclick="window.dispatchEvent(new CustomEvent('open-shortcuts-modal'))">⌨️ Shortcuts</button>
+        <button class="btn ghost" onclick="renderPlannerCalendarsPanel(); window.dispatchEvent(new CustomEvent('open-planner-calendars-modal'))">⚙️ Calendars</button>
         <input id="plannerQuickAdd" class="planner-quickadd" placeholder="✨ Quick add — e.g. Lunch tomorrow 1pm @Cafe" title="Type an event in plain language, then press Enter" onkeydown="handleQuickAddKeydown(event)">
         <div class="planner-search">
           <input id="plannerSearch" placeholder="🔍  Search events…" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
@@ -209,8 +208,8 @@
       <div class="formrow">
         <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
         <select id="taskCategory" style="min-width:120px;"></select>
-        <div x-data>
-          <button class="btn ghost" @click="$dispatch('open-categories-modal')" style="padding:4px 8px; line-height:1; font-size:14px;" title="Manage categories">🏷️</button>
+        <div>
+          <button class="btn ghost" onclick="window.dispatchEvent(new CustomEvent('open-categories-modal'))" style="padding:4px 8px; line-height:1; font-size:14px;" title="Manage categories">🏷️</button>
         </div>
         <input id="taskDue" type="datetime-local" onkeydown="if(event.key==='Enter')addTask()">
         <button class="btn" onclick="addTask()">Add</button>
@@ -472,17 +471,17 @@
     </div>
     <div class="card">
       <h3>🔄 Software Updates</h3>
-      <div x-data class="card" style="text-align:center; padding:30px;">
+      <div class="card" style="text-align:center; padding:30px;">
         <h3 style="margin-bottom:10px;">About TyloPlanner</h3>
         <p style="margin-bottom:15px; font-size:14px; opacity:0.8;">Local-first planner & organizer.</p>
         <span id="versionCheckStatus" style="font-size:14px" class="muted">Checking for updates...</span>
         <button class="btn small" id="checkUpdateBtn" onclick="checkForUpdates(true)">Check now</button>
-        <button class="btn small" id="updateServerBtn" style="display:none" @click="$dispatch('open-update-modal')">How to update</button>
+        <button class="btn small" id="updateServerBtn" style="display:none" onclick="window.dispatchEvent(new CustomEvent('open-update-modal'))">How to update</button>
       </div>
     </div>
   </section>
 
-  <dialog id="updateModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-update-modal.window="open = true" @close-update-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="updateModal" class="modal">
     <div class="modal-content" style="max-width: 450px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Update TyloPlanner</h3>
       <p style="font-size:14px; margin-bottom:12px; line-height:1.5;">To update TyloPlanner to the latest version, run the following commands on your server:</p>
@@ -500,12 +499,12 @@
       </div>
       
       <div style="display:flex; justify-content:flex-end; gap:8px;">
-        <button class="btn" @click="open = false">Close</button>
+        <button class="btn" onclick="this.closest('dialog').close()">Close</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="taskModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-task-modal.window="open = true" @close-task-modal.window="open = false" @click="if($event.target === $el) open = false" @keydown.enter="if($event.target.tagName !== 'BUTTON') { $event.preventDefault(); saveTaskModal(); }">
+  <dialog id="taskModal" class="modal">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 id="taskModalTitle" style="margin-bottom:16px; font-size:16px; font-weight:700;">Edit Task</h3>
       <input type="hidden" id="editTaskId">
@@ -526,13 +525,13 @@
       </div>
       
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:20px;">
-        <button class="btn ghost" @click="open = false">Cancel</button>
+        <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
         <button class="btn" onclick="saveTaskModal()">Save</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="categoriesModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-categories-modal.window="open = true" @close-categories-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="categoriesModal" class="modal">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Manage Categories</h3>
       
@@ -545,12 +544,12 @@
       <div id="modalCategoriesList" class="card-scroll" style="max-height:200px; margin-bottom:16px;"></div>
       
       <div style="display:flex; justify-content:flex-end;">
-        <button class="btn" @click="open = false">Close</button>
+        <button class="btn" onclick="this.closest('dialog').close()">Close</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="eventModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-event-modal.window="open = true" @close-event-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="eventModal" class="modal">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <h3 id="evModalTitleText" tabindex="-1" autofocus style="margin-bottom:16px; font-size:16px; font-weight:700; outline:none;">Event Details</h3>
       <input type="hidden" id="evModalId">
@@ -725,13 +724,13 @@
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button class="btn" style="flex:1; padding:10px; font-size:14px;" onclick="saveEventModal()">Save</button>
           <button class="btn danger" id="evModalDelBtn" style="display:none; padding:10px; font-size:14px;" onclick="delEventModal()">Delete</button>
-          <button class="btn ghost" style="padding:10px; font-size:14px;" @click="open = false">Cancel</button>
+          <button class="btn ghost" style="padding:10px; font-size:14px;" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
       </div>
     </div>
   </dialog>
 
-  <dialog id="shortcutsModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-shortcuts-modal.window="open = true" @close-shortcuts-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="shortcutsModal" class="modal">
     <div class="modal-content" style="max-width: 420px; width: 90%;">
       <h3 style="margin-bottom:16px; font-size:16px; font-weight:700;">Keyboard Shortcuts</h3>
       <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
@@ -770,31 +769,31 @@
       <div style="display:flex; gap:8px;">
         <button class="btn" style="flex:1;" onclick="saveShortcuts()">Save</button>
         <button class="btn ghost" style="padding:10px;" onclick="resetShortcutsToDefault()">Reset Defaults</button>
-        <button class="btn ghost" style="padding:10px;" @click="open = false">Cancel</button>
+        <button class="btn ghost" style="padding:10px;" onclick="this.closest('dialog').close()">Cancel</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="mediaPreviewModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false; document.getElementById('mediaPreviewContainer').innerHTML = '';" @open-media-preview-modal.window="open = true" @close-media-preview-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="mediaPreviewModal" class="modal">
     <div id="mediaPreviewModalContent" class="modal-content" style="display: flex; flex-direction: column; box-sizing: border-box;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 id="mediaPreviewTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">File Preview</h3>
-        <button class="btn ghost small" @click="open = false" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
       </div>
       <div id="mediaPreviewContainer" style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto; background:#121212; border-radius:4px; min-height:0; padding:10px;">
         <!-- Embedded preview will go here -->
       </div>
       <div style="margin-top:12px; display:flex; justify-content:flex-end;">
-        <button class="btn ghost" @click="open = false">Close</button>
+        <button class="btn ghost" onclick="this.closest('dialog').close()">Close</button>
       </div>
     </div>
   </dialog>
 
-  <dialog id="dashboardEventDetailsModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-dashboard-event-modal.window="open = true" @close-dashboard-event-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="dashboardEventDetailsModal" class="modal">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 id="dbEvModalTitle" style="font-size:16px; font-weight:700; margin:0;">Event Details</h3>
-        <button class="btn ghost small" @click="open = false" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
       </div>
       <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:20px;">
         <div>
@@ -832,7 +831,7 @@
       </div>
       <div style="display:flex; gap:8px;">
         <button id="dbEvEditBtn" class="btn" style="flex:1;">✏️ Edit in Calendar</button>
-        <button class="btn ghost" style="flex:1;" @click="open = false">Close</button>
+        <button class="btn ghost" style="flex:1;" onclick="this.closest('dialog').close()">Close</button>
       </div>
     </div>
   </dialog>
@@ -871,20 +870,20 @@
     <span class="fab-icon" id="fabIcon">+</span>
   </button>
 </div>
-  <dialog id="plannerCalendarsModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-planner-calendars-modal.window="open = true" @close-planner-calendars-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="plannerCalendarsModal" class="modal">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 style="margin:0;font-size:16px;">Customize Calendars</h3>
-        <button class="btn ghost small" @click="open = false" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
       </div>
       <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   </dialog>
-  <dialog id="mobileMenuModal" class="modal" x-data="{ open: false }" x-init="$watch('open', val => { if (val && !$el.open) { $el.showModal() } else if (!val && $el.open) { $el.close() } })" @close="open = false" @open-mobile-menu-modal.window="open = true" @close-mobile-menu-modal.window="open = false" @click="if($event.target === $el) open = false">
+  <dialog id="mobileMenuModal" class="modal">
     <div class="modal-content" style="padding-bottom: env(safe-area-inset-bottom);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 style="margin:0;font-size:16px;">More</h3>
-        <button class="btn ghost small" @click="open = false" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
       </div>
       <div class="menu-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'analytics\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">📊 Analytics</button>

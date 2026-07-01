@@ -8,7 +8,7 @@ const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/mani
                 "/js/planner.js", "/js/exams.js", "/js/habits.js",
                 "/js/workouts.js", "/js/tasks.js", "/js/notes.js",
                 "/js/analytics.js", "/js/dashboard.js", "/js/backup.js", "/js/chart.umd.js",
-                "/js/files.js", "/js/settings.js", "/js/marked.min.js", "/js/alpine.min.js",
+                "/js/files.js", "/js/settings.js", "/js/marked.min.js",
                 "/js/offline.js", "/js/bottom_nav.js", "/js/login.js", "/js/study_timer.js",
                 "/js/swipe.js"];
 
