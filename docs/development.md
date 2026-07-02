@@ -20,8 +20,10 @@ SQLite (data/tyloplanner.db)
   state (`GET /api/state`), keeps it in a global `S`, and coordinates rendering
   using ES modules in `static/js/`. Edit a file, refresh the browser, done.
 - **Offline Mode & Sync Queue.** Uses a service worker to cache frontend assets, and an IndexedDB database `tyloplanner_offline` to cache the application state (`state_cache`) and queue modifications (`api_queue`) offline. When the network connection is restored, the client automatically replays queued mutations sequentially to the backend.
-- **One database.** Tables are created automatically from `SCHEMA` on first
-  run. The `kv` table holds settings, tokens and scheduler bookkeeping.
+- **One database.** The schema is built from ordered SQL files in
+  `migrations/` (`NNN_*.sql`), applied on startup by `run_migrations()` in
+  `helpers.py` (tracked via `db_version` in `kv`). The `kv` table holds
+  settings, tokens and scheduler bookkeeping.
 
 ## Running in development
 
@@ -96,8 +98,10 @@ ignores anything not listed there.
 
 Example: a water-intake tracker.
 
-1. **Schema:** add a table to `SCHEMA` and its writable columns to `TABLES`
-   in `helpers.py`. Restart — the table is created automatically.
+1. **Schema:** add a new `migrations/NNN_*.sql` file that creates the table
+   (never edit an already-applied migration), and add its writable columns to
+   the `TABLES` whitelist in `helpers.py`. Restart — the migration runs
+   automatically.
 2. **UI:** add a nav button + `<section id="tab-water">` in
    `static/index.html`. Create `static/js/water.js` with a `renderWater()` function
    and export it. Import it in `static/app.js`, then call it from `renderAll()`. Use the existing `api()` helper for requests.
