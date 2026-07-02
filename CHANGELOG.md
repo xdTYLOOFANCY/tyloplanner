@@ -2,6 +2,31 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.6.0 — 2026-07-02
+
+Notes get a real WYSIWYG editor.
+
+- **Rich-text Notes editor (Quill).** The Notes tab moved from a Markdown
+  textarea with a live preview to a true what-you-see-is-what-you-get editor,
+  Apple-Notes style. The toolbar covers headings, bold/italic/underline/strike,
+  text & highlight color, ordered / bulleted / **checklist** lists, indent,
+  blockquote, code blocks, links and inline images. Formatting is applied and
+  shown inline — no more split panes, Read Mode, or Markdown syntax to remember.
+- **Inline images.** Insert images straight into a note; they're uploaded
+  through the existing files storage (`/api/files`) and embedded by URL, so note
+  rows stay small.
+- **Storage & migration.** Notes now store sanitized rich HTML in `notes.body`,
+  tracked by a new `body_format` column (migration `017`). Existing Markdown
+  notes are converted to HTML automatically the first time they're opened and
+  saved — nothing to do, no data lost. Note bodies are run through a strict
+  server-side HTML allowlist sanitizer (stdlib only) on save.
+- **Kept:** folders, note search (list + in-note find), drag-and-drop,
+  pinning, mobile panel navigation, and Styled-HTML / Compiled-Notebook export
+  all continue to work.
+- **New vendored dependency.** Quill (`static/js/quill.js` +
+  `quill.snow.css`) ships prebuilt alongside the existing `chart.umd.js` /
+  `marked.min.js` — no bundler or build step added.
+
 ## 1.5.38 — 2026-06-30
 
 Three calendar quality-of-life additions.

@@ -8,6 +8,7 @@ import helpers
 from helpers import (
     db, uid, q, TABLES, APP_URL,
     kv_get, feed_key, totp_enabled, full_state_dict, db_retry,
+    sanitize_note_html,
 )
 
 # ---------------------------------------------------------------------------
@@ -27,6 +28,9 @@ _RE_DATETIME = re.compile(
 # Maximum character length for free-text / URL fields
 _MAX_STR = 8000
 _MAX_SHORT = 255
+# Note bodies hold rich HTML (Quill), which is far bulkier than the equivalent
+# Markdown, so they get a much larger cap than other free-text fields.
+_MAX_BODY = 500_000
 
 # Allowed event types (matches what the frontend sends — planner.js EVENT_TYPES list)
 _EVENT_TYPES = {
@@ -97,7 +101,8 @@ _FIELD_RULES = {
     # ---- free-text / URL fields ----
     "name":             ("str", _MAX_STR),
     "title":            ("str", _MAX_STR),
-    "body":             ("str", _MAX_STR),
+    "body":             ("str", _MAX_BODY),
+    "body_format":      ("enum", frozenset(("md", "html"))),
     "description":      ("str", _MAX_STR),
     "note":             ("str", _MAX_STR),
     "subject":          ("str", _MAX_SHORT),
@@ -411,6 +416,8 @@ def create_row(table):
     data, err = _validate_fields(table, raw)
     if err:
         return jsonify({"error": err}), 400
+    if table == "notes" and data.get("body_format") == "html" and "body" in data:
+        data["body"] = sanitize_note_html(data["body"])
     cols = list(data.keys())
     rid = uid()
     sql = "INSERT INTO %s (id%s) VALUES (?%s)" % (
@@ -445,6 +452,8 @@ def update_row(table, rid):
     data, err = _validate_fields(table, raw)
     if err:
         return jsonify({"error": err}), 400
+    if table == "notes" and data.get("body_format") == "html" and "body" in data:
+        data["body"] = sanitize_note_html(data["body"])
     cols = list(data.keys())
     sql = "UPDATE %s SET %s WHERE id=?" % (table, ",".join(q(c) + "=?" for c in cols))
     with db(write=True) as con:

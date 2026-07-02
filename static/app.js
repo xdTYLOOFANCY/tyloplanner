@@ -38,7 +38,6 @@ import {
 import {
   renderNotes, newNote as _newNote, selectNote, openNote, noteChanged, deleteNote as _deleteNote,
   toggleNotePin, noteSearchInput, noteBodySearchInput, noteBodySearchNav,
-  toggleNoteMode, noteInsert, toggleNoteReadMode, toggleNoteSplitOnly,
   handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack, toggleNoteSearchBar,
   navigateToNoteFolder, createNoteFolderPrompt, renameNoteFolderPrompt, changeNoteFolderIconPrompt, deleteNoteFolderConfirm,
   onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
@@ -262,10 +261,6 @@ window.noteBodySearchInput = noteBodySearchInput;
 window.noteBodySearchNav = noteBodySearchNav;
 window.handleNoteSearchKeydown = handleNoteSearchKeydown;
 window.handleNoteBodySearchKeydown = handleNoteBodySearchKeydown;
-window.toggleNoteMode = toggleNoteMode;
-window.toggleNoteReadMode = toggleNoteReadMode;
-window.toggleNoteSplitOnly = toggleNoteSplitOnly;
-window.noteInsert = noteInsert;
 window.toggleNotePin = toggleNotePin;
 window.toggleNoteDownloadMenu = toggleNoteDownloadMenu;
 window.downloadNoteAs = downloadNoteAs;

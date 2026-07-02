@@ -603,6 +603,66 @@ mark.cur{background:#f5a623;color:#1c2230}
 .note-search-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit}
 .note-search-btn:hover{color:var(--text);border-color:var(--accent)}
 #noteBodySearchCount{min-width:54px;text-align:right}
+
+/* ---- Quill rich-text editor (themed to app CSS variables) ---- */
+.ql-toolbar.ql-snow,
+#noteEditorQuill.ql-container.ql-snow { border-color: var(--border); }
+.ql-toolbar.ql-snow {
+  background: var(--panel2);
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  position: sticky; top: 0; z-index: 5;
+}
+#noteEditorQuill.ql-container.ql-snow {
+  background: var(--panel2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+#noteEditorQuill .ql-editor { min-height: 55vh; line-height: 1.6; }
+#noteEditorQuill .ql-editor.ql-blank::before { color: var(--muted); font-style: normal; }
+/* toolbar icon + picker colors */
+.ql-snow .ql-stroke { stroke: var(--muted); }
+.ql-snow .ql-fill, .ql-snow .ql-stroke.ql-fill { fill: var(--muted); }
+.ql-snow .ql-picker { color: var(--muted); }
+.ql-snow.ql-toolbar button:hover, .ql-snow.ql-toolbar button.ql-active,
+.ql-snow .ql-picker-label:hover, .ql-snow .ql-picker-label.ql-active { color: var(--accent); }
+.ql-snow.ql-toolbar button:hover .ql-stroke, .ql-snow.ql-toolbar button.ql-active .ql-stroke,
+.ql-snow .ql-picker-label:hover .ql-stroke { stroke: var(--accent); }
+.ql-snow.ql-toolbar button:hover .ql-fill, .ql-snow.ql-toolbar button.ql-active .ql-fill { fill: var(--accent); }
+.ql-snow .ql-picker-options {
+  background: var(--panel);
+  border-color: var(--border) !important;
+  border-radius: 8px;
+}
+.ql-snow .ql-picker.ql-expanded .ql-picker-label { border-color: var(--border); color: var(--accent); }
+/* editor content */
+#noteEditorQuill .ql-editor a { color: var(--accent); }
+#noteEditorQuill .ql-editor blockquote { border-left: 4px solid var(--border); color: var(--muted); }
+#noteEditorQuill .ql-editor pre.ql-syntax,
+#noteEditorQuill .ql-editor .ql-code-block-container {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+#noteEditorQuill .ql-editor img { max-width: 100%; border-radius: 8px; }
+/* link/format tooltip */
+.ql-snow .ql-tooltip {
+  background: var(--panel); color: var(--text);
+  border-color: var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.ql-snow .ql-tooltip input[type=text] {
+  background: var(--panel2); color: var(--text); border-color: var(--border);
+}
+.ql-snow .ql-tooltip a.ql-action, .ql-snow .ql-tooltip a.ql-remove { color: var(--accent); }
+@media (max-width: 640px) {
+  /* ≥16px prevents iOS from auto-zooming when the editor gains focus */
+  #noteEditorQuill.ql-container.ql-snow { font-size: 16px; }
+  #noteEditorQuill .ql-editor { min-height: 50vh; }
+}
+
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}
 .note-pinned .btn-pin,.file-pinned .btn-pin{color:#f5c518}

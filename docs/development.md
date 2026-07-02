@@ -210,10 +210,14 @@ can't leak upward.
   client-side). The toolbar `#plannerQuickAdd` runs `parseQuickAdd()` — a
   dependency-free heuristic parser for dates/times/durations/locations — and
   `quickAddOpen()` pre-fills the Add-Event modal for confirmation.
-- **Notes editor.** On phones the editor is single-pane: `applyNoteLayout()`
-  forces `isSplit = false` so edit mode is the textarea and read mode is the
-  rendered preview (never side-by-side). Do **not** re-introduce a
-  `#noteView { display: none !important }` rule — it silently breaks Read Mode.
+- **Notes editor.** Notes use a vendored Quill WYSIWYG editor (one instance,
+  created lazily by `initQuill()` in `static/js/notes.js`). Bodies are stored as
+  rich HTML (`notes.body_format === 'html'`); legacy Markdown notes are converted
+  via `mdToHtml()` on first open and persisted as HTML on first edit. The editor
+  reloads a note's contents **only** when `loadedNoteId` changes (switching
+  notes), never on a live-sync re-render, so incremental sync can't clobber the
+  caret or in-flight edits. Bodies are sanitized server-side by
+  `sanitize_note_html()` (allowlist, stdlib) on every save.
 - **Sticky + transforms don't mix.** `position: sticky` breaks inside an
   ancestor with a `transform`/`filter`. The tab-switch animation is therefore
   opacity-only (`tabFadeIn`); keep it that way or the planner axis unsticks.

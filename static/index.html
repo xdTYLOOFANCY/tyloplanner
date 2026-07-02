@@ -11,9 +11,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="js/quill.snow.css">
 <link rel="stylesheet" href="style.css?v=85">
 <script src="js/marked.min.js"></script>
 <script src="js/chart.umd.js"></script>
+<script src="js/quill.js"></script>
 <script type="module" src="app.js?v=85"></script>
 <script src="js/bottom_nav.js"></script>
 
@@ -244,36 +246,15 @@
             <span id="noteSaveStatus" class="note-status">Saved</span>
           </div>
           <div class="note-control-grid">
-            <span class="muted note-control-label">Read Mode</span>
-            <div class="note-control-widget">
-              <input type="checkbox" id="noteReadToggle" class="ios-toggle" onchange="toggleNoteReadMode()">
-            </div>
+            <button class="mobile-only btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Search in note">&#128269;</button>
             <div class="dropdown" id="noteDownloadDropdown">
               <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note">📥 Export</button>
               <div class="dropdown-content" id="noteDownloadMenu">
                 <a href="#" onclick="downloadNoteAs('html'); return false;">📄 Styled HTML (.html)</a>
-                <a href="#" onclick="downloadNoteAs('md'); return false;">📝 Markdown (.md)</a>
                 <a href="#" onclick="downloadNoteAs('print'); return false;">🖨️ Print / PDF</a>
               </div>
             </div>
             <button class="btn danger small note-control-delete" onclick="deleteNote()">Delete</button>
-          </div>
-        </div>
-        <div class="note-toolbar" id="noteToolbar" onmousedown="event.preventDefault()">
-          <button onclick="noteInsert('bold')" title="Bold"><b>B</b></button>
-          <button onclick="noteInsert('italic')" title="Italic"><i>I</i></button>
-          <button onclick="noteInsert('heading')" title="Heading">H1</button>
-          <button onclick="noteInsert('list')" title="Bulleted list">&#8226; List</button>
-          <button onclick="noteInsert('numlist')" title="Numbered list">1. List</button>
-          <button onclick="noteInsert('divider')" title="Divider">&#8212;</button>
-          <button class="mobile-only" onclick="toggleNoteSearchBar()" title="Search in note">&#128269;</button>
-          <div style="flex:1"></div>
-          <div class="note-control-grid">
-            <span class="muted note-control-label">Split View</span>
-            <div class="note-control-widget">
-              <span class="hcheck on" id="noteSplitCheck" onclick="toggleNoteSplitOnly()">✓</span>
-            </div>
-            <div class="note-control-delete-spacer"></div>
           </div>
         </div>
         <div class="note-search-bar">
@@ -282,10 +263,8 @@
           <button class="note-search-btn" onclick="noteBodySearchNav(1)" title="Next match">↓</button>
           <span id="noteBodySearchCount" class="muted"></span>
         </div>
-        <div class="note-split-pane">
-          <textarea id="noteBody" placeholder="Write anything…" oninput="noteChanged()"></textarea>
-          <div id="noteView" class="markdown-body"></div>
-        </div>
+        <!-- Quill injects its .ql-toolbar just before this container on init -->
+        <div id="noteEditorQuill"></div>
       </div>
     </div>
   </section>

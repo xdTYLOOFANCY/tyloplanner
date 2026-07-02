@@ -199,6 +199,40 @@ class CrudTests(unittest.TestCase):
         row = self._rows("notes")[0]
         self.assertEqual(row["is_pinned"], 0)
 
+    def test_note_body_format_roundtrip(self):
+        # New notes store rich HTML tagged with body_format='html'.
+        r = self.c.post("/api/notes", json={
+            "title": "rich", "body": "<p>hi</p>", "body_format": "html"})
+        self.assertEqual(r.status_code, 200)
+        row = self._rows("notes")[0]
+        self.assertEqual(row["body_format"], "html")
+        self.assertEqual(row["body"], "<p>hi</p>")
+
+    def test_note_body_format_rejects_bad_value(self):
+        r = self.c.post("/api/notes", json={"title": "x", "body_format": "pdf"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_note_html_body_is_sanitized(self):
+        # A script / event handler / javascript: link must be stripped when the
+        # body is saved as HTML.
+        payload = ('<p onclick="steal()">ok</p>'
+                   '<script>evil()</script>'
+                   '<a href="javascript:alert(1)">x</a>')
+        r = self.c.post("/api/notes", json={
+            "title": "xss", "body": payload, "body_format": "html"})
+        self.assertEqual(r.status_code, 200)
+        body = self._rows("notes")[0]["body"]
+        self.assertNotIn("onclick", body)
+        self.assertNotIn("<script", body)
+        self.assertNotIn("javascript:", body)
+        self.assertIn("ok", body)
+
+    def test_note_markdown_body_not_sanitized(self):
+        # Legacy Markdown bodies (no body_format='html') pass through untouched.
+        rid = self.c.post("/api/notes", json={
+            "title": "md", "body": "# Heading <not html>"}).get_json()["id"]
+        self.assertEqual(self._rows("notes")[0]["body"], "# Heading <not html>")
+
     def test_delete_note_folder_relocates_contents(self):
         # Create parent note folder A, child note folder B, and grandchild note folder C
         fid_a = self.c.post("/api/note_folders", json={"name": "A", "parent_id": None}).get_json()["id"]
@@ -1398,7 +1432,7 @@ class DatabaseMigrationTests(unittest.TestCase):
         with helpers.db() as con:
             row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row["value"], "15")
+            self.assertEqual(row["value"], "17")
 
             notes_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
             self.assertIsNotNone(notes_fts)
@@ -2236,7 +2270,7 @@ class CliAdminTests(unittest.TestCase):
         # Verify the schema version was tracked in the kv table (the app's
         # source of truth is kv['db_version'], not PRAGMA user_version).
         row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
-        self.assertEqual(row["value"], "15")
+        self.assertEqual(row["value"], "17")
 
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()

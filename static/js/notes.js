@@ -61,174 +61,129 @@ function getWordCount(text) {
   return cleanText.split(/\s+/).length;
 }
 
-function updateCountersAndPreview() {
-  var ta = document.getElementById("noteBody");
-  if (!ta) return;
-  var text = ta.value || "";
-  
+// Rendered HTML for a note regardless of storage format (used by export).
+function noteBodyHtml(note) {
+  if (!note) return "";
+  return note.body_format === "html" ? (note.body || "") : mdToHtml(note.body || "");
+}
+
+// Plain text of a note body, for word/character counts in exports.
+function notePlainText(note) {
+  if (!note) return "";
+  if (note.body_format === "html") {
+    var tmp = document.createElement("div");
+    tmp.innerHTML = note.body || "";
+    return tmp.textContent || tmp.innerText || "";
+  }
+  return note.body || "";
+}
+
+// ---- Quill rich-text (WYSIWYG) editor ----
+// The editor stores rich HTML in note.body (body_format === 'html'). Legacy
+// Markdown notes are converted to HTML for display the first time they open and
+// are persisted as HTML on the first edit.
+var quill = null;
+var loadedNoteId = null;      // which note is currently loaded into the editor
+var suppressChange = false;   // guard: programmatic loads must not autosave
+var searchMatches = [];       // in-note search hit indices (Quill offsets)
+
+var QUILL_TOOLBAR = [
+  [{ header: [1, 2, 3, false] }],
+  ["bold", "italic", "underline", "strike"],
+  [{ color: [] }, { background: [] }],
+  [{ list: "ordered" }, { list: "bullet" }, { list: "check" }],
+  [{ indent: "-1" }, { indent: "+1" }],
+  ["blockquote", "code-block"],
+  ["link", "image"],
+  ["clean"]
+];
+
+function initQuill() {
+  if (quill) return quill;
+  if (!window.Quill) return null;
+  var host = document.getElementById("noteEditorQuill");
+  if (!host) return null;
+  quill = new window.Quill(host, {
+    theme: "snow",
+    placeholder: "Write anything…",
+    modules: {
+      toolbar: {
+        container: QUILL_TOOLBAR,
+        handlers: { image: quillImageHandler }
+      }
+    }
+  });
+  quill.on("text-change", function(delta, oldDelta, source) {
+    if (suppressChange || source !== "user") return;
+    updateCounters();
+    noteChanged();
+  });
+  return quill;
+}
+
+// Current editor contents as HTML ("" when the note is empty).
+function getEditorBody() {
+  if (!quill) return "";
+  var html = quill.root.innerHTML;
+  if (html === "<p><br></p>" || html === "<p></p>") return "";
+  return html;
+}
+
+// Load an HTML string into the editor without triggering an autosave.
+function setEditorBody(html) {
+  if (!quill) return;
+  suppressChange = true;
+  try {
+    if (html) {
+      quill.setContents(quill.clipboard.convert({ html: html }), "silent");
+    } else {
+      quill.setText("", "silent");
+    }
+  } finally {
+    suppressChange = false;
+  }
+}
+
+// Toolbar image button: upload through the existing files API and embed the
+// stored URL (keeps big base64 blobs out of the notes table).
+function quillImageHandler() {
+  if (!quill) return;
+  var input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = function() {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var range = quill.getSelection(true) || { index: quill.getLength() };
+    var fd = new FormData();
+    fd.append("file", file);
+    fetch("/api/files/upload", { method: "POST", body: fd })
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function(res) {
+        if (!res || !res.id) return Promise.reject();
+        quill.insertEmbed(range.index, "image", "/api/files/" + res.id + "/view", "user");
+        quill.setSelection(range.index + 1, 0, "user");
+      })
+      .catch(function() { alert("Image upload failed."); });
+  };
+  input.click();
+}
+
+function updateCounters() {
+  if (!quill) return;
+  // Quill always keeps a trailing newline; drop it for honest counts.
+  var text = (quill.getText() || "").replace(/\n+$/, "");
   var wordCount = getWordCount(text);
   var charCount = text.length;
-  
   var wcEl = document.getElementById("noteWordCount");
   var ccEl = document.getElementById("noteCharCount");
   if (wcEl) wcEl.textContent = wordCount + " " + (wordCount === 1 ? "word" : "words");
   if (ccEl) ccEl.textContent = charCount + " " + (charCount === 1 ? "character" : "characters");
-  
-  renderNoteView();
-}
-
-export function toggleNoteMode() {
-  // Always split layout, mode toggling no longer needed.
-}
-
-export function toggleNoteReadMode() {
-  if (!currentNote) return;
-  var toggle = document.getElementById("noteReadToggle");
-  var isRead = toggle ? toggle.checked : false;
-  localStorage.setItem("note_read_mode_" + currentNote, isRead ? "true" : "false");
-  applyNoteLayout();
-}
-
-export function toggleNoteSplitOnly() {
-  if (!currentNote) return;
-  var check = document.getElementById("noteSplitCheck");
-  if (!check) return;
-  
-  var isSplit = !check.classList.contains("on");
-  if (isSplit) {
-    check.classList.add("on");
-    check.textContent = "✓";
-  } else {
-    check.classList.remove("on");
-    check.textContent = "";
-  }
-  
-  localStorage.setItem("note_split_view_" + currentNote, isSplit ? "true" : "false");
-  applyNoteLayout();
-}
-
-export function applyNoteLayout() {
-  var readToggle = document.getElementById("noteReadToggle");
-  var splitCheck = document.getElementById("noteSplitCheck");
-
-  var isRead = readToggle ? readToggle.checked : false;
-  var isSplit = splitCheck ? splitCheck.classList.contains("on") : true;
-
-  // On phones the split preview is too cramped, so we never show editor +
-  // preview side by side. Edit mode = textarea only; Read mode = preview only.
-  // This also lets Read Mode actually work on mobile (the old CSS hard-hid the
-  // preview with !important, which broke the read toggle entirely).
-  var isMobile = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
-  if (isMobile) isSplit = false;
-
-  var ta = document.getElementById("noteBody");
-  var view = document.getElementById("noteView");
-  var toolbar = document.getElementById("noteToolbar");
-  var searchBar = document.querySelector(".note-search-bar");
-  var splitPane = document.querySelector(".note-split-pane");
-  
-  if (isRead) {
-    if (ta) ta.style.display = "none";
-    if (view) view.style.display = "";
-    if (toolbar) toolbar.style.display = "none";
-    if (searchBar) {
-      searchBar.style.display = "";
-      searchBar.classList.add("read-mode-search");
-    }
-    if (splitPane) splitPane.style.gridTemplateColumns = "1fr";
-  } else {
-    if (ta) ta.style.display = "";
-    if (toolbar) toolbar.style.display = "";
-    if (searchBar) {
-      searchBar.style.display = "";
-      searchBar.classList.remove("read-mode-search");
-    }
-    
-    if (isSplit) {
-      if (view) view.style.display = "";
-      if (splitPane) splitPane.style.gridTemplateColumns = "";
-    } else {
-      if (view) view.style.display = "none";
-      if (splitPane) splitPane.style.gridTemplateColumns = "1fr";
-    }
-  }
-}
-
-function renderNoteView() {
-  var ta = document.getElementById("noteBody");
-  var view = document.getElementById("noteView");
-  var cnt = document.getElementById("noteBodySearchCount");
-  var q = (noteBodySearch.q || "").toLowerCase().trim();
-  var html = mdToHtml(ta ? ta.value : "");
-  if (q) html = highlightHtml(html, q);
-  if (view) view.innerHTML = html;
-  
-  if (view) {
-    var marks = view.querySelectorAll("mark");
-    var n = marks.length;
-    if (noteBodySearch.idx >= n) noteBodySearch.idx = 0;
-    if (marks[noteBodySearch.idx]) marks[noteBodySearch.idx].className = "cur";
-    if (cnt) cnt.textContent = q ? (n ? (noteBodySearch.idx + 1) + "/" + n : "0 results") : "";
-  }
-}
-
-function applyNoteMode() {
-  updateCountersAndPreview();
-  applyNoteLayout();
-  
-  var q = (noteBodySearch.q || "").toLowerCase().trim();
-  var cnt = document.getElementById("noteBodySearchCount");
-  var view = document.getElementById("noteView");
-  if (cnt) {
-    if (q && view) {
-      var marks = view.querySelectorAll("mark");
-      var n = marks.length;
-      noteBodySearch.idx = Math.min(noteBodySearch.idx, Math.max(0, n - 1));
-      cnt.textContent = n ? (noteBodySearch.idx + 1) + "/" + n : "0 results";
-    } else {
-      cnt.textContent = "";
-    }
-  }
-}
-
-export function noteInsert(type) {
-  var ta = document.getElementById("noteBody");
-  if (!ta) return;
-  var s = ta.selectionStart, e = ta.selectionEnd, val = ta.value, sel = val.slice(s, e);
-  var newVal, pos, ls;
-  if (type === "bold") {
-    newVal = val.slice(0, s) + "**" + sel + "**" + val.slice(e);
-    pos = sel ? (s + 2 + sel.length + 2) : (s + 2);
-  } else if (type === "italic") {
-    newVal = val.slice(0, s) + "*" + sel + "*" + val.slice(e);
-    pos = sel ? (s + 1 + sel.length + 1) : (s + 1);
-  } else if (type === "heading") {
-    ls = val.lastIndexOf("\n", s - 1) + 1;
-    newVal = val.slice(0, ls) + "# " + val.slice(ls);
-    pos = s + 2;
-  } else if (type === "list") {
-    ls = val.lastIndexOf("\n", s - 1) + 1;
-    newVal = val.slice(0, ls) + "- " + val.slice(ls);
-    pos = s + 2;
-  } else if (type === "numlist") {
-    ls = val.lastIndexOf("\n", s - 1) + 1;
-    newVal = val.slice(0, ls) + "1. " + val.slice(ls);
-    pos = s + 3;
-  } else {
-    var pre = (s > 0 && val[s - 1] !== "\n") ? "\n" : "";
-    var ins = pre + "---\n";
-    newVal = val.slice(0, s) + ins + val.slice(s);
-    pos = s + ins.length;
-  }
-  ta.value = newVal;
-  ta.selectionStart = ta.selectionEnd = pos;
-  ta.focus();
-  noteChanged();
 }
 
 export async function newNote(refresh) {
   noteMode = "edit";
-  var payload = { title: "", body: "", updated: Date.now() };
+  var payload = { title: "", body: "", body_format: "html", updated: Date.now() };
   if (activeNoteFolderId) payload.folder_id = activeNoteFolderId;
   var r = await api("POST", "/api/notes", payload);
   currentNote = r.id;
@@ -249,22 +204,23 @@ export function selectNote(id) {
     // Run the pending save in the background immediately
     var pendingNoteId = currentNote;
     var pendingTitle = document.getElementById("noteTitle").value;
-    var pendingBody = document.getElementById("noteBody").value;
+    var pendingBody = getEditorBody();
     clearTimeout(noteTimer);
     noteTimer = null;
-    
+
     var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
     var lastUpdated = n ? n.updated : 0;
     var updatedTime = Date.now();
-    
+
     api("PUT", "/api/notes/" + pendingNoteId, {
       title: pendingTitle,
       body: pendingBody,
+      body_format: "html",
       updated: updatedTime,
       last_updated: lastUpdated
     }).then(function() {
       var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
-      if (n) { n.title = pendingTitle; n.body = pendingBody; n.updated = updatedTime; }
+      if (n) { n.title = pendingTitle; n.body = pendingBody; n.body_format = "html"; n.updated = updatedTime; }
       renderNoteList();
     }).catch(function(err) {
       if (err.message && err.message.includes("conflict")) {
@@ -273,6 +229,7 @@ export function selectNote(id) {
           api("PUT", "/api/notes/" + pendingNoteId, {
             title: pendingTitle,
             body: pendingBody,
+            body_format: "html",
             updated: updatedTime,
             last_updated: Date.now() // force overwrite next time
           });
@@ -294,9 +251,9 @@ export function selectNote(id) {
 
 export function noteChanged() {
   clearTimeout(noteTimer);
-  
-  updateCountersAndPreview();
-  
+
+  updateCounters();
+
   var statusEl = document.getElementById("noteSaveStatus");
   if (statusEl) {
     statusEl.textContent = "Typing...";
@@ -305,8 +262,8 @@ export function noteChanged() {
   
   var pendingNoteId = currentNote;
   var pendingTitle = document.getElementById("noteTitle").value;
-  var pendingBody = document.getElementById("noteBody").value;
-  
+  var pendingBody = getEditorBody();
+
   noteTimer = setTimeout(async function() {
     if (!pendingNoteId) return;
     
@@ -322,6 +279,7 @@ export function noteChanged() {
       await api("PUT", "/api/notes/" + pendingNoteId, {
         title: pendingTitle,
         body: pendingBody,
+        body_format: "html",
         updated: updatedTime,
         last_updated: lastUpdated
       });
@@ -329,6 +287,7 @@ export function noteChanged() {
       if (n2) {
         n2.title = pendingTitle;
         n2.body = pendingBody;
+        n2.body_format = "html";
         n2.updated = updatedTime;
       }
       renderNoteList();
@@ -349,6 +308,7 @@ export function noteChanged() {
           await api("PUT", "/api/notes/" + pendingNoteId, {
             title: pendingTitle,
             body: pendingBody,
+            body_format: "html",
             updated: updatedTime2,
             last_updated: updatedTime2 // force overwrite
           });
@@ -356,6 +316,7 @@ export function noteChanged() {
           if (n3) {
             n3.title = pendingTitle;
             n3.body = pendingBody;
+            n3.body_format = "html";
             n3.updated = updatedTime2;
           }
           renderNoteList();
@@ -449,7 +410,7 @@ export function noteBodySearchInput() {
   var searchEl = document.getElementById("noteBodySearch");
   noteBodySearch.q = searchEl ? searchEl.value : "";
   noteBodySearch.idx = 0;
-  applyNoteBodySearch(noteBodySearch.q.trim().length > 0);
+  runNoteBodySearch(noteBodySearch.q.trim().length > 0);
 }
 
 export function handleNoteBodySearchKeydown(e) {
@@ -460,31 +421,48 @@ export function handleNoteBodySearchKeydown(e) {
 }
 
 export function noteBodySearchNav(dir) {
-  var q = (noteBodySearch.q || "").toLowerCase().trim();
-  if (!q) return;
-  var view = document.getElementById("noteView");
-  var n = view ? view.querySelectorAll("mark").length : 0;
+  var n = searchMatches.length;
   if (!n) return;
   noteBodySearch.idx = (noteBodySearch.idx + dir + n) % n;
-  applyNoteBodySearch(true);
+  var cnt = document.getElementById("noteBodySearchCount");
+  if (cnt) cnt.textContent = (noteBodySearch.idx + 1) + "/" + n;
+  focusNoteMatch();
 }
 
-function applyNoteBodySearch(jump) {
-  var q = (noteBodySearch.q || "").toLowerCase().trim();
-  var ta = document.getElementById("noteBody");
+// Find all matches for the current query in the Quill document. Navigation
+// selects each hit (via the native selection) and scrolls it into view — no
+// document mutation, so it never dirties the note.
+function runNoteBodySearch(jump) {
   var cnt = document.getElementById("noteBodySearchCount");
-  if (!ta) return;
-  
-  renderNoteView();
-  
-  if (jump && q) {
-    var view = document.getElementById("noteView");
-    if (view) {
-      var marks = view.querySelectorAll("mark");
-      if (marks[noteBodySearch.idx]) {
-        marks[noteBodySearch.idx].scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }
-    }
+  searchMatches = [];
+  var q = (noteBodySearch.q || "").trim();
+  if (!quill || !q) {
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  var text = quill.getText();
+  var lc = text.toLowerCase(), lq = q.toLowerCase(), i = 0;
+  while (i <= lc.length) {
+    var idx = lc.indexOf(lq, i);
+    if (idx === -1) break;
+    searchMatches.push(idx);
+    i = idx + lq.length;
+  }
+  var n = searchMatches.length;
+  if (noteBodySearch.idx >= n) noteBodySearch.idx = 0;
+  if (cnt) cnt.textContent = n ? (noteBodySearch.idx + 1) + "/" + n : "0 results";
+  if (jump && n) focusNoteMatch();
+}
+
+function focusNoteMatch() {
+  var q = (noteBodySearch.q || "").trim();
+  if (!quill || !searchMatches.length) return;
+  var idx = searchMatches[noteBodySearch.idx];
+  quill.setSelection(idx, q.length, "user");
+  var bounds = quill.getBounds(idx, q.length);
+  if (bounds) {
+    var root = quill.root;
+    root.scrollTop = root.scrollTop + bounds.top - root.clientHeight / 2;
   }
 }
 
@@ -635,6 +613,7 @@ export function renderNotes() {
   var n = S.notes.find(function(x) { return x.id === currentNote; });
   if (!n) {
     currentNote = null;
+    loadedNoteId = null;
     localStorage.removeItem("active_note_id");
     // On mobile: exit editor-panel mode
     var layout = document.querySelector(".noteslayout");
@@ -648,50 +627,34 @@ export function renderNotes() {
   if (layout) layout.classList.add("note-editing");
   document.body.classList.add("note-open");
 
+  initQuill();
+
   var titleEl = document.getElementById("noteTitle");
-  var bodyEl = document.getElementById("noteBody");
-  // Don't overwrite textarea while a save is pending — it resets the cursor
-  // position and may inject stale server content over the user's live edits.
-  if (!noteTimer) {
+  // Only (re)load a note's content when actually switching notes. Reloading on
+  // every render would reset the caret and could clobber live edits mid-type,
+  // and a live-sync tick must never overwrite what the user is writing.
+  if (loadedNoteId !== currentNote) {
     if (titleEl) titleEl.value = n.title || "";
-    if (bodyEl) bodyEl.value = n.body || "";
+    var body = n.body || "";
+    // Legacy Markdown notes are converted to HTML for display; they persist as
+    // HTML on the first edit (see noteChanged).
+    setEditorBody(n.body_format === "html" ? body : (body ? mdToHtml(body) : ""));
+    loadedNoteId = currentNote;
+    noteBodySearch.idx = 0;
+    searchMatches = [];
+    updateCounters();
   }
-  
+
   var statusEl = document.getElementById("noteSaveStatus");
-  if (statusEl) {
+  if (statusEl && !noteTimer) {
     statusEl.textContent = "Saved at " + formatTime(n.updated || Date.now());
     statusEl.className = "note-status saved";
   }
-  
-  // Apply saved layout states
-  if (currentNote) {
-    var readToggle = document.getElementById("noteReadToggle");
-    if (readToggle) {
-      var savedRead = localStorage.getItem("note_read_mode_" + currentNote);
-      readToggle.checked = savedRead === "true"; // default to false
-    }
-    
-    var splitCheck = document.getElementById("noteSplitCheck");
-    if (splitCheck) {
-      var savedSplit = localStorage.getItem("note_split_view_" + currentNote);
-      var isSplit = savedSplit !== "false"; // default to true
-      if (isSplit) {
-        splitCheck.classList.add("on");
-        splitCheck.textContent = "✓";
-      } else {
-        splitCheck.classList.remove("on");
-        splitCheck.textContent = "";
-      }
-    }
-  }
-  
-  noteBodySearch.idx = 0;
-    applyNoteMode();
   });
 }
 
 // Toggle the in-note search bar. On mobile it is collapsed by default to give
-// the textarea maximum room; this reveals/hides it and focuses the field.
+// the editor maximum room; this reveals/hides it and focuses the field.
 export function toggleNoteSearchBar() {
   var ed = document.getElementById("noteEditor");
   if (!ed) return;
@@ -703,13 +666,14 @@ export function toggleNoteSearchBar() {
     input.value = "";
     noteBodySearch.q = "";
     input.blur();
-    updateCountersAndPreview();
+    runNoteBodySearch(false);
   }
 }
 
 // Mobile panel navigation: go back from editor to note list
 export function notesGoBack() {
   currentNote = null;
+  loadedNoteId = null;
   localStorage.removeItem("active_note_id");
   var layout = document.querySelector(".noteslayout");
   if (layout) layout.classList.remove("note-editing");
@@ -904,30 +868,34 @@ export function downloadNoteAs(format) {
   if (!note) return;
   
   var title = note.title || "Untitled";
-  
+  var isHtmlNote = note.body_format === "html";
+
   if (format === 'md') {
-    triggerDownload(note.body || "", title + ".md", "text/markdown");
+    // HTML notes export their raw rich HTML; legacy notes stay Markdown.
+    triggerDownload(note.body || "", title + (isHtmlNote ? ".html" : ".md"),
+      isHtmlNote ? "text/html" : "text/markdown");
     var dropdown = document.getElementById("noteDownloadDropdown");
     if (dropdown) dropdown.classList.remove("show");
     return;
   }
-  
+
   if (format === 'print') {
     var dropdown = document.getElementById("noteDownloadDropdown");
     if (dropdown) dropdown.classList.remove("show");
     window.print();
     return;
   }
-  
+
   if (format === 'html') {
-    var rawHtml = mdToHtml(note.body);
+    var rawHtml = noteBodyHtml(note);
     // Replace wiki links with alert behavior in standalone mode
     var renderedHtml = rawHtml.replace(/onclick="openNote\('([^']+)'\);return false;"/g, 'onclick="alert(\'This link points to another note inside TyloPlanner. Download as a Compiled Notebook to make links interactive.\');return false;"');
-    
+
     var theme = localStorage.getItem("tylo-theme") || "dark";
     var updatedDate = new Date(note.updated || Date.now()).toLocaleDateString();
-    var wordCount = getWordCount(note.body);
-    var charCount = note.body ? note.body.length : 0;
+    var plainText = notePlainText(note);
+    var wordCount = getWordCount(plainText);
+    var charCount = plainText.length;
     
     // Directory breadcrumbs omitted for single note downloads
     
@@ -1190,14 +1158,15 @@ function compileDigitalNotebook(rootFolderId, notebookTitle) {
 
   var renderedNotesMap = {};
   exportedNotes.forEach(function(n) {
-    var rawHtml = mdToHtml(n.body);
+    var rawHtml = noteBodyHtml(n);
     // Replace openNote with showNote
     var localHtml = rawHtml.replace(/onclick="openNote\('([^']+)'\);return false;"/g, 'href="#note-$1" onclick="showNote(\'$1\');return false;"');
-    
+
     renderedNotesMap[n.id] = {
       id: n.id,
       title: n.title || "Untitled",
-      body: n.body || "",
+      // Plain text is used only for the word/char counters in the exported page.
+      body: notePlainText(n),
       html: localHtml,
       updated: n.updated || Date.now(),
       folder_id: n.folder_id

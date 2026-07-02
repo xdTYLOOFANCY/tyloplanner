@@ -40,7 +40,10 @@ connection logic, the migration runner, the `kv` store, and the `TABLES`
 column whitelist. Routes are grouped into `blueprints/` (auth, api, settings,
 calendar, strava, files, backup, notifications). A daemon thread from
 `scheduler.py` runs per-minute jobs (reminders, ICS auto-sync, nightly
-backups), guarded by `done_<job>` markers in `kv`. The frontend is ES modules
+backups), guarded by `done_<job>` markers in `kv`. The Notes tab uses a
+vendored Quill WYSIWYG editor (`static/js/notes.js`); note bodies are rich HTML
+(`notes.body_format` tracks `html` vs legacy `md`) and are sanitized server-side
+via `sanitize_note_html()` in `helpers.py`. The frontend is ES modules
 with no bundler: `static/app.js` is the orchestrator — it pulls global state
 `S` from `GET /api/state` via `static/js/state.js` (which also drives
 incremental live sync with `?since_version=`), delegates rendering to feature
@@ -55,7 +58,8 @@ User settings live in the `kv` table with a `set_` prefix.
 
 - **No new dependencies** without strong justification; keep the stack
   Flask + stdlib + the eight packages in `requirements.txt` (vendored
-  frontend libs `chart.umd.js` / `marked.min.js` live in `static/js/`).
+  frontend libs `chart.umd.js` / `marked.min.js` / `quill.js` +
+  `quill.snow.css` live in `static/js/` — prebuilt, no bundler).
 - **Frontend stays vanilla JS**, using ES modules in `static/js/` without any
   bundler or framework. `static/app.js` wires everything together for the HTML
   templates.
