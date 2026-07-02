@@ -1,7 +1,11 @@
 // TyloPlanner service worker: cache static assets so the app shell loads
 // instantly (and the icon/manifest work offline). API calls always hit the
 // network - your data is never served stale.
-const CACHE = "tylo-v105";
+const CACHE = "tylo-v106";
+// Uploaded note images (/api/files/<id>/view) get their own runtime cache so
+// inline images still render offline. Kept separate so it survives app updates.
+const MEDIA_CACHE = "tylo-media-v1";
+const MEDIA_RE = /^\/api\/files\/[^/]+\/view$/;
 const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/manifest.json",
                 "/icon-192.png", "/icon-512.png",
                 "/js/state.js", "/js/utils.js", "/js/theme.js",
@@ -10,7 +14,9 @@ const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/mani
                 "/js/analytics.js", "/js/dashboard.js", "/js/backup.js", "/js/chart.umd.js",
                 "/js/files.js", "/js/settings.js", "/js/marked.min.js",
                 "/js/offline.js", "/js/bottom_nav.js", "/js/login.js", "/js/study_timer.js",
-                "/js/swipe.js", "/js/quill.js", "/js/quill.snow.css"];
+                "/js/swipe.js", "/js/quill.js", "/js/quill.snow.css",
+                "/fonts/inter-400.woff2", "/fonts/inter-500.woff2",
+                "/fonts/inter-600.woff2", "/fonts/inter-700.woff2"];
 
 self.addEventListener("install", function (e) {
   // Do NOT call skipWaiting() here — it causes infinite reload loops on iOS
@@ -20,7 +26,7 @@ self.addEventListener("install", function (e) {
 
 self.addEventListener("activate", function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k !== CACHE; })
+    return Promise.all(keys.filter(function (k) { return k !== CACHE && k !== MEDIA_CACHE; })
       .map(function (k) { return caches.delete(k); }));
   }));
   self.clients.claim();
@@ -35,6 +41,22 @@ self.addEventListener("message", function (e) {
 self.addEventListener("fetch", function (e) {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET") return;
+  // Inline note images: serve cached-first, revalidate in the background, so
+  // they render offline. (Everything else under /api/ always hits the network.)
+  if (MEDIA_RE.test(url.pathname)) {
+    e.respondWith(
+      caches.open(MEDIA_CACHE).then(function (cache) {
+        return cache.match(e.request).then(function (hit) {
+          const fetchP = fetch(e.request).then(function (resp) {
+            if (resp && resp.status === 200) cache.put(e.request, resp.clone());
+            return resp;
+          }).catch(function () { return hit; });
+          return hit || fetchP;
+        });
+      })
+    );
+    return;
+  }
   if (url.pathname.startsWith("/api/") || url.pathname === "/calendar.ics") return;
   if (ASSETS.indexOf(url.pathname) !== -1) {
     e.respondWith(

@@ -2,6 +2,28 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.7.1 — 2026-07-02
+
+Performance, offline, and accessibility pass.
+
+- **Self-hosted Inter font.** The UI font was loaded from Google Fonts but
+  silently blocked by the Content-Security-Policy, so the app fell back to
+  system fonts and logged an error on every page load. Inter (latin) now ships
+  locally in `static/fonts/`, so it actually renders and the console error is
+  gone — with no external request.
+- **Lighter initial load.** `marked` and `chart.umd.js` are now `defer`red so
+  they no longer block HTML parsing, and **Quill (≈209 KB) is loaded lazily**
+  the first time you open a note instead of on every page load. The default
+  Dashboard no longer pays for the editor.
+- **Inline note images work offline.** The service worker now keeps a dedicated
+  runtime cache for uploaded images (`/api/files/<id>/view`), so images embedded
+  in notes still render without a connection.
+- **Accessibility.** Added `aria-label`s to icon-only buttons (notes toolbar,
+  export, find/replace, dialog close) so screen readers announce them.
+- **Fixes/cleanup.** Notes layout heights use `100dvh` (correct on mobile
+  browsers with a dynamic toolbar); removed dead code from the notes module;
+  added adversarial tests for the HTML sanitizer.
+
 ## 1.7.0 — 2026-07-02
 
 A Google-Docs-style Notes experience, plus more formatting.

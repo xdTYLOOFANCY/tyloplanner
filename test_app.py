@@ -233,6 +233,29 @@ class CrudTests(unittest.TestCase):
             "title": "md", "body": "# Heading <not html>"}).get_json()["id"]
         self.assertEqual(self._rows("notes")[0]["body"], "# Heading <not html>")
 
+    def test_sanitizer_adversarial(self):
+        # Direct unit checks on the HTML sanitizer's harder cases.
+        s = helpers.sanitize_note_html
+        # uppercase / mixed-case script is still dropped
+        self.assertNotIn("alert", s("<SCRIPT>alert(1)</SCRIPT><p>ok</p>").lower())
+        # event handler with odd casing removed
+        self.assertNotIn("onerror", s('<img src="x" OnErroR="hack()">').lower())
+        # img with data:image allowed, data:text/html rejected
+        self.assertIn("data:image/png", s('<img src="data:image/png;base64,AAAA">'))
+        self.assertNotIn("data:text/html", s('<img src="data:text/html,<script>1</script>">'))
+        # obfuscated javascript: url (leading/embedded whitespace) rejected
+        self.assertNotIn("javascript", s('<a href="java\tscript:alert(1)">x</a>').lower())
+        self.assertNotIn("vbscript", s('<a href="vbscript:msgbox(1)">x</a>').lower())
+        # dangerous style declarations stripped, safe ones kept
+        out = s('<p style="color:red;position:fixed;background:url(x)">t</p>')
+        self.assertIn("color", out)
+        self.assertNotIn("position", out)
+        self.assertNotIn("url(", out)
+        # malformed / unbalanced markup does not raise and stays parseable
+        self.assertIsInstance(s("<div><p>a</div></p><b>bold"), str)
+        # HTML comments are dropped entirely
+        self.assertNotIn("secret", s("<!-- secret --><p>x</p>"))
+
     def test_delete_note_folder_relocates_contents(self):
         # Create parent note folder A, child note folder B, and grandchild note folder C
         fid_a = self.c.post("/api/note_folders", json={"name": "A", "parent_id": None}).get_json()["id"]

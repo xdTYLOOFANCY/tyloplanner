@@ -8,14 +8,12 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="js/quill.snow.css">
 <link rel="stylesheet" href="style.css?v=85">
-<script src="js/marked.min.js"></script>
-<script src="js/chart.umd.js"></script>
-<script src="js/quill.js"></script>
+<!-- marked + chart are deferred so they don't block HTML parsing; quill.js is
+     loaded lazily the first time the Notes tab opens (see ensureQuill in notes.js). -->
+<script defer src="js/marked.min.js"></script>
+<script defer src="js/chart.umd.js"></script>
 <script type="module" src="app.js?v=85"></script>
 <script src="js/bottom_nav.js"></script>
 
@@ -226,7 +224,7 @@
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <button class="btn" style="flex:1" onclick="newNote()">+ Note</button>
           <button class="btn ghost" style="flex:1" onclick="createNoteFolderPrompt()">+ Folder</button>
-          <button class="btn ghost" style="padding:6px 10px;" onclick="downloadAllNotesNotebook()" title="Compile all notes into a digital notebook">📚</button>
+          <button class="btn ghost" style="padding:6px 10px;" onclick="downloadAllNotesNotebook()" title="Compile all notes into a digital notebook" aria-label="Compile all notes into a notebook">📚</button>
         </div>
         <div id="noteFolderHeader" style="margin-bottom:10px;"></div>
         <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" onkeydown="handleNoteSearchKeydown(event)" style="width:100%;margin-bottom:8px">
@@ -237,7 +235,7 @@
            then a centered "page" (title + Quill editor) floating on a canvas. -->
       <div id="noteEditor" style="display:none">
         <div class="note-topbar">
-          <button class="mobile-only note-back" id="noteBackBtn" onclick="notesGoBack()" title="Back to notes">&#8592;</button>
+          <button class="mobile-only note-back" id="noteBackBtn" onclick="notesGoBack()" title="Back to notes" aria-label="Back to notes">&#8592;</button>
           <div class="note-doc-meta">
             <span id="noteSaveStatus" class="note-status">Saved</span>
             <span class="note-stats-divider">·</span>
@@ -246,9 +244,9 @@
             <span id="noteCharCount">0 characters</span>
           </div>
           <div class="note-topbar-actions">
-            <button class="btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Find &amp; replace">&#128269;</button>
+            <button class="btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Find &amp; replace" aria-label="Find and replace">&#128269;</button>
             <div class="dropdown" id="noteDownloadDropdown">
-              <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note">📥 Export</button>
+              <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note" aria-label="Export note">📥 Export</button>
               <div class="dropdown-content" id="noteDownloadMenu">
                 <a href="#" onclick="downloadNoteAs('html'); return false;">📄 Styled HTML (.html)</a>
                 <a href="#" onclick="downloadNoteAs('print'); return false;">🖨️ Print / PDF</a>
@@ -261,8 +259,8 @@
         <div id="noteToolbarSlot" class="note-doctoolbar"></div>
         <div class="note-search-bar">
           <input id="noteBodySearch" placeholder="Find in note…" oninput="noteBodySearchInput()" onkeydown="handleNoteBodySearchKeydown(event)">
-          <button class="note-search-btn" onclick="noteBodySearchNav(-1)" title="Previous match">↑</button>
-          <button class="note-search-btn" onclick="noteBodySearchNav(1)" title="Next match">↓</button>
+          <button class="note-search-btn" onclick="noteBodySearchNav(-1)" title="Previous match" aria-label="Previous match">↑</button>
+          <button class="note-search-btn" onclick="noteBodySearchNav(1)" title="Next match" aria-label="Next match">↓</button>
           <span id="noteBodySearchCount" class="muted"></span>
           <span class="note-search-sep"></span>
           <input id="noteBodyReplace" placeholder="Replace with…">
@@ -863,7 +861,7 @@
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 style="margin:0;font-size:16px;">Customize Calendars</h3>
-        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;" aria-label="Close">✕</button>
       </div>
       <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:12px;"></div>
     </div>
@@ -872,7 +870,7 @@
     <div class="modal-content" style="padding-bottom: env(safe-area-inset-bottom);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <h3 style="margin:0;font-size:16px;">More</h3>
-        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;" aria-label="Close">✕</button>
       </div>
       <div class="menu-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <button class="btn ghost" onclick="document.querySelector('button[data-tab=\'analytics\']').click(); window.dispatchEvent(new CustomEvent('close-mobile-menu-modal'))" style="min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;">📊 Analytics</button>

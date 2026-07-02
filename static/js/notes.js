@@ -3,7 +3,7 @@
 import { S, safeRender } from './state.js';
 import { esc, api, z, mdToHtml } from './utils.js';
 
-var currentNote = null, noteTimer = null, noteMode = "edit";
+var currentNote = null, noteTimer = null;
 var noteBodySearch = { q: "", idx: 0 };
 var activeNoteFolderId = null;
 var draggedNoteId = null;
@@ -29,7 +29,6 @@ export function getNoteBreadcrumbs(folderId) {
   return path;
 }
 
-function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function highlightText(text, q) {
   if (!q || !text) return esc(text || "");
   var res = "", lc = text.toLowerCase(), lq = q.toLowerCase(), i = 0;
@@ -40,11 +39,6 @@ function highlightText(text, q) {
     i = idx + q.length;
   }
   return res;
-}
-function highlightHtml(html, q) {
-  if (!q) return html;
-  var re = new RegExp('(' + escapeRegex(esc(q)) + ')(?![^<]*>)', 'gi');
-  return html.replace(re, '<mark>$1</mark>');
 }
 
 
@@ -101,6 +95,23 @@ var QUILL_TOOLBAR = [
   ["link", "image"],
   ["clean"]
 ];
+
+// Quill (209 KB) is loaded lazily the first time a note is opened, so it never
+// weighs on the initial page load (Notes is not the default tab).
+var quillLoadPromise = null;
+function ensureQuill() {
+  if (window.Quill) return Promise.resolve();
+  if (!quillLoadPromise) {
+    quillLoadPromise = new Promise(function(resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "js/quill.js";
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  return quillLoadPromise;
+}
 
 function initQuill() {
   if (quill) return quill;
@@ -191,7 +202,6 @@ function updateCounters() {
 }
 
 export async function newNote(refresh) {
-  noteMode = "edit";
   var payload = { title: "", body: "", body_format: "html", updated: Date.now() };
   if (activeNoteFolderId) payload.folder_id = activeNoteFolderId;
   var r = await api("POST", "/api/notes", payload);
@@ -677,6 +687,11 @@ export function renderNotes() {
   if (layout) layout.classList.add("note-editing");
   document.body.classList.add("note-open");
 
+  // Load Quill on first use, then re-render once it's ready.
+  if (!window.Quill) {
+    ensureQuill().then(function() { renderNotes(); }).catch(function() {});
+    return;
+  }
   initQuill();
 
   var titleEl = document.getElementById("noteTitle");
