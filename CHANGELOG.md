@@ -2,6 +2,25 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.7.0 — 2026-07-02
+
+A Google-Docs-style Notes experience, plus more formatting.
+
+- **Redesigned editor UI.** The Notes editor is now laid out like Google Docs:
+  a slim top bar (save status, word/char count, find, export, delete), a
+  sticky grouped formatting toolbar, and a centered "page" that floats on a
+  canvas with the document title sitting on the page. On phones the page goes
+  full-bleed and the toolbar scrolls horizontally. All themed to the app's
+  existing CSS variables (works in every theme, light and dark).
+- **More formatting** (all built into Quill — still no bundler/deps): text
+  **alignment** (left/center/right/justify), **subscript/superscript**,
+  **font size** and **font family** pickers, and headings extended to H1–H6.
+- **Find & replace.** The in-note find bar (toggled with the 🔍 button) gained
+  a replace field with **Replace** and **Replace all**.
+- The server-side HTML sanitizer already allows the classes/tags these
+  features emit (`ql-align-*`, `ql-size-*`, `ql-font-*`, `<sub>`/`<sup>`), so
+  everything round-trips safely.
+
 ## 1.6.0 — 2026-07-02
 
 Notes get a real WYSIWYG editor.

@@ -87,10 +87,14 @@ var loadedNoteId = null;      // which note is currently loaded into the editor
 var suppressChange = false;   // guard: programmatic loads must not autosave
 var searchMatches = [];       // in-note search hit indices (Quill offsets)
 
+// Google-Docs-style toolbar: paragraph style, font, size, inline formatting,
+// color, sub/superscript, alignment, lists, indent, blocks, links & images.
 var QUILL_TOOLBAR = [
-  [{ header: [1, 2, 3, false] }],
+  [{ header: [1, 2, 3, 4, 5, 6, false] }, { font: [] }, { size: ["small", false, "large", "huge"] }],
   ["bold", "italic", "underline", "strike"],
   [{ color: [] }, { background: [] }],
+  [{ script: "sub" }, { script: "super" }],
+  [{ align: [] }],
   [{ list: "ordered" }, { list: "bullet" }, { list: "check" }],
   [{ indent: "-1" }, { indent: "+1" }],
   ["blockquote", "code-block"],
@@ -113,6 +117,11 @@ function initQuill() {
       }
     }
   });
+  // Quill injects the toolbar right before the editor (inside the page); move it
+  // up into the sticky Docs-style formatting bar above the canvas.
+  var slot = document.getElementById("noteToolbarSlot");
+  var tbModule = quill.getModule("toolbar");
+  if (slot && tbModule && tbModule.container) slot.appendChild(tbModule.container);
   quill.on("text-change", function(delta, oldDelta, source) {
     if (suppressChange || source !== "user") return;
     updateCounters();
@@ -459,11 +468,50 @@ function focusNoteMatch() {
   if (!quill || !searchMatches.length) return;
   var idx = searchMatches[noteBodySearch.idx];
   quill.setSelection(idx, q.length, "user");
-  var bounds = quill.getBounds(idx, q.length);
-  if (bounds) {
-    var root = quill.root;
-    root.scrollTop = root.scrollTop + bounds.top - root.clientHeight / 2;
+  // The page (.ql-editor) grows with content; the .note-canvas is the scroller,
+  // so scroll the match into the canvas viewport ourselves.
+  var sel = window.getSelection();
+  var canvas = document.querySelector(".note-canvas");
+  if (sel && sel.rangeCount && canvas) {
+    var rect = sel.getRangeAt(0).getBoundingClientRect();
+    var crect = canvas.getBoundingClientRect();
+    if (rect.height && (rect.top < crect.top || rect.bottom > crect.bottom)) {
+      canvas.scrollTop += (rect.top - crect.top) - canvas.clientHeight / 2;
+    }
   }
+}
+
+function getReplaceValue() {
+  var el = document.getElementById("noteBodyReplace");
+  return el ? el.value : "";
+}
+
+// Replace the currently-focused match, then re-run the search.
+export function noteReplaceCurrent() {
+  var q = (noteBodySearch.q || "");
+  if (!quill || !q || !searchMatches.length) return;
+  var rep = getReplaceValue();
+  var idx = searchMatches[noteBodySearch.idx];
+  var current = quill.getText(idx, q.length);
+  if (current.toLowerCase() !== q.toLowerCase()) { runNoteBodySearch(true); return; }
+  quill.deleteText(idx, q.length, "user");
+  if (rep) quill.insertText(idx, rep, "user");
+  runNoteBodySearch(true);
+}
+
+// Replace every match. Work back-to-front so earlier offsets stay valid.
+export function noteReplaceAll() {
+  var q = (noteBodySearch.q || "");
+  if (!quill || !q) return;
+  var rep = getReplaceValue();
+  runNoteBodySearch(false);
+  for (var i = searchMatches.length - 1; i >= 0; i--) {
+    var idx = searchMatches[i];
+    quill.deleteText(idx, q.length, "user");
+    if (rep) quill.insertText(idx, rep, "user");
+  }
+  noteBodySearch.idx = 0;
+  runNoteBodySearch(true);
 }
 
 function isNoteDescendant(folderId, targetId) {
@@ -622,7 +670,9 @@ export function renderNotes() {
     if (ed) ed.style.display = "none";
     return;
   }
-  if (ed) ed.style.display = "block";
+  // Reveal via CSS (desktop: flex column; mobile: block panel) — don't hard-set
+  // 'block' or it would override the flex layout the Docs canvas depends on.
+  if (ed) ed.style.display = "";
   var layout = document.querySelector(".noteslayout");
   if (layout) layout.classList.add("note-editing");
   document.body.classList.add("note-open");
@@ -665,6 +715,8 @@ export function toggleNoteSearchBar() {
   } else if (input) {
     input.value = "";
     noteBodySearch.q = "";
+    var rep = document.getElementById("noteBodyReplace");
+    if (rep) rep.value = "";
     input.blur();
     runNoteBodySearch(false);
   }

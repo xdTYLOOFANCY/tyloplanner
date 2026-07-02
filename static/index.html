@@ -233,20 +233,20 @@
         <div id="noteFolderList"></div>
         <div id="noteList"></div>
       </div>
-      <div class="card" id="noteEditor" style="display:none">
-        <!-- Mobile back button: returns to note list on small screens -->
-        <button class="mobile-only" id="noteBackBtn" onclick="notesGoBack()" style="display:flex;align-items:center;gap:6px;background:transparent;border:none;color:var(--accent);font-size:15px;font-weight:600;cursor:pointer;padding:0 0 10px 0;-webkit-tap-highlight-color:transparent;">&#8592; Notes</button>
-        <input id="noteTitle" placeholder="Title" oninput="noteChanged()">
-        <div class="note-header-bar">
-          <div class="note-stats">
-            <span id="noteWordCount">0 words</span>
-            <span class="note-stats-divider">|</span>
-            <span id="noteCharCount">0 characters</span>
-            <span class="note-stats-divider">|</span>
+      <!-- Google-Docs-style editor: a slim top bar, a sticky formatting bar,
+           then a centered "page" (title + Quill editor) floating on a canvas. -->
+      <div id="noteEditor" style="display:none">
+        <div class="note-topbar">
+          <button class="mobile-only note-back" id="noteBackBtn" onclick="notesGoBack()" title="Back to notes">&#8592;</button>
+          <div class="note-doc-meta">
             <span id="noteSaveStatus" class="note-status">Saved</span>
+            <span class="note-stats-divider">·</span>
+            <span id="noteWordCount">0 words</span>
+            <span class="note-stats-divider">·</span>
+            <span id="noteCharCount">0 characters</span>
           </div>
-          <div class="note-control-grid">
-            <button class="mobile-only btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Search in note">&#128269;</button>
+          <div class="note-topbar-actions">
+            <button class="btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Find &amp; replace">&#128269;</button>
             <div class="dropdown" id="noteDownloadDropdown">
               <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note">📥 Export</button>
               <div class="dropdown-content" id="noteDownloadMenu">
@@ -254,17 +254,27 @@
                 <a href="#" onclick="downloadNoteAs('print'); return false;">🖨️ Print / PDF</a>
               </div>
             </div>
-            <button class="btn danger small note-control-delete" onclick="deleteNote()">Delete</button>
+            <button class="btn danger small" onclick="deleteNote()">Delete</button>
           </div>
         </div>
+        <!-- Quill's toolbar is moved here on init (see initQuill) -->
+        <div id="noteToolbarSlot" class="note-doctoolbar"></div>
         <div class="note-search-bar">
-          <input id="noteBodySearch" placeholder="Search in note…" oninput="noteBodySearchInput()" onkeydown="handleNoteBodySearchKeydown(event)">
+          <input id="noteBodySearch" placeholder="Find in note…" oninput="noteBodySearchInput()" onkeydown="handleNoteBodySearchKeydown(event)">
           <button class="note-search-btn" onclick="noteBodySearchNav(-1)" title="Previous match">↑</button>
           <button class="note-search-btn" onclick="noteBodySearchNav(1)" title="Next match">↓</button>
           <span id="noteBodySearchCount" class="muted"></span>
+          <span class="note-search-sep"></span>
+          <input id="noteBodyReplace" placeholder="Replace with…">
+          <button class="note-search-btn" onclick="noteReplaceCurrent()" title="Replace current match">Replace</button>
+          <button class="note-search-btn" onclick="noteReplaceAll()" title="Replace all matches">All</button>
         </div>
-        <!-- Quill injects its .ql-toolbar just before this container on init -->
-        <div id="noteEditorQuill"></div>
+        <div class="note-canvas">
+          <div class="note-page">
+            <input id="noteTitle" class="note-page-title" placeholder="Untitled document" oninput="noteChanged()">
+            <div id="noteEditorQuill"></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
