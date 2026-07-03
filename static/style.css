@@ -655,11 +655,16 @@ mark.cur{background:#f5a623;color:#1c2230}
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   padding: 3px 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* overflow must stay visible so the font/size/heading picker dropdowns can
+     escape the bar instead of being clipped/scrolled inside it. The toolbar
+     wraps to multiple rows rather than scrolling horizontally. */
+  overflow: visible;
+  position: relative;
+  z-index: 30;
   flex-shrink: 0;
 }
-.note-doctoolbar::-webkit-scrollbar { display: none; }
+/* Picker dropdowns must paint above the document canvas below them. */
+.note-doctoolbar .ql-picker-options { z-index: 40; }
 .note-doctoolbar .ql-toolbar.ql-snow {
   border: none;
   padding: 3px 0;
@@ -786,8 +791,7 @@ mark.cur{background:#f5a623;color:#1c2230}
     padding: 16px 16px 48px;
   }
   .note-page-title { font-size: 23px; }
-  .note-doctoolbar { justify-content: flex-start; }
-  .note-doctoolbar .ql-toolbar.ql-snow { flex-wrap: nowrap; justify-content: flex-start; }
+  .note-doctoolbar .ql-toolbar.ql-snow { justify-content: center; }
 }
 
 /* ---- Version history modal ---- */
@@ -890,6 +894,28 @@ mark.cur{background:#f5a623;color:#1c2230}
 }
 .note-table-tools button:hover { color: var(--text); border-color: var(--accent); }
 .note-table-tools button.ttx:hover { color: var(--red); border-color: var(--red); }
+
+/* Image resize/align overlay (shown when an image is selected) */
+.note-img-overlay {
+  display: none; position: fixed; z-index: 900; box-sizing: border-box;
+  border: 2px solid var(--accent); border-radius: 4px; pointer-events: none;
+}
+.note-img-overlay .nio-bar {
+  position: absolute; top: -34px; left: 0; display: flex; gap: 2px;
+  pointer-events: auto; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 3px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+.note-img-overlay .nio-bar button {
+  pointer-events: auto; cursor: pointer; font-size: 13px; line-height: 1;
+  width: 26px; height: 24px; border-radius: 5px;
+  color: var(--muted); background: var(--panel2); border: 1px solid var(--border);
+}
+.note-img-overlay .nio-bar button:hover { color: var(--accent); border-color: var(--accent); }
+.note-img-overlay .nio-handle {
+  position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--panel);
+  cursor: nwse-resize; pointer-events: auto;
+}
 
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}

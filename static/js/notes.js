@@ -61,6 +61,29 @@ function noteBodyHtml(note) {
   return note.body_format === "html" ? (note.body || "") : mdToHtml(note.body || "");
 }
 
+// Inline uploaded images (/api/files/<id>/view) as data: URIs so an exported
+// HTML file is self-contained and its images render for anyone it's shared with.
+async function inlineExportImages(html) {
+  if (!html || html.indexOf("/api/files/") === -1) return html;
+  var re = /\/api\/files\/[A-Za-z0-9]+\/view/g, m, urls = [];
+  while ((m = re.exec(html))) { if (urls.indexOf(m[0]) === -1) urls.push(m[0]); }
+  for (var i = 0; i < urls.length; i++) {
+    try {
+      var resp = await fetch(urls[i]);
+      if (!resp.ok) continue;
+      var blob = await resp.blob();
+      var dataUri = await new Promise(function(res, rej) {
+        var r = new FileReader();
+        r.onloadend = function() { res(r.result); };
+        r.onerror = rej;
+        r.readAsDataURL(blob);
+      });
+      html = html.split(urls[i]).join(dataUri);
+    } catch (e) { /* leave the original URL if fetch fails */ }
+  }
+  return html;
+}
+
 // Plain text of a note body, for word/character counts in exports.
 function notePlainText(note) {
   if (!note) return "";
@@ -140,6 +163,7 @@ function initQuill() {
     noteChanged();
     // Defer a tick: Quill hasn't committed the new selection yet when
     // text-change fires, so getSelection() can be stale on the first keystroke.
+    setTimeout(function() { autoLinkify(delta); }, 0);
     setTimeout(maybeTriggerEditorPopup, 0);
   });
   quill.on("selection-change", function(range) {
@@ -150,6 +174,8 @@ function initQuill() {
     }
     setTimeout(maybeTriggerEditorPopup, 0);
     setTimeout(updateTableTools, 0);
+    // Hide the image overlay if the selection is no longer on that image.
+    if (imgTarget && !(range.length === 1 && range.index === imgTarget.index)) hideImgOverlay();
   });
   // Keyboard navigation for the inline popup (capture so it beats Quill's keys).
   quill.root.addEventListener("keydown", function(e) {
@@ -162,13 +188,18 @@ function initQuill() {
     else handled = false;
     if (handled) { e.preventDefault(); e.stopPropagation(); }
   }, true);
-  // Clicking a [[wiki-link]] opens the target note (beats Quill's link tooltip).
   quill.root.addEventListener("click", function(e) {
+    // Clicking a [[wiki-link]] opens the target note (beats Quill's tooltip).
     var a = e.target.closest && e.target.closest('a[href^="#note-"]');
-    if (!a) return;
-    e.preventDefault(); e.stopPropagation();
-    var id = a.getAttribute("href").slice(6);
-    if ((S.notes || []).some(function(n) { return n.id === id; })) openNote(id);
+    if (a) {
+      e.preventDefault(); e.stopPropagation();
+      var id = a.getAttribute("href").slice(6);
+      if ((S.notes || []).some(function(n) { return n.id === id; })) openNote(id);
+      return;
+    }
+    // Clicking an image selects it and shows the resize/align overlay.
+    if (e.target.tagName === "IMG") { selectEditorImage(e.target); return; }
+    hideImgOverlay();
   }, true);
   return quill;
 }
@@ -186,6 +217,7 @@ function setEditorBody(html) {
   if (!quill) return;
   closeEditorPopup();
   if (tableTools) tableTools.style.display = "none";
+  hideImgOverlay();
   suppressChange = true;
   try {
     if (html) {
@@ -316,6 +348,135 @@ function updateTableTools() {
   bar.style.position = "fixed";
   bar.style.left = Math.max(8, rect.left) + "px";
   bar.style.top = Math.max(8, rect.top - 38) + "px";
+}
+
+// ---- Auto-linkify URLs (typed + pasted) ----
+var URL_TOKEN_RE = /^(https?:\/\/[^\s]+\.[^\s]+|www\.[^\s]+\.[^\s]+)$/i;
+
+function linkifyAt(start, len, url) {
+  var cleaned = url.replace(/[.,;:!?)\]}'"]+$/, ""); // don't swallow trailing punctuation
+  if (!cleaned || !URL_TOKEN_RE.test(cleaned)) return;
+  var fmt = quill.getFormat(start, cleaned.length);
+  if (fmt && fmt.link) return; // already a link
+  var href = /^www\./i.test(cleaned) ? "http://" + cleaned : cleaned;
+  quill.formatText(start, cleaned.length, "link", href, "user");
+}
+
+function autoLinkify(delta) {
+  if (!quill || suppressChange) return;
+  // Position of the change + the inserted string (robust even if more was typed
+  // before this deferred call runs — earlier indices are frozen).
+  var ops = (delta && delta.ops) || [];
+  var pos = 0, ins = null;
+  for (var i = 0; i < ops.length; i++) {
+    if (typeof ops[i].retain === "number") pos += ops[i].retain;
+    else if (typeof ops[i].insert === "string") { ins = ops[i].insert; break; }
+    else if (ops[i].insert) pos += 1; // embed
+  }
+  if (!ins) return;
+  if (ins.length > 1) {
+    // Pasted / batched text: linkify every URL inside the inserted range.
+    var re = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi, m;
+    while ((m = re.exec(ins))) linkifyAt(pos + m.index, m[0].length, m[0]);
+  }
+  // For every boundary (space/newline) anywhere in the inserted text — keystrokes
+  // can batch as "e ", " and", etc. — linkify the token ending just before it (a
+  // URL that may have started in an earlier insert).
+  for (var k = 0; k < ins.length; k++) {
+    if (ins[k] !== " " && ins[k] !== "\n") continue;
+    var bpos = pos + k;
+    var li = quill.getLine(bpos);
+    if (!li || !li[0]) continue;
+    var lineStart = bpos - li[1];
+    var before = quill.getText(lineStart, li[1]); // up to (not incl.) the boundary
+    var t = /(\S+)$/.exec(before);
+    if (t) linkifyAt(lineStart + (before.length - t[1].length), t[1].length, t[1]);
+  }
+}
+
+// ---- Inline image resize + alignment ----
+var imgOverlay = null;
+var imgTarget = null;   // { node, index }
+
+function buildImgOverlay() {
+  if (imgOverlay) return imgOverlay;
+  imgOverlay = document.createElement("div");
+  imgOverlay.className = "note-img-overlay";
+  imgOverlay.innerHTML =
+    '<div class="nio-bar">' +
+      '<button type="button" data-a="left" title="Align left">⬅</button>' +
+      '<button type="button" data-a="center" title="Align center">↔</button>' +
+      '<button type="button" data-a="right" title="Align right">➡</button>' +
+      '<button type="button" data-a="reset" title="Reset size">⟲</button>' +
+    '</div>' +
+    '<span class="nio-handle" title="Drag to resize"></span>';
+  document.body.appendChild(imgOverlay);
+  // alignment / reset buttons
+  Array.prototype.forEach.call(imgOverlay.querySelectorAll(".nio-bar button"), function(btn) {
+    btn.addEventListener("mousedown", function(e) {
+      e.preventDefault(); e.stopPropagation();
+      if (!imgTarget) return;
+      var a = btn.getAttribute("data-a");
+      if (a === "reset") {
+        imgTarget.node.removeAttribute("width");
+        quill.formatText(imgTarget.index, 1, "width", false, "user");
+      } else {
+        quill.formatLine(imgTarget.index, 1, "align", a === "left" ? false : a, "user");
+      }
+      setTimeout(showImgOverlay, 0);
+    });
+  });
+  // drag-to-resize handle (keeps aspect ratio)
+  var handle = imgOverlay.querySelector(".nio-handle");
+  handle.addEventListener("mousedown", function(e) {
+    if (!imgTarget) return;
+    e.preventDefault(); e.stopPropagation();
+    var startX = e.clientX;
+    var startW = imgTarget.node.getBoundingClientRect().width;
+    var maxW = quill.root.clientWidth;
+    function move(ev) {
+      var w = Math.max(40, Math.min(maxW, Math.round(startW + (ev.clientX - startX))));
+      imgTarget.node.setAttribute("width", w);
+      showImgOverlay();
+    }
+    function up() {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      var w = imgTarget.node.getAttribute("width");
+      if (w) quill.formatText(imgTarget.index, 1, "width", String(w), "user");
+      showImgOverlay();
+    }
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+  window.addEventListener("scroll", function() {
+    if (imgTarget) showImgOverlay();
+  }, true);
+  return imgOverlay;
+}
+
+function selectEditorImage(node) {
+  var blot = window.Quill.find(node);
+  if (!blot) return;
+  imgTarget = { node: node, index: quill.getIndex(blot) };
+  quill.setSelection(imgTarget.index, 1, "silent");
+  showImgOverlay();
+}
+
+function showImgOverlay() {
+  if (!imgTarget) return;
+  var ov = buildImgOverlay();
+  var rect = imgTarget.node.getBoundingClientRect();
+  ov.style.display = "block";
+  ov.style.left = rect.left + "px";
+  ov.style.top = rect.top + "px";
+  ov.style.width = rect.width + "px";
+  ov.style.height = rect.height + "px";
+}
+
+function hideImgOverlay() {
+  imgTarget = null;
+  if (imgOverlay) imgOverlay.style.display = "none";
 }
 
 function buildPopup() {
@@ -1264,7 +1425,7 @@ window.addEventListener('click', function(e) {
   }
 });
 
-export function downloadNoteAs(format) {
+export async function downloadNoteAs(format) {
   if (!currentNote) return;
   var note = S.notes.find(function(n) { return n.id === currentNote; });
   if (!note) return;
@@ -1289,7 +1450,7 @@ export function downloadNoteAs(format) {
   }
 
   if (format === 'html') {
-    var rawHtml = noteBodyHtml(note);
+    var rawHtml = await inlineExportImages(noteBodyHtml(note));
     // Replace wiki links with alert behavior in standalone mode
     var renderedHtml = rawHtml.replace(/onclick="openNote\('([^']+)'\);return false;"/g, 'onclick="alert(\'This link points to another note inside TyloPlanner. Download as a Compiled Notebook to make links interactive.\');return false;"');
 
@@ -1438,9 +1599,12 @@ export function downloadNoteAs(format) {
       margin: 24px 0;
     }
     .markdown-body table {
-      width: 100%;
+      width: auto;
+      max-width: 100%;
       border-collapse: collapse;
       margin-bottom: 16px;
+      display: block;
+      overflow-x: auto;
     }
     .markdown-body th, .markdown-body td {
       padding: 8px 12px;
@@ -1449,6 +1613,13 @@ export function downloadNoteAs(format) {
     }
     .markdown-body th {
       background: var(--panel2);
+    }
+    .markdown-body img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      display: block;
+      margin: 8px 0;
     }
     .note-link {
       color: var(--accent);
@@ -1522,7 +1693,7 @@ export function downloadNoteAs(format) {
   }
 }
 
-function compileDigitalNotebook(rootFolderId, notebookTitle) {
+async function compileDigitalNotebook(rootFolderId, notebookTitle) {
   var exportedFolders = [];
   var exportedNotes = [];
 
@@ -1559,8 +1730,9 @@ function compileDigitalNotebook(rootFolderId, notebookTitle) {
   }
 
   var renderedNotesMap = {};
-  exportedNotes.forEach(function(n) {
-    var rawHtml = noteBodyHtml(n);
+  for (var ni = 0; ni < exportedNotes.length; ni++) {
+    var n = exportedNotes[ni];
+    var rawHtml = await inlineExportImages(noteBodyHtml(n));
     // Replace openNote with showNote
     var localHtml = rawHtml.replace(/onclick="openNote\('([^']+)'\);return false;"/g, 'href="#note-$1" onclick="showNote(\'$1\');return false;"');
 
@@ -1573,7 +1745,7 @@ function compileDigitalNotebook(rootFolderId, notebookTitle) {
       updated: n.updated || Date.now(),
       folder_id: n.folder_id
     };
-  });
+  }
 
   var theme = localStorage.getItem("tylo-theme") || "dark";
   
@@ -1852,9 +2024,12 @@ function compileDigitalNotebook(rootFolderId, notebookTitle) {
       margin: 24px 0;
     }
     .markdown-body table {
-      width: 100%;
+      width: auto;
+      max-width: 100%;
       border-collapse: collapse;
       margin-bottom: 16px;
+      display: block;
+      overflow-x: auto;
     }
     .markdown-body th, .markdown-body td {
       padding: 8px 12px;
@@ -1863,6 +2038,13 @@ function compileDigitalNotebook(rootFolderId, notebookTitle) {
     }
     .markdown-body th {
       background: var(--panel2);
+    }
+    .markdown-body img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      display: block;
+      margin: 8px 0;
     }
     
     .note-link { color: var(--accent); text-decoration: none; }
@@ -2186,14 +2368,14 @@ function compileDigitalNotebook(rootFolderId, notebookTitle) {
   triggerDownload(htmlContent, notebookTitle + ".html", "text/html");
 }
 
-export function downloadNoteFolder(folderId) {
+export async function downloadNoteFolder(folderId) {
   if (!folderId) return;
   var folder = S.note_folders.find(function(f) { return f.id === folderId; });
   if (!folder) return;
-  compileDigitalNotebook(folderId, (folder.name || "Folder") + " Notes");
+  await compileDigitalNotebook(folderId, (folder.name || "Folder") + " Notes");
 }
 
-export function downloadAllNotesNotebook() {
-  compileDigitalNotebook(null, "TyloPlanner Notes");
+export async function downloadAllNotesNotebook() {
+  await compileDigitalNotebook(null, "TyloPlanner Notes");
 }
 
