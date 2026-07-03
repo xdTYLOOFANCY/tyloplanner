@@ -137,7 +137,33 @@ function initQuill() {
     if (suppressChange || source !== "user") return;
     updateCounters();
     noteChanged();
+    // Defer a tick: Quill hasn't committed the new selection yet when
+    // text-change fires, so getSelection() can be stale on the first keystroke.
+    setTimeout(maybeTriggerEditorPopup, 0);
   });
+  quill.on("selection-change", function(range) {
+    if (!range) { closeEditorPopup(); return; }
+    setTimeout(maybeTriggerEditorPopup, 0);
+  });
+  // Keyboard navigation for the inline popup (capture so it beats Quill's keys).
+  quill.root.addEventListener("keydown", function(e) {
+    if (!popupState) return;
+    var handled = true;
+    if (e.key === "ArrowDown") movePopupSelection(1);
+    else if (e.key === "ArrowUp") movePopupSelection(-1);
+    else if (e.key === "Enter" || e.key === "Tab") choosePopupItem();
+    else if (e.key === "Escape") closeEditorPopup();
+    else handled = false;
+    if (handled) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+  // Clicking a [[wiki-link]] opens the target note (beats Quill's link tooltip).
+  quill.root.addEventListener("click", function(e) {
+    var a = e.target.closest && e.target.closest('a[href^="#note-"]');
+    if (!a) return;
+    e.preventDefault(); e.stopPropagation();
+    var id = a.getAttribute("href").slice(6);
+    if ((S.notes || []).some(function(n) { return n.id === id; })) openNote(id);
+  }, true);
   return quill;
 }
 
@@ -201,6 +227,154 @@ function updateCounters() {
   var ccEl = document.getElementById("noteCharCount");
   if (wcEl) wcEl.textContent = wordCount + " " + (wordCount === 1 ? "word" : "words");
   if (ccEl) ccEl.textContent = charCount + " " + (charCount === 1 ? "character" : "characters");
+}
+
+// ---- Inline command popup: "/" slash menu + "[[" wiki-links ----
+// A single floating menu, positioned at the caret, shared by both triggers.
+var editorPopup = null;      // the reused DOM element
+var popupState = null;       // { type:'slash'|'wiki', anchor, items, index }
+var popupBusy = false;       // guard while applying a choice
+
+var SLASH_ITEMS = [
+  { icon: "H1", label: "Heading 1", kw: "title", apply: function() { quill.format("header", 1, "user"); } },
+  { icon: "H2", label: "Heading 2", kw: "subtitle", apply: function() { quill.format("header", 2, "user"); } },
+  { icon: "H3", label: "Heading 3", kw: "", apply: function() { quill.format("header", 3, "user"); } },
+  { icon: "•", label: "Bulleted list", kw: "unordered", apply: function() { quill.format("list", "bullet", "user"); } },
+  { icon: "1.", label: "Numbered list", kw: "ordered", apply: function() { quill.format("list", "ordered", "user"); } },
+  { icon: "☑", label: "Checklist", kw: "todo task", apply: function() { quill.format("list", "unchecked", "user"); } },
+  { icon: "❝", label: "Quote", kw: "blockquote", apply: function() { quill.format("blockquote", true, "user"); } },
+  { icon: "</>", label: "Code block", kw: "pre monospace", apply: function() { quill.format("code-block", true, "user"); } },
+  { icon: "🖼", label: "Image", kw: "picture photo", apply: function() { quillImageHandler(); } }
+];
+
+function buildPopup() {
+  if (editorPopup) return editorPopup;
+  editorPopup = document.createElement("div");
+  editorPopup.className = "editor-popup";
+  editorPopup.style.display = "none";
+  document.body.appendChild(editorPopup);
+  document.addEventListener("mousedown", function(e) {
+    if (popupState && editorPopup && !editorPopup.contains(e.target)) closeEditorPopup();
+  });
+  return editorPopup;
+}
+
+function closeEditorPopup() {
+  popupState = null;
+  if (editorPopup) editorPopup.style.display = "none";
+}
+
+function maybeTriggerEditorPopup() {
+  if (popupBusy || !quill) return;
+  var sel = quill.getSelection();
+  if (!sel || sel.length > 0) return closeEditorPopup();
+  var lineInfo = quill.getLine(sel.index);
+  var line = lineInfo && lineInfo[0];
+  var offset = lineInfo ? lineInfo[1] : 0;
+  if (!line) return closeEditorPopup();
+  var lineStart = sel.index - offset;
+  var before = quill.getText(lineStart, offset);
+  // Slash menu: the line up to the caret is "/" + word chars.
+  var mSlash = /^\/(\w*)$/.exec(before);
+  if (mSlash) { openSlashMenu(lineStart, mSlash[1]); return; }
+  // Wiki-link: an open "[[" with a short query and no closing "]]" yet.
+  var open = before.lastIndexOf("[[");
+  if (open !== -1) {
+    var after = before.slice(open + 2);
+    if (after.indexOf("]]") === -1 && after.indexOf("[") === -1 && after.length <= 60) {
+      openWikiMenu(lineStart + open, after); return;
+    }
+  }
+  closeEditorPopup();
+}
+
+function openSlashMenu(anchor, query) {
+  var q = (query || "").toLowerCase();
+  var items = SLASH_ITEMS.filter(function(it) {
+    return !q || it.label.toLowerCase().indexOf(q) !== -1 || (it.kw && it.kw.indexOf(q) !== -1);
+  });
+  if (!items.length) return closeEditorPopup();
+  popupState = { type: "slash", anchor: anchor, items: items, index: 0 };
+  renderPopup(); positionPopup(anchor);
+}
+
+function openWikiMenu(anchor, query) {
+  var q = (query || "").toLowerCase();
+  var list = (S.notes || []).filter(function(n) {
+    return n.id !== currentNote && (n.title || "").trim() !== "" &&
+      (n.title || "").toLowerCase().indexOf(q) !== -1;
+  });
+  list.sort(function(a, b) { return (b.updated || 0) - (a.updated || 0); });
+  list = list.slice(0, 8).map(function(n) { return { id: n.id, title: n.title }; });
+  if (!list.length) return closeEditorPopup();
+  popupState = { type: "wiki", anchor: anchor, items: list, index: 0 };
+  renderPopup(); positionPopup(anchor);
+}
+
+function renderPopup() {
+  var el = buildPopup();
+  var st = popupState;
+  var html = st.type === "wiki" ? '<div class="ep-head">Link to note</div>' : "";
+  st.items.forEach(function(it, i) {
+    var icon = st.type === "slash" ? it.icon : "🔗";
+    var label = st.type === "slash" ? it.label : it.title;
+    html += '<div class="ep-item' + (i === st.index ? " sel" : "") + '" data-i="' + i + '">' +
+      '<span class="ep-icon">' + esc(icon) + '</span>' +
+      '<span class="ep-label">' + esc(label) + '</span></div>';
+  });
+  el.innerHTML = html;
+  el.style.display = "block";
+  Array.prototype.forEach.call(el.querySelectorAll(".ep-item"), function(node) {
+    node.addEventListener("mousedown", function(e) {
+      e.preventDefault();
+      popupState.index = parseInt(node.getAttribute("data-i"), 10);
+      choosePopupItem();
+    });
+  });
+}
+
+function positionPopup(anchor) {
+  var el = buildPopup();
+  var b = quill.getBounds(anchor);
+  var rect = quill.root.getBoundingClientRect();
+  el.style.position = "fixed";
+  el.style.left = Math.max(8, Math.min(rect.left + b.left, window.innerWidth - 268)) + "px";
+  el.style.top = Math.min(rect.top + b.top + b.height + 6, window.innerHeight - 280) + "px";
+}
+
+function movePopupSelection(dir) {
+  if (!popupState) return;
+  var n = popupState.items.length;
+  popupState.index = (popupState.index + dir + n) % n;
+  renderPopup();
+}
+
+function choosePopupItem() {
+  if (!popupState || !quill) return;
+  var st = popupState;
+  var item = st.items[st.index];
+  if (!item) return closeEditorPopup();
+  var sel = quill.getSelection();
+  var cursor = sel ? sel.index : st.anchor;
+  popupBusy = true;
+  try {
+    if (st.type === "slash") {
+      quill.deleteText(st.anchor, cursor - st.anchor, "user");
+      quill.setSelection(st.anchor, 0, "silent");
+      item.apply();
+    } else {
+      quill.deleteText(st.anchor, cursor - st.anchor, "user");
+      quill.insertText(st.anchor, item.title, { link: "#note-" + item.id }, "user");
+      var end = st.anchor + item.title.length;
+      quill.setSelection(end, 0, "silent");
+      quill.format("link", false, "silent");
+      quill.insertText(end, " ", "user");
+      quill.setSelection(end + 1, 0, "silent");
+    }
+  } finally {
+    popupBusy = false;
+    closeEditorPopup();
+  }
 }
 
 export async function newNote(refresh) {

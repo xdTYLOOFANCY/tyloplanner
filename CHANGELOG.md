@@ -2,6 +2,21 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.9.0 — 2026-07-03
+
+Slash commands and wiki-links in the notes editor.
+
+- **`/` slash menu.** Type `/` at the start of a line to open a command menu —
+  headings (H1–H3), bulleted / numbered / checklist lists, quote, code block,
+  and image. Filter by typing, navigate with ↑/↓, choose with Enter, dismiss
+  with Esc. No mouse required.
+- **`[[wiki-links]]`.** Type `[[` to autocomplete and link to another note by
+  title; clicking the link opens that note. Links are stored as ordinary
+  `#note-<id>` anchors (no schema change, and they pass the existing HTML
+  sanitizer), so they round-trip and export cleanly.
+- Both share one caret-anchored popup, styled to the app theme, and work on
+  desktop and mobile.
+
 ## 1.8.0 — 2026-07-03
 
 Note version history + an undo fix.
