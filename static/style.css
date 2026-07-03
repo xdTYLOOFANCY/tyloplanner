@@ -93,6 +93,419 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
   align-items: center;
   gap: 8px;
 }
+/* Logout shown only when auth is enabled (body.auth-enabled set in settings.js) */
+#logoutBtn { display: none; }
+body.auth-enabled #logoutBtn { display: inline-block; }
+
+/* ---------- Sidebar navigation (desktop-only, >900px) ---------- */
+.sidebar { display: none; }
+
+@media screen and (min-width: 901px) {
+  body[data-nav-layout="sidebar"] {
+    /* Custom props don't inherit upward, so the width var and the content
+       offset must live on the same element (body), not html. */
+    --sidebar-w: 220px;
+    padding-left: var(--sidebar-w);
+    transition: padding-left 0.2s ease;
+  }
+  body[data-nav-layout="sidebar"].sidebar-collapsed { --sidebar-w: 64px; }
+
+  body[data-nav-layout="sidebar"] .sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    padding: 14px 10px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    z-index: 101;
+    transition: width 0.2s ease;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Sidebar replaces the top header entirely; main's max-width + margin:auto
+     centering then balances in the remaining space (correct on ultrawide/4K). */
+  body[data-nav-layout="sidebar"] .top-nav-container { display: none; }
+  body[data-nav-layout="sidebar"] main { padding-top: 18px; }
+
+  /* Full-height panes sized against the viewport assume the ~73px top header
+     chrome; with the sidebar there is no header, so give them the space back. */
+  body[data-nav-layout="sidebar"] #noteEditor { height: calc(100dvh - 76px); }
+  body[data-nav-layout="sidebar"] .notelist { height: calc(100dvh - 76px); }
+  body[data-nav-layout="sidebar"] .note-page { min-height: calc(100dvh - 196px); }
+}
+
+/* Shared sidebar styles — used by both the desktop rail (≥901px) and the
+   mobile drawer (≤900px). Mode-specific box/positioning stays in the media
+   blocks below. */
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px 12px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand .headlogo { width: 24px; height: 24px; flex: none; }
+  .sidebar-brand-name {
+    font-size: 16px;
+    font-weight: 700;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity 0.15s ease;
+  }
+  .sidebar-date {
+    font-size: 11.5px;
+    color: var(--muted);
+    padding: 0 8px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .sidebar-date:empty { display: none; }
+  .sidebar-collapse {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    display: flex;
+    flex: none;
+  }
+  .sidebar-collapse:hover { color: var(--text); background: rgba(128, 128, 128, 0.1); }
+  .sidebar-collapse svg { width: 18px; height: 18px; transition: transform 0.2s; }
+
+  .sidebar-nav { display: flex; flex-direction: column; }
+  .sidebar-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+  .sidebar-group-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 8px 10px 4px;
+    white-space: nowrap;
+  }
+
+  .sidebar button[data-tab] {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 500;
+    text-align: left;
+    transition: all 0.2s;
+  }
+  /* Footer actions (theme toggle, logout) share the nav-item look */
+  .sidebar-action {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 500;
+    text-align: left;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .sidebar button[data-tab] svg,
+  .sidebar-action svg { width: 19px; height: 19px; flex: none; transition: transform 0.2s ease, color 0.2s; }
+  .sidebar button[data-tab]:hover,
+  .sidebar-action:hover { color: var(--text); background: rgba(128, 128, 128, 0.1); }
+
+/* Icon hover animations are desktop-only (hover is meaningless on touch) */
+@media screen and (min-width: 901px) {
+  /* Icon animates when hovering the item or its label */
+  .sidebar button[data-tab]:hover svg,
+  .sidebar-action:hover svg { transform: scale(1.18) translateX(2px); color: var(--accent); }
+
+  /* Individual hover animations for icons */
+  @keyframes anim-dashboard {
+    0%, 100% { transform: scale(1.18) translateX(2px); }
+    50% { transform: scale(1.18) translateX(2px) translateY(-2px); }
+  }
+  @keyframes anim-analytics {
+    0%, 100% { transform: scale(1.18) translateX(2px); }
+    50% { transform: scale(1.18) translateX(2px) scaleY(1.1); }
+  }
+  @keyframes anim-planner {
+    0% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    25% { transform: scale(1.18) translateX(2px) rotate(-6deg); }
+    75% { transform: scale(1.18) translateX(2px) rotate(6deg); }
+    100% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+  }
+  @keyframes anim-exams {
+    0%, 100% { transform: scale(1.18) translateX(2px); }
+    50% { transform: scale(1.18) translateX(2px) translateY(-3px); }
+  }
+  @keyframes anim-habits {
+    0%, 100% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    50% { transform: scale(1.18) translateX(2px) rotate(8deg); }
+  }
+  @keyframes anim-workouts {
+    0% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    25% { transform: scale(1.18) translateX(2px) rotate(-8deg); }
+    75% { transform: scale(1.18) translateX(2px) rotate(8deg); }
+    100% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+  }
+  @keyframes anim-tasks {
+    0%, 100% { transform: scale(1.18) translateX(2px); }
+    50% { transform: scale(1.18) translateX(5px); }
+  }
+  @keyframes anim-notes {
+    0%, 100% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    25% { transform: scale(1.18) translateX(2px) rotate(-4deg); }
+    75% { transform: scale(1.18) translateX(2px) rotate(4deg); }
+  }
+  @keyframes anim-files {
+    0%, 100% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    50% { transform: scale(1.18) translateX(2px) rotate(-6deg); }
+  }
+  @keyframes anim-theme {
+    0% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    100% { transform: scale(1.18) translateX(2px) rotate(360deg); }
+  }
+  @keyframes anim-settings {
+    0% { transform: scale(1.18) translateX(2px) rotate(0deg); }
+    100% { transform: scale(1.18) translateX(2px) rotate(360deg); }
+  }
+  @keyframes anim-logout {
+    0%, 100% { transform: scale(1.18) translateX(2px); }
+    50% { transform: scale(1.18) translateX(6px); }
+  }
+
+  .sidebar button[data-tab="dashboard"]:hover svg { animation: anim-dashboard 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="analytics"]:hover svg { animation: anim-analytics 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="planner"]:hover svg { animation: anim-planner 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="exams"]:hover svg { animation: anim-exams 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="habits"]:hover svg { animation: anim-habits 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="workouts"]:hover svg { animation: anim-workouts 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="tasks"]:hover svg { animation: anim-tasks 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="notes"]:hover svg { animation: anim-notes 1.5s ease-in-out infinite; }
+  .sidebar button[data-tab="files"]:hover svg { animation: anim-files 1.5s ease-in-out infinite; }
+  .sidebar .sidebar-theme:hover svg { animation: anim-theme 3s linear infinite; }
+  .sidebar button[data-tab="settings"]:hover svg { animation: anim-settings 4s linear infinite; }
+  .sidebar .sidebar-logout:hover svg { animation: anim-logout 1.5s ease-in-out infinite; }
+}
+
+  .sidebar button[data-tab] { position: relative; }
+  .sidebar button[data-tab].active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--text);
+  }
+  .sidebar button[data-tab].active svg { color: var(--accent); }
+  /* Notion-style active indicator rail */
+  .sidebar button[data-tab].active::before {
+    content: '';
+    position: absolute;
+    left: -10px; top: 20%; bottom: 20%;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent);
+  }
+  .sidebar-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: transform 0.2s ease, opacity 0.15s ease;
+  }
+  .sidebar button[data-tab]:hover .sidebar-label,
+  .sidebar-action:hover .sidebar-label { transform: translateX(3px); }
+
+  .sidebar button:focus-visible,
+  .sidebar a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .sidebar-footer .tab-badge { margin-left: auto; flex: none; }
+  /* Logout only when auth is on (mirrors #logoutBtn) */
+  .sidebar-logout { display: none; }
+  body.auth-enabled .sidebar-logout { display: flex; }
+
+@media screen and (min-width: 901px) {
+  /* Collapsed (icon-only) mode. Labels fade + clip instead of display:none so
+     the width animation is smooth and buttons keep their accessible names. */
+  body.sidebar-collapsed .sidebar-label,
+  body.sidebar-collapsed .sidebar-brand-name { opacity: 0; }
+  body.sidebar-collapsed .sidebar-group-label,
+  body.sidebar-collapsed .sidebar-date,
+  body.sidebar-collapsed .sidebar-brand .headlogo { display: none; }
+  /* Divider replaces the group label as the visual separator */
+  body.sidebar-collapsed .sidebar-group + .sidebar-group {
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+  /* Nudge padding so the 19px icon sits optically centered in the 64px rail */
+  body.sidebar-collapsed .sidebar button[data-tab],
+  body.sidebar-collapsed .sidebar-action { padding-left: 12px; }
+  body.sidebar-collapsed .sidebar button[data-tab].active::before { left: -12px; }
+  body.sidebar-collapsed .sidebar-brand { justify-content: center; }
+  body.sidebar-collapsed .sidebar-collapse svg { transform: rotate(180deg); }
+  body.sidebar-collapsed .sidebar-footer .tab-badge {
+    position: absolute; top: 4px; right: 8px; margin: 0;
+  }
+}
+
+/* Sidebar honors reduced motion: no width/label transitions, no icon loops */
+@media screen and (min-width: 901px) and (prefers-reduced-motion: reduce) {
+  body[data-nav-layout="sidebar"],
+  body[data-nav-layout="sidebar"] .sidebar,
+  .sidebar-label, .sidebar-brand-name, .sidebar-collapse svg,
+  .sidebar button[data-tab] svg, .sidebar-action svg { transition: none; }
+  .sidebar button[data-tab]:hover svg,
+  .sidebar-action:hover svg { animation: none; transform: none; }
+  .sidebar button[data-tab]:hover .sidebar-label,
+  .sidebar-action:hover .sidebar-label { transform: none; }
+}
+
+/* ---------- Mobile drawer (≤900px) ----------
+   The same #sidebar becomes an off-canvas panel, Claude-app style: opened by
+   the header hamburger or an edge swipe, dismissed by scrim tap / swipe /
+   Escape. Replaces the old bottom navigation entirely. */
+.drawer-btn { display: none; }
+.drawer-scrim { display: none; }
+.quick-add-menu { display: none; }
+
+@media screen and (max-width: 900px) {
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(300px, 84vw);
+    padding: 14px 10px calc(14px + env(safe-area-inset-bottom));
+    padding-left: calc(10px + env(safe-area-inset-left));
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    z-index: 1200;
+    transform: translateX(-105%);
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+    touch-action: pan-y;
+  }
+  body.drawer-open .sidebar { transform: translateX(0); }
+  /* While the finger drags, JS positions the drawer directly — no easing lag */
+  .sidebar.dragging { transition: none; }
+  body.drawer-open { overflow: hidden; }
+
+  /* Drawer ergonomics: bigger touch targets, no collapse concept */
+  .sidebar button[data-tab], .sidebar-action { padding: 12px 10px; font-size: 14.5px; }
+  .sidebar button[data-tab] svg, .sidebar-action svg { width: 20px; height: 20px; }
+  .sidebar-collapse { display: none; }
+
+  .drawer-scrim {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1199;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  body.drawer-open .drawer-scrim { opacity: 1; pointer-events: auto; }
+
+  /* Header becomes: [hamburger] [brand] ........ [quick-add] */
+  .drawer-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: var(--text);
+    cursor: pointer;
+    flex: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .drawer-btn:active { background: var(--panel2); }
+  .drawer-btn svg { width: 22px; height: 22px; }
+  .top-nav-container { flex-wrap: nowrap; }
+  .top-nav-container .nav-tabs { display: none; }
+  .top-nav-container .nav-actions { display: none; }
+  .header-desktop-only { display: none !important; }
+  .nav-brand { flex: 1; min-width: 0; }
+  .nav-brand h1 { overflow: hidden; text-overflow: ellipsis; }
+
+  /* Quick-add popover under the top-right button */
+  .quick-add-menu {
+    position: fixed;
+    top: 58px;
+    right: 10px;
+    min-width: 210px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    z-index: 1210;
+    flex-direction: column;
+    gap: 2px;
+    transform-origin: top right;
+  }
+  .quick-add-menu.open { display: flex; animation: quick-add-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes quick-add-pop {
+    from { opacity: 0; transform: scale(0.92) translateY(-4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .quick-add-menu button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 12px 12px;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+  }
+  .quick-add-menu button:active { background: var(--panel2); }
+  .quick-add-menu button svg { width: 19px; height: 19px; flex: none; color: var(--accent); }
+}
+
+@media screen and (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .sidebar, .drawer-scrim { transition: none; }
+  .quick-add-menu.open { animation: none; }
+}
 main{padding:0 24px 24px 24px;max-width:1600px;margin:0 auto}
 section{display:none}
 section.active{display:block}
@@ -149,7 +562,7 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .weekgrid{display:flex;flex-direction:column;}
 
 /* Time Grid Layout */
-.time-grid-wrapper { display: block; position: relative; overflow-y: auto; height: calc(100vh - 130px); min-height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+.time-grid-wrapper { display: block; position: relative; overflow-y: auto; height: var(--planner-grid-h, calc(100vh - 130px)); min-height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
 .time-grid-inner { display: flex; min-height: 100%; }
 .time-axis { width: 50px; flex-shrink: 0; border-right: 1px solid var(--border); position: relative; background: var(--panel2); }
 .time-label { position: absolute; right: 8px; font-size: 11px; color: var(--muted); transform: translateY(-50%); top: 0; }
@@ -260,6 +673,11 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .resize-handle.top { top: 0; border-top-left-radius: 6px; border-top-right-radius: 6px; }
 .resize-handle.bottom { bottom: 0; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
 .event.absolute:hover .resize-handle { opacity: 1; }
+/* Touch devices: no drag-resize on planner events — resize via editing only.
+   Gated on pointer capability, not width, so tablets are covered too. */
+@media (pointer: coarse) {
+  .resize-handle { display: none; }
+}
 .event.absolute.dragging { opacity: 0.8; z-index: 50 !important; cursor: grabbing !important; user-select: none; transition: none; overflow: hidden; height: var(--drag-height) !important; min-height: 0 !important; }
 .event.absolute.dragging .resize-handle { opacity: 0; pointer-events: none; }
 .event.absolute.resizing-saving, .event.absolute.resizing-saving:hover { height: var(--original-height) !important; min-height: var(--original-height) !important; }
@@ -418,6 +836,9 @@ table.grades tr:hover .exam-del{opacity:1}
 
 /* notes */
 .noteslayout{display:grid;grid-template-columns:260px 1fr;gap:16px}
+/* Grid items default to min-width:auto, letting wide toolbar content blow the
+   editor pane out past its track (clipped on phones). */
+.noteslayout>*{min-width:0}
 @media(max-width:760px){.noteslayout{grid-template-columns:1fr}}
 .notelist .list-item{cursor:pointer}
 .notelist .list-item.sel{outline:1px solid var(--accent)}
@@ -647,6 +1068,13 @@ mark.cur{background:#f5a623;color:#1c2230}
 .note-doc-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex: 1; min-width: 0; }
 .note-doc-meta .note-stats-divider { color: var(--border); }
 .note-topbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* Phones: the actions row is wider than the screen — wrap the bar so the
+   save-status/word-count meta drops to its own line instead of clipping. */
+@media (max-width: 640px) {
+  .note-topbar { flex-wrap: wrap; row-gap: 4px; padding: 8px 10px; }
+  .note-topbar-actions { margin-left: auto; }
+  .note-doc-meta { order: 3; flex-basis: 100%; }
+}
 
 /* Formatting bar (Quill toolbar is relocated into this slot) */
 .note-doctoolbar {
@@ -939,10 +1367,6 @@ code.url{background:var(--panel2);padding:4px 8px;border-radius:6px;font-size:12
 .loginerror{background:rgba(239,91,108,.15);color:var(--red);padding:8px;border-radius:8px;font-size:13px}
 .top-nav-container .headlogo{width:26px;height:26px}
 
-#bottomNav {
-  display: none;
-}
-
 /* Modal */
 .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center}
 dialog.modal {
@@ -968,104 +1392,25 @@ dialog.modal::backdrop {
 
 
 @media (max-width: 640px) {
-  /* Hide the desktop top nav — bottom nav takes over */
-  .nav-tabs {
-    display: none !important;
-  }
-
-  /* Compact header: hide non-essential actions */
+  /* Compact header */
   .top-nav-container {
-    padding: 10px 14px;
-    gap: 8px;
+    padding: 10px 8px 10px 6px;
+    gap: 4px;
   }
 
   .top-nav-container .date {
     display: none;
   }
 
-  .header-desktop-only {
-    display: none !important;
-  }
-
   main {
     padding: 14px 12px;
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    /* Clearance for the floating action button (no bottom nav anymore) */
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
   h2.pagetitle {
     font-size: 17px;
     margin-bottom: 12px;
-  }
-
-  /* Bottom navigation */
-  #bottomNav {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    z-index: 100;
-    background: color-mix(in srgb, var(--panel) 90%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-top: 1px solid var(--border);
-    justify-content: space-around;
-    align-items: center;
-    padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
-    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.2);
-  }
-
-  #bottomNav button {
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    cursor: pointer;
-    flex: 1;
-    padding: 6px 2px;
-    min-height: 52px;
-    transition: color 0.2s ease;
-    position: relative;
-    -webkit-tap-highlight-color: transparent;
-    border-radius: 0;
-    letter-spacing: 0.01em;
-  }
-
-  #bottomNav button:active {
-    opacity: 0.7;
-  }
-
-  #bottomNav button.active {
-    color: var(--accent);
-  }
-
-  /* Active indicator pill above the icon */
-  #bottomNav button.active::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 32px;
-    height: 3px;
-    background: var(--accent);
-    border-radius: 0 0 3px 3px;
-  }
-
-  #bottomNav button .nav-icon {
-    font-size: 22px;
-    line-height: 1;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  #bottomNav button.active .nav-icon {
-    transform: scale(1.12);
   }
 
   /* Improve touch target sizes for inputs and buttons */
@@ -2580,7 +2925,7 @@ body.dark .drop-overlay {
 
 @media (max-width: 640px) {
   .fab-container {
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: calc(20px + env(safe-area-inset-bottom));
   }
 }
 
@@ -2879,7 +3224,7 @@ body.dark .drop-overlay {
   .update-banner {
     left: 12px;
     right: 12px;
-    bottom: calc(80px + env(safe-area-inset-bottom));
+    bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   /* Compact page titles */
@@ -3339,11 +3684,13 @@ body.dark .drop-overlay {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-/* Dropdown Menu for Notes Download */
+/* Dropdown Menu for Notes Download. Must outrank .note-doctoolbar (z-index 30)
+   and its .ql-picker-options (z-index 40) so the export menu isn't hidden
+   under the editor's formatting bar. */
 .dropdown {
   position: relative;
   display: inline-block;
-  z-index: 15 !important;
+  z-index: 50 !important;
 }
 .dropdown-content {
   display: none;
@@ -3410,59 +3757,36 @@ body.dark .drop-overlay {
 /* ---------- View Transitions ---------- */
 
 /* Custom sliding animations with cross-fade */
-@keyframes slide-to-left {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(-50px); opacity: 0; }
-}
+/* Tab switches animate only the content area — nav chrome (header/sidebar/
+   drawer) must never move. Quick crossfade: old view drops out fast, new view
+   fades in with a subtle rise. Exit shorter than enter on purpose. */
+main { view-transition-name: main-content; }
 
-@keyframes slide-from-right {
-  from { transform: translateX(50px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-@keyframes slide-to-right {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(50px); opacity: 0; }
-}
-
-@keyframes slide-from-left {
-  from { transform: translateX(-50px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-/* Set up shared animation properties for the view transition pseudo-elements */
 ::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 0.25s;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  animation-fill-mode: both;
+::view-transition-new(root) { animation: none; }
+
+@keyframes content-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes content-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+::view-transition-old(main-content) {
+  animation: content-out 0.1s ease-in both;
+}
+::view-transition-new(main-content) {
+  animation: content-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
 }
 
-/* Apply forward sliding when the 'forward' type is active (using either modern types API or class fallback) */
-html:active-view-transition-type(forward)::view-transition-old(root),
-html.transition-forward::view-transition-old(root) {
-  animation-name: slide-to-left;
-}
-html:active-view-transition-type(forward)::view-transition-new(root),
-html.transition-forward::view-transition-new(root) {
-  animation-name: slide-from-right;
-}
-
-/* Apply backward sliding when the 'backward' type is active (using either modern types API or class fallback) */
-html:active-view-transition-type(backward)::view-transition-old(root),
-html.transition-backward::view-transition-old(root) {
-  animation-name: slide-to-right;
-}
-html:active-view-transition-type(backward)::view-transition-new(root),
-html.transition-backward::view-transition-new(root) {
-  animation-name: slide-from-left;
-}
-
-/* Respect prefers-reduced-motion: disable slide animations, fall back to simple fade or instantly swap */
+/* Respect prefers-reduced-motion: instant swap */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(root),
   ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(root),
+  ::view-transition-old(main-content),
+  ::view-transition-new(main-content) {
     animation: none !important;
   }
 }

@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.11.0"
+VERSION = "1.12.1"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -664,6 +664,7 @@ SETTING_DEFAULTS = {
     "persist_active_tab": "1",
     "task_categories": "School,Work,Personal",
     "app_theme_style": "default",
+    "nav_layout": "topbar",
     "dashboard_style": "glass",
     "dashboard_desktop_layout": "",
     "dashboard_mobile_layout": "",

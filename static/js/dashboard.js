@@ -1170,6 +1170,8 @@ export function renderDashboard() {
     var greetEl = document.getElementById("greeting");
     if (greetEl) greetEl.textContent = g + " \uD83D\uDC4B";
     document.getElementById("headerDate").textContent = fmtShort(now) + " " + now.getFullYear();
+    var sbDate = document.getElementById("sidebarDate");
+    if (sbDate) sbDate.textContent = fmtShort(now) + " " + now.getFullYear();
 
     // Load widgets data
     try {

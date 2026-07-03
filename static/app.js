@@ -6,7 +6,7 @@
 import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
 import { todayStr, esc, delRow as _delRow, navigateWithTransition } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
-import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings } from './js/theme.js';
+import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings, applyNavLayoutFromSettings } from './js/theme.js';
 import { exportData, importData } from './js/backup.js';
 import { 
   renderDashboard, 
@@ -62,7 +62,7 @@ import {
   importIcsFile as _importIcsFile, clearIcs as _clearIcs,
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
-  saveAppThemeStyle as _saveAppThemeStyle, saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
+  saveAppThemeStyle as _saveAppThemeStyle, saveNavLayout as _saveNavLayout, saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
   toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
   updateCategoryColor as _updateCategoryColor, checkForUpdates,
@@ -205,6 +205,7 @@ window.revokeSession = function(sid) { _revokeSession(sid, R); };
 window.changePassword = function() { changePassword(R); };
 window.backupNow = function() { _backupNow(R); };
 window.saveAppThemeStyle = function() { _saveAppThemeStyle(R); };
+window.saveNavLayout = function() { _saveNavLayout(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
 window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
@@ -459,7 +460,6 @@ const MODALS = {
   mediaPreviewModal: 'media-preview',
   dashboardEventDetailsModal: 'dashboard-event',
   plannerCalendarsModal: 'planner-calendars',
-  mobileMenuModal: 'mobile-menu',
 };
 for (const [id, slug] of Object.entries(MODALS)) {
   const dlg = document.getElementById(id);
@@ -558,6 +558,7 @@ window.addEventListener("offline", function() {
 refresh(renderAll).then(function() {
   applyThemeStyleFromSettings(SET);
   applyAccentFromSettings(SET);
+  applyNavLayoutFromSettings(SET);
   setPlannerRefresh(R);
   updateOfflineBanner();
   startLiveSync();

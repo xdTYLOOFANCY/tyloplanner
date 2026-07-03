@@ -257,30 +257,13 @@ export async function delRow(table, id, refresh) {
  * @param {string} [direction] - Optional navigation direction.
  */
 export function navigateWithTransition(updateDOM, direction) {
+  // direction is accepted for call-site compatibility but unused: the
+  // transition is a directionless crossfade scoped to <main> (see style.css).
   if (!document.startViewTransition) {
     updateDOM();
     return;
   }
-
-  if (direction) {
-    try {
-      // 1. Modern API: types option
-      return document.startViewTransition({
-        update: updateDOM,
-        types: [direction]
-      });
-    } catch (e) {
-      // Fallback for browsers supporting startViewTransition but not types
-      document.documentElement.classList.add(`transition-${direction}`);
-      const transition = document.startViewTransition(updateDOM);
-      transition.finished.finally(() => {
-        document.documentElement.classList.remove(`transition-${direction}`);
-      });
-      return transition;
-    }
-  } else {
-    return document.startViewTransition(updateDOM);
-  }
+  return document.startViewTransition(updateDOM);
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { S, SET, safeRender } from './state.js';
 import { esc, api, toast, debounce } from './utils.js';
-import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings } from './theme.js';
+import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings, applyNavLayout, applyNavLayoutFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
 
 
@@ -19,7 +19,7 @@ export function renderSettings(refresh) {
   safeRender("settings", () => {
     document.getElementById("icsUrl").textContent = S.feed_url;
   document.getElementById("icsDownload").href = S.feed_url;
-  document.getElementById("logoutBtn").style.display = S.auth.enabled ? "inline-block" : "none";
+  document.body.classList.toggle("auth-enabled", !!S.auth.enabled);
   var box = document.getElementById("stravaBox"), html = "";
   var host = (S.app_url || location.origin).replace(/^https?:\/\//, "").replace(/:\d+$/, "").replace(/\/.*$/, "");
   if (!S.strava.configured || stravaEditing) {
@@ -52,9 +52,11 @@ export function renderSettings(refresh) {
   if (SET) {
     setVal("appThemeStyle", SET.app_theme_style || "default");
     setVal("accentColor", SET.accent_color);
+    setVal("navLayout", SET.nav_layout || "topbar");
   }
   applyThemeStyleFromSettings(SET);
   applyAccentFromSettings(SET);
+  applyNavLayoutFromSettings(SET);
   var persistTab = SET ? SET.persist_active_tab !== "0" : true;
   var tabToggleEl = document.getElementById("tabPersistenceToggle");
   if (tabToggleEl) tabToggleEl.checked = persistTab;
@@ -109,6 +111,16 @@ export async function saveAppThemeStyle(refresh) {
   });
   applyThemeStyle(value);
   toast("Theme style saved");
+  await refresh();
+}
+
+export async function saveNavLayout(refresh) {
+  var value = document.getElementById("navLayout").value;
+  await api("POST", "/api/settings", {
+    nav_layout: value
+  });
+  applyNavLayout(value);
+  toast("Navigation layout saved");
   await refresh();
 }
 
@@ -745,7 +757,7 @@ export async function checkForUpdates(force) {
   var statusEl = document.getElementById("versionCheckStatus");
   var checkBtn = document.getElementById("checkUpdateBtn");
   var updateBtn = document.getElementById("updateServerBtn");
-  var badgeEl = document.getElementById("settings-update-badge");
+  var badgeEls = document.querySelectorAll(".settings-update-badge");
 
   if (!statusEl) return;
 
@@ -759,12 +771,12 @@ export async function checkForUpdates(force) {
       statusEl.innerHTML = "✨ Update available! (<b>v" + esc(res.latest) + "</b> is available, current is v" + esc(res.current) + ")";
       statusEl.className = "";
       if (updateBtn) updateBtn.style.display = "inline-block";
-      if (badgeEl) badgeEl.style.display = "inline-block";
+      badgeEls.forEach(function(el) { el.style.display = "inline-block"; });
     } else {
       statusEl.textContent = "Your software is up-to-date (v" + res.current + ").";
       statusEl.className = "muted";
       if (updateBtn) updateBtn.style.display = "none";
-      if (badgeEl) badgeEl.style.display = "none";
+      badgeEls.forEach(function(el) { el.style.display = "none"; });
     }
   } catch (err) {
     console.error("Version check error:", err);

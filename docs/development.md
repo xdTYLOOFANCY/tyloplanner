@@ -132,14 +132,63 @@ The app is a single responsive layout, not a separate mobile build. The
 hard rule: **desktop must stay unchanged.** Scope every mobile tweak so it
 can't leak upward.
 
-- **The breakpoint is `640px`.** `≤640px` is "mobile" (bottom nav, FAB,
-  single-column). `≥641px` is "desktop". Tablet gets a couple of nudges in
-  the `641–768px` range. Put mobile-only CSS inside `@media (max-width: 640px)`
-  and mobile-only JS behind `window.matchMedia('(max-width: 640px)').matches`.
-- **Desktop nav vs. mobile nav.** The top `.nav-tabs` is hidden ≤640px and the
-  fixed `#bottomNav` + a global `#globalFab` take over. Elements that should
-  only appear on one side use the `.header-desktop-only` / `.mobile-only`
-  helper classes.
+- **Two breakpoints.** `≤900px` is "drawer land": the top `.nav-tabs` and
+  `.nav-actions` are hidden and navigation is the off-canvas drawer (see
+  below). `≤640px` additionally gets the phone-density tweaks (FAB,
+  single-column, larger touch targets); tablets get a couple of nudges in
+  the `641–768px` range. Put phone-only CSS inside `@media (max-width: 640px)`
+  and phone-only JS behind `window.matchMedia('(max-width: 640px)').matches`.
+- **Mobile navigation is the drawer.** ≤900px the same `#sidebar` markup
+  renders as an off-canvas panel (Claude-app style): `transform:
+  translateX(-105%)` at rest, slid in by `body.drawer-open`, with a
+  `#drawerScrim` behind it. It opens via the header hamburger (`#drawerBtn`)
+  or an edge swipe from the left (finger-tracked in `sidebar.js`), and closes
+  on scrim tap, swipe-left, Escape, or navigation. The old `#bottomNav` +
+  `bottom_nav.js` are gone. The header's top-right `#quickAddBtn` opens
+  `#quickAddMenu` (new event / to-do / note / calendar) which calls existing
+  globals via `window.quickAddGo()`. A `#globalFab` still provides per-tab
+  add actions ≤640px. Elements that should only appear on one side use the
+  `.header-desktop-only` / `.mobile-only` helper classes.
+- **Touch devices can't drag-resize planner events** — `.resize-handle` is
+  hidden under `@media (pointer: coarse)` (capability-gated, not width-gated,
+  so desktop-sized tablets are covered); events are resized via the edit
+  modal instead.
+- **Tab-switch animation** is a crossfade scoped to `<main>` via
+  `view-transition-name: main-content` — nav chrome (header, sidebar, drawer)
+  never moves. The old directional root slide is gone;
+  `navigateWithTransition()` ignores its direction argument.
+- **Desktop sidebar layout (optional).** On desktop only, users can switch from
+  the top tab bar to a left `#sidebar` via **Settings → Appearance → Navigation
+  layout** (`nav_layout` setting: `topbar` | `sidebar`). `applyNavLayout()` in
+  `theme.js` sets `data-nav-layout` on `<html>`/`<body>`; the CSS is gated behind
+  `@media (min-width: 901px)`, so it can never affect the ≤640px mobile bottom
+  nav. In sidebar mode the whole `.top-nav-container` header is hidden and
+  `body` gets `padding-left: var(--sidebar-w)` so the fixed rail sits in the
+  gutter and `main`'s `max-width` + `margin:auto` still centres the content in
+  the space that's left (balanced on ultrawide/4K). **Gotcha:** `--sidebar-w`
+  and the offset padding must live on the *same* element (`body`) — custom
+  properties don't inherit upward, so defining the var on `body` and consuming
+  it on `html` silently resolves the padding to 0 and the rail overlaps the
+  content. Panes sized with `calc(100vh - 130px)` (notes editor) assume the
+  top-bar chrome; sidebar mode overrides them with `- 76px` equivalents in the
+  same media block. The planner grid instead measures its real offset after
+  each render (`sizeTimeGrid()` in `planner.js` sets `--planner-grid-h`), so it
+  fits both layouts and any control wrapping. The chosen layout is cached in
+  `localStorage` (`tylo-nav-layout`) and applied by a tiny pre-paint script at
+  the top of `<body>` so there's no layout flash before `/api/settings` loads;
+  the server setting stays the source of truth and re-corrects the cache on
+  boot. The sidebar reuses the existing `data-tab` buttons —
+  `sidebar.js` forwards clicks to the `#tabs` buttons and mirrors their `.active`
+  state (same pattern as `bottom_nav.js`), so the single tab-switch handler in
+  `app.js` is never forked. Its collapse (icon-only) state is a client-only
+  `localStorage` preference (`tylo-sidebar-collapsed`), not a DB setting;
+  **⌘/Ctrl+\\** toggles it (sidebar mode only), collapsed items get native
+  `title` tooltips, and labels fade via `opacity` instead of `display:none` so
+  buttons keep their accessible names. All sidebar motion is disabled under
+  `prefers-reduced-motion`. The
+  Settings update badge is targeted by the `.settings-update-badge` class, and
+  log-out visibility by the `body.auth-enabled` class (set in `settings.js`), so
+  both the top-bar and sidebar copies toggle together.
 - **Planner.** Multi-day time-grid views are unreadable when 7 columns share a
   phone screen, so on mobile each `.day-col` inside `.day-columns.multiday`
   gets `80vw` width with `scroll-snap`, the grid scrolls horizontally, and the

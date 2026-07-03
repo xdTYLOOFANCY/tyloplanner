@@ -2,6 +2,87 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.12.1 — 2026-07-03
+
+Offline sync can no longer wedge the app at startup.
+
+- **Fixed a boot deadlock in the offline queue.** If changes were queued while
+  the server was unreachable and no cached copy of your data existed yet, the
+  app could load as an empty shell forever — pending writes blocked data
+  fetching, and the pending writes were only sent after a successful data
+  fetch. The queue is now drained (when online) before the app fetches state,
+  so it boots and syncs; genuine offline behavior (queueing writes, serving
+  the cached copy) is unchanged. Queue replay is also single-flight now, so
+  overlapping sync triggers can't send the same queued change twice.
+
+## 1.12.0 — 2026-07-03
+
+Mobile overhaul: slide-out drawer navigation, quick add, calmer tab switches.
+
+- **Mobile drawer replaces the bottom bar.** Navigation on phones/tablets
+  (≤900px) is now the same grouped sidebar as desktop, as a slide-out drawer:
+  open it with the top-left menu button or by swiping in from the left edge
+  (it follows your finger, like a native app); close it by tapping the dimmed
+  page, swiping it away, pressing Escape, or navigating. All ten sections are
+  now one tap away — the old five-slot bottom bar and its "More" popup are
+  gone.
+- **Quick add (top-right +).** A new header button on mobile opens a small
+  menu: new event, new to-do, new note, or jump to the calendar.
+- **Tab switching animation redone.** The old full-page sideways slide (which
+  dragged the nav chrome along) is replaced by a fast crossfade of just the
+  content area — navigation stays perfectly still, and the new view fades in
+  with a subtle rise. Instant under reduced-motion.
+- **No drag-resizing planner events on touch screens.** The resize handles
+  were 8px targets that mostly triggered by accident; on touch devices
+  (capability-detected, so tablets too) events are now resized through the
+  edit dialog only.
+- **Mobile fixes along the way.** The note editor no longer overflows the
+  screen width (its toolbar row wraps and the pane respects the grid track);
+  the floating + button sits at the bottom edge now that the bar is gone; the
+  in-between 641–900px window sizes get the drawer too instead of a wrapping
+  tab strip.
+
+## 1.11.2 — 2026-07-03
+
+Planner grid fits the window exactly.
+
+- **No more phantom page scroll on the planner.** The desktop time grid sized
+  itself with a hardcoded viewport offset that was ~35px short whenever the
+  controls above it were taller than assumed, so the page always scrolled
+  slightly. The grid now measures its real position after each render (and on
+  window resize) and fills exactly the remaining viewport height, in both the
+  top-bar and sidebar layouts. Mobile keeps its existing sizing.
+
+## 1.11.1 — 2026-07-03
+
+Switchable desktop navigation layout.
+
+- **Sidebar navigation (desktop).** A new left sidebar is available as an
+  alternative to the top tab bar, toggled under **Settings → Appearance →
+  Navigation layout** and persisted per-user (`nav_layout` setting). Tabs are
+  grouped (Overview / Academic & life / Workspace) with stroke SVG icons that
+  animate on hover, and Settings is pinned to the bottom. In sidebar mode the
+  top header is replaced entirely — the theme toggle and (when auth is on) the
+  log-out link move into the sidebar footer. The sidebar collapses to an
+  icon-only rail (state saved in `localStorage`). It reuses the existing
+  tab-switch mechanism, so it stays in sync with the top bar and mirrors the
+  Settings update badge. On wide/4K screens content stays balanced beside the
+  sidebar instead of hugging an edge.
+- **Sidebar polish.** The chosen layout is cached locally and applied before
+  first paint, so there's no top-bar flash when the app opens in sidebar mode.
+  **⌘/Ctrl+\\** toggles collapse (like Notion); collapsed icons show native
+  tooltips and keep their screen-reader names (labels fade instead of being
+  removed); the active tab gets an accent tint + indicator rail that follows a
+  custom accent color; the current date shows under the brand; full-height
+  panes (planner grid, notes editor) reclaim the space the header used to
+  occupy; keyboard focus rings are visible throughout; and all sidebar motion
+  respects `prefers-reduced-motion`.
+- **Header cleanup.** The header's **Backup**/**Restore** buttons were removed —
+  those actions already live under **Settings → Data** — and the "source code is
+  yours" strip at the bottom of the page is gone.
+- **Desktop-only.** The whole feature is gated behind `min-width: 901px`; below
+  that the mobile bottom navigation is completely unchanged.
+
 ## 1.11.0 — 2026-07-03
 
 Editor polish: image resize, auto-links, cleaner exports, dropdown fix.

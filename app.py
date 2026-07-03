@@ -25,90 +25,65 @@ recover_interrupted_tasks()
 
 _WELCOME_NOTE_TITLE = "How to use Notes"
 _WELCOME_NOTE_BODY = """\
-# How to use Notes
-
-Welcome! Here is everything the Notes section can do.
-
----
-
-## Writing & saving
-
-Type in the editor — your note **saves automatically** in the background. A live save status indicator (e.g. *Typing...*, *Saving...*, or *Saved at HH:MM:SS*) is displayed in the header alongside word and character counters.
-
-## Read Mode & Split View
-
-You can customize the layout of the editor using the control toggles:
-- **Read Mode** (pill slider in the header) — When turned **ON**, it hides the editing area and toolbar, displaying the clean, formatted note along with the search bar.
-- **Split View** (checkmark toggle in the toolbar) — When Read Mode is **OFF**, toggle Split View to switch between a side-by-side editing layout (Split) or a distraction-free editor-only layout.
-
-Layout toggle states are saved automatically **per note** and persist across page reloads.
-
-## Searching within notes
-
-Use the search bar at the bottom of the header to search for text inside the current note.
-- All matching text will be highlighted in yellow.
-- Use the **↑** and **↓** arrows, or simply press **Enter** in the search box, to step through each result.
-- The search bar takes up the full width of the editor and is styled slightly larger in **Read Mode** for readability.
-- It is fully active in both editing layouts and in **Read Mode**.
-
----
-
-## Formatting toolbar
-
-The toolbar above the text area inserts Markdown at your cursor position. Select text first, then click a formatting button to wrap the selection:
-
-- **B** — bold: `**text**`
-- **I** — italic: `*text*`
-- **H1** — heading: `# text`
-- **• List** — bullet item: `- text`
-- **1. List** — numbered item: `1. text`
-- **—** — horizontal divider: `---`
-
----
-
-## Markdown reference
-
-# Heading 1
-## Heading 2
-### Heading 3
-
-**bold text** and *italic text* and ~~strikethrough~~
-
-> This is a blockquote. Great for callouts or quotes.
-
-- Bullet one
-- Bullet two
-
-1. Step one
-2. Step two
-
----
-
-## Linking to other notes
-
-Type `[[Note Title]]` anywhere to create a clickable cross-reference.
-
-- If the note **exists**: the link turns blue and opens that note when clicked.
-- If the note **does not exist yet**: the link appears grey with a dashed underline.
-- Titles are matched **case-insensitively**, so `[[my note]]` and `[[My Note]]` both work.
-
-*This note can be edited or deleted at any time — it will not come back.*
+<h1>How to use Notes</h1>
+<p>Welcome! Here is everything the Notes section can do.</p>
+<hr>
+<h2>Writing &amp; saving</h2>
+<p>Type in the editor — your note <strong>saves automatically</strong> in the background. A live save status indicator (e.g. <em>Typing...</em>, <em>Saving...</em>, or <em>Saved at HH:MM:SS</em>) is displayed in the header alongside word and character counters.</p>
+<h2>The formatting toolbar</h2>
+<p>This is a full what-you-see-is-what-you-get editor — no Markdown syntax to remember. Select text and click a toolbar button, or use the pickers, to apply:</p>
+<ul>
+<li>Paragraph/heading style, font family and font size</li>
+<li><strong>Bold</strong>, <em>italic</em>, <u>underline</u>, <s>strikethrough</s></li>
+<li>Text color, highlight color, and alignment (left/center/right/justify)</li>
+<li>Subscript/superscript</li>
+<li>Ordered, bulleted and checklist lists, with indent/outdent</li>
+<li>Blockquotes and code blocks</li>
+<li>Links and inline images</li>
+</ul>
+<h2>The / slash menu</h2>
+<p>Type <code>/</code> at the start of a line to open a quick command menu — headings, lists, a checklist, a quote, a code block, a table, or an image. Filter by typing, navigate with the arrow keys, choose with Enter, dismiss with Esc.</p>
+<h2>Tables</h2>
+<p>Insert a table from the <code>/</code> menu (starts as 3×3). While the caret is inside a table, a small floating toolbar lets you add/remove rows and columns or delete the whole table. Cells are fully editable and round-trip through save and export.</p>
+<h2>Linking to other notes</h2>
+<p>Type <code>[[</code> to open an autocomplete for another note's title — pick one to insert a clickable link.</p>
+<ul>
+<li>If the note <strong>exists</strong>: the link turns blue and opens that note when clicked.</li>
+<li>If the note <strong>does not exist yet</strong>: the link appears grey with a dashed underline.</li>
+<li>Titles are matched <strong>case-insensitively</strong>.</li>
+</ul>
+<h2>Images</h2>
+<p>Insert an image from the toolbar or the slash menu. Click an inserted image to select it: drag the corner handle to resize (keeps aspect ratio), or use the small toolbar above it to align left/center/right or reset the size. Typing or pasting a URL (<code>https://…</code> or <code>www.…</code>) also turns it into a clickable link automatically.</p>
+<h2>Version history</h2>
+<p>The <strong>🕘 Version history</strong> button in the header opens a panel of past snapshots of this note (taken automatically as you edit, at most one every ~10 minutes). Preview any of them, or <strong>restore</strong> one — restoring first snapshots your current content, so it's itself undoable.</p>
+<h2>Searching within notes</h2>
+<p>Use the <strong>🔍 Find &amp; replace</strong> button to search (and optionally replace) text inside the current note.</p>
+<ul>
+<li>All matching text is highlighted; step through results with the <strong>↑</strong>/<strong>↓</strong> arrows or Enter.</li>
+<li>Use <strong>Replace</strong> or <strong>Replace all</strong> to swap in new text.</li>
+</ul>
+<h2>Exporting</h2>
+<p>The <strong>📥 Export</strong> button offers <strong>Styled HTML (.html)</strong> — a self-contained file with images inlined — and <strong>Print / PDF</strong>, which opens your browser's print dialog so you can save the note as a PDF.</p>
+<p><em>This note can be edited or deleted at any time — it will not come back.</em></p>
 """
 
 with db() as con:
     seeded = con.execute("SELECT value FROM kv WHERE key='seed_welcome_note'").fetchone()
     if not seeded:
         con.execute(
-            "INSERT INTO notes(id,title,body,updated) VALUES(?,?,?,?)",
-            (uuid.uuid4().hex[:12], _WELCOME_NOTE_TITLE, _WELCOME_NOTE_BODY, int(time.time() * 1000))
+            "INSERT INTO notes(id,title,body,body_format,updated) VALUES(?,?,?,?,?)",
+            (uuid.uuid4().hex[:12], _WELCOME_NOTE_TITLE, _WELCOME_NOTE_BODY, "html", int(time.time() * 1000))
         )
-        con.execute("INSERT INTO kv(key,value) VALUES('seed_welcome_note','4')")
-    elif seeded[0] in ('1', '2', '3'):
+        con.execute("INSERT INTO kv(key,value) VALUES('seed_welcome_note','5')")
+    elif seeded[0] in ('1', '2', '3', '4'):
         # Update the welcome note body to the new version if it hasn't been deleted
         note = con.execute("SELECT id FROM notes WHERE title=?", (_WELCOME_NOTE_TITLE,)).fetchone()
         if note:
-            con.execute("UPDATE notes SET body=?, updated=? WHERE id=?", (_WELCOME_NOTE_BODY, int(time.time() * 1000), note[0]))
-        con.execute("UPDATE kv SET value='4' WHERE key='seed_welcome_note'")
+            con.execute(
+                "UPDATE notes SET body=?, body_format='html', updated=? WHERE id=?",
+                (_WELCOME_NOTE_BODY, int(time.time() * 1000), note[0])
+            )
+        con.execute("UPDATE kv SET value='5' WHERE key='seed_welcome_note'")
 
     seeded_shortcuts = con.execute("SELECT value FROM kv WHERE key='seed_default_shortcut'").fetchone()
     if not seeded_shortcuts:

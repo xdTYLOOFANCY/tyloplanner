@@ -97,7 +97,17 @@ export function startLiveSync() {
 
 export async function refresh(renderAll) {
   var offMod = await import('./offline.js');
-  
+
+  // Drain queued offline writes BEFORE fetching state: api() serves GETs from
+  // cache while writes are pending, so a stale queue with no cached state
+  // would otherwise deadlock boot forever (the queue used to be drained only
+  // after a successful refresh). No-op when offline or the queue is empty.
+  try {
+    await offMod.syncQueue();
+  } catch (e) {
+    console.warn("Pre-refresh queue drain failed:", e);
+  }
+
   if (!S) {
     try {
       S = await offMod.getCache("state");

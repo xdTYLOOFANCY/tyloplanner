@@ -114,8 +114,22 @@ export async function updateOfflineBanner() {
   }
 }
 
+var syncInFlight = false;
+
 export async function syncQueue(refreshCallback) {
-  if (!navigator.onLine) return;
+  // Single-flight: replay is triggered from several places (boot refresh,
+  // api() write path, 'online' event) — concurrent loops would replay the
+  // same queued items twice before removal.
+  if (syncInFlight || !navigator.onLine) return;
+  syncInFlight = true;
+  try {
+    await syncQueueInner(refreshCallback);
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+async function syncQueueInner(refreshCallback) {
   var queue = await getQueue();
   if (queue.length === 0) {
     await updateOfflineBanner();

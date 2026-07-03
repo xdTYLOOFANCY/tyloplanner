@@ -82,3 +82,15 @@ export function applyThemeStyleFromSettings(set) {
   applyThemeStyle(style);
 }
 
+export function applyNavLayout(layout) {
+  var v = (layout === "sidebar") ? "sidebar" : "topbar";
+  document.documentElement.setAttribute("data-nav-layout", v);
+  document.body.setAttribute("data-nav-layout", v);
+  // Cache for the pre-paint boot script in index.html (avoids layout flash).
+  try { localStorage.setItem("tylo-nav-layout", v); } catch (e) {}
+}
+
+export function applyNavLayoutFromSettings(set) {
+  applyNavLayout(set && set.nav_layout === "sidebar" ? "sidebar" : "topbar");
+}
+

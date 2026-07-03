@@ -13,7 +13,7 @@ const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/mani
                 "/js/workouts.js", "/js/tasks.js", "/js/notes.js",
                 "/js/analytics.js", "/js/dashboard.js", "/js/backup.js", "/js/chart.umd.js",
                 "/js/files.js", "/js/settings.js", "/js/marked.min.js",
-                "/js/offline.js", "/js/bottom_nav.js", "/js/login.js", "/js/study_timer.js",
+                "/js/offline.js", "/js/sidebar.js", "/js/login.js", "/js/study_timer.js",
                 "/js/swipe.js", "/js/quill.js", "/js/quill.snow.css",
                 "/fonts/inter-400.woff2", "/fonts/inter-500.woff2",
                 "/fonts/inter-600.woff2", "/fonts/inter-700.woff2"];

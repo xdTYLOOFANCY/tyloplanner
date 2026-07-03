@@ -1,5 +1,5 @@
 import { S, SET, safeRender } from './state.js';
-import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused } from './utils.js';
+import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 
@@ -40,6 +40,29 @@ try {
 } catch(e) {}
 
 export function setPlannerRefresh(fn) { plannerRefresh = fn; }
+
+// Size the time grid to the real space below its rendered position instead of
+// a guessed constant: the controls above it wrap at some widths and sidebar
+// mode has no top header, so any fixed offset is wrong somewhere. Sets a CSS
+// var the .time-grid-wrapper height rule consumes (constant kept as fallback).
+function sizeTimeGrid() {
+  var w = document.querySelector('.time-grid-wrapper');
+  if (!w) return; // month view has no time grid
+  // Mobile (≤640px) keeps its own CSS height with the bottom-nav allowance.
+  if (window.innerWidth <= 640) { w.style.removeProperty('--planner-grid-h'); return; }
+  if (!w.offsetParent) return; // planner tab hidden — remeasured on activation
+  var top = w.getBoundingClientRect().top + window.scrollY;
+  w.style.setProperty('--planner-grid-h', Math.floor(window.innerHeight - top) + 'px');
+}
+window.addEventListener('resize', debounce(sizeTimeGrid, 150));
+// Re-measure when the planner tab becomes visible: a resize while it was
+// display:none can't be measured (offsetParent is null until activation).
+var _plannerSection = document.getElementById('tab-planner');
+if (_plannerSection) {
+  new MutationObserver(function() {
+    if (_plannerSection.classList.contains('active')) sizeTimeGrid();
+  }).observe(_plannerSection, { attributes: true, attributeFilter: ['class'] });
+}
 
 export function changePlannerView(val) {
   currentView = val;
@@ -563,6 +586,7 @@ export function renderPlanner() {
       }
     });
   }
+  sizeTimeGrid();
   
   document.querySelectorAll(currentView === 'month' ? ".month-cell" : ".day-col").forEach(function(col) {
     col.addEventListener("dragover", function(ev) {
