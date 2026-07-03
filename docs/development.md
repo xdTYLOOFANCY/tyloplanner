@@ -20,8 +20,10 @@ SQLite (data/tyloplanner.db)
   state (`GET /api/state`), keeps it in a global `S`, and coordinates rendering
   using ES modules in `static/js/`. Edit a file, refresh the browser, done.
 - **Offline Mode & Sync Queue.** Uses a service worker to cache frontend assets, and an IndexedDB database `tyloplanner_offline` to cache the application state (`state_cache`) and queue modifications (`api_queue`) offline. When the network connection is restored, the client automatically replays queued mutations sequentially to the backend.
-- **One database.** Tables are created automatically from `SCHEMA` on first
-  run. The `kv` table holds settings, tokens and scheduler bookkeeping.
+- **One database.** The schema is built from ordered SQL files in
+  `migrations/` (`NNN_*.sql`), applied on startup by `run_migrations()` in
+  `helpers.py` (tracked via `db_version` in `kv`). The `kv` table holds
+  settings, tokens and scheduler bookkeeping.
 
 ## Running in development
 
@@ -96,8 +98,10 @@ ignores anything not listed there.
 
 Example: a water-intake tracker.
 
-1. **Schema:** add a table to `SCHEMA` and its writable columns to `TABLES`
-   in `helpers.py`. Restart — the table is created automatically.
+1. **Schema:** add a new `migrations/NNN_*.sql` file that creates the table
+   (never edit an already-applied migration), and add its writable columns to
+   the `TABLES` whitelist in `helpers.py`. Restart — the migration runs
+   automatically.
 2. **UI:** add a nav button + `<section id="tab-water">` in
    `static/index.html`. Create `static/js/water.js` with a `renderWater()` function
    and export it. Import it in `static/app.js`, then call it from `renderAll()`. Use the existing `api()` helper for requests.
@@ -206,10 +210,14 @@ can't leak upward.
   client-side). The toolbar `#plannerQuickAdd` runs `parseQuickAdd()` — a
   dependency-free heuristic parser for dates/times/durations/locations — and
   `quickAddOpen()` pre-fills the Add-Event modal for confirmation.
-- **Notes editor.** On phones the editor is single-pane: `applyNoteLayout()`
-  forces `isSplit = false` so edit mode is the textarea and read mode is the
-  rendered preview (never side-by-side). Do **not** re-introduce a
-  `#noteView { display: none !important }` rule — it silently breaks Read Mode.
+- **Notes editor.** Notes use a vendored Quill WYSIWYG editor (one instance,
+  created lazily by `initQuill()` in `static/js/notes.js`). Bodies are stored as
+  rich HTML (`notes.body_format === 'html'`); legacy Markdown notes are converted
+  via `mdToHtml()` on first open and persisted as HTML on first edit. The editor
+  reloads a note's contents **only** when `loadedNoteId` changes (switching
+  notes), never on a live-sync re-render, so incremental sync can't clobber the
+  caret or in-flight edits. Bodies are sanitized server-side by
+  `sanitize_note_html()` (allowlist, stdlib) on every save.
 - **Sticky + transforms don't mix.** `position: sticky` breaks inside an
   ancestor with a `transform`/`filter`. The tab-switch animation is therefore
   opacity-only (`tabFadeIn`); keep it that way or the planner axis unsticks.

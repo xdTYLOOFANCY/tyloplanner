@@ -1,3 +1,10 @@
+/* Self-hosted Inter (latin) — replaces the CDN load the CSP used to block.
+   font-display:swap so text renders immediately in the fallback stack. */
+@font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap; src:url('fonts/inter-400.woff2') format('woff2'); }
+@font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap; src:url('fonts/inter-500.woff2') format('woff2'); }
+@font-face { font-family:'Inter'; font-style:normal; font-weight:600; font-display:swap; src:url('fonts/inter-600.woff2') format('woff2'); }
+@font-face { font-family:'Inter'; font-style:normal; font-weight:700; font-display:swap; src:url('fonts/inter-700.woff2') format('woff2'); }
+
 :root{
   --bg:#0f1115; --panel:#181b22; --panel2:#1f232c; --border:#2a2f3a;
   --text:#e8eaf0; --muted:#8b93a3; --accent:#4f8cff; --accent2:#7c5cff;
@@ -577,8 +584,13 @@ table.grades tr:hover .exam-del{opacity:1}
 .note-link-missing{color:var(--muted);text-decoration:underline dashed;cursor:default}
 mark{background:#ffe066;color:#1c2230;border-radius:2px;padding:0 1px}
 mark.cur{background:#f5a623;color:#1c2230}
-.note-search-bar{display:flex;align-items:center;gap:4px;margin-bottom:6px}
-.note-search-bar input{flex:1;font-size:12px;padding:4px 8px}
+/* Find & replace panel — hidden until toggled (magnifier button / mobile) */
+.note-search-bar{display:none;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+#noteEditor.note-search-open .note-search-bar{display:flex}
+.note-search-bar input{font-size:13px;padding:5px 10px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);min-width:130px}
+#noteBodySearch{flex:1}
+#noteBodyReplace{flex:1}
+.note-search-sep{width:1px;align-self:stretch;background:var(--border);margin:0 2px}
 .note-search-bar.read-mode-search {
   padding: 8px 12px;
   background: var(--panel2);
@@ -603,6 +615,282 @@ mark.cur{background:#f5a623;color:#1c2230}
 .note-search-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit}
 .note-search-btn:hover{color:var(--text);border-color:var(--accent)}
 #noteBodySearchCount{min-width:54px;text-align:right}
+
+/* =====================================================================
+   Google-Docs-style notes editor
+   Layout: slim top bar → sticky formatting bar → scrolling canvas that
+   holds a centered "page" (title + Quill editor).
+   ===================================================================== */
+#noteEditor {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  background: var(--bg);                 /* canvas */
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.note-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.note-topbar .note-back {
+  background: transparent; border: none; color: var(--accent);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.note-doc-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex: 1; min-width: 0; }
+.note-doc-meta .note-stats-divider { color: var(--border); }
+.note-topbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Formatting bar (Quill toolbar is relocated into this slot) */
+.note-doctoolbar {
+  display: flex;
+  justify-content: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 3px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.note-doctoolbar::-webkit-scrollbar { display: none; }
+.note-doctoolbar .ql-toolbar.ql-snow {
+  border: none;
+  padding: 3px 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 4px;
+  max-width: 940px;
+}
+.note-doctoolbar .ql-toolbar.ql-snow .ql-formats {
+  margin-right: 6px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+.note-doctoolbar .ql-toolbar.ql-snow .ql-formats:last-child { border-right: none; margin-right: 0; padding-right: 0; }
+
+/* Scrolling canvas + the floating page */
+.note-canvas {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 24px 16px 60px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+.note-page {
+  max-width: 820px;
+  min-height: calc(100dvh - 250px);
+  margin: 0 auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.12);
+  padding: 52px 72px 72px;
+}
+.note-page-title {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0 0 6px;
+  margin-bottom: 6px;
+  outline: none;
+}
+.note-page-title::placeholder { color: var(--muted); opacity: 0.6; }
+
+/* Quill container/editor become part of the page (borderless, transparent) */
+#noteEditorQuill.ql-container.ql-snow {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+}
+#noteEditorQuill .ql-editor { padding: 0; min-height: 220px; line-height: 1.7; }
+#noteEditorQuill .ql-editor.ql-blank::before { left: 0; right: 0; color: var(--muted); font-style: normal; }
+
+/* Toolbar icon + picker colors (themed to app variables) */
+.ql-snow .ql-stroke { stroke: var(--muted); }
+.ql-snow .ql-fill, .ql-snow .ql-stroke.ql-fill { fill: var(--muted); }
+.ql-snow .ql-picker { color: var(--muted); }
+.ql-snow.ql-toolbar button:hover, .ql-snow.ql-toolbar button.ql-active,
+.ql-snow .ql-picker-label:hover, .ql-snow .ql-picker-label.ql-active { color: var(--accent); }
+.ql-snow.ql-toolbar button:hover .ql-stroke, .ql-snow.ql-toolbar button.ql-active .ql-stroke,
+.ql-snow .ql-picker-label:hover .ql-stroke { stroke: var(--accent); }
+.ql-snow.ql-toolbar button:hover .ql-fill, .ql-snow.ql-toolbar button.ql-active .ql-fill { fill: var(--accent); }
+.ql-snow .ql-picker-options {
+  background: var(--panel);
+  border-color: var(--border) !important;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+.ql-snow .ql-picker.ql-expanded .ql-picker-label { border-color: var(--border); color: var(--accent); }
+
+/* Font-family picker options (no extra dependency; built-in whitelist) */
+.ql-font-serif, .ql-editor .ql-font-serif { font-family: Georgia, "Times New Roman", serif; }
+.ql-font-monospace, .ql-editor .ql-font-monospace { font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; }
+
+/* Editor content */
+#noteEditorQuill .ql-editor a { color: var(--accent); }
+#noteEditorQuill .ql-editor blockquote { border-left: 4px solid var(--border); color: var(--muted); }
+#noteEditorQuill .ql-editor pre.ql-syntax,
+#noteEditorQuill .ql-editor .ql-code-block-container {
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+#noteEditorQuill .ql-editor img { max-width: 100%; border-radius: 8px; }
+
+/* Link / format tooltip */
+.ql-snow .ql-tooltip {
+  background: var(--panel); color: var(--text);
+  border-color: var(--border); border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.ql-snow .ql-tooltip input[type=text] {
+  background: var(--panel2); color: var(--text); border-color: var(--border);
+}
+.ql-snow .ql-tooltip a.ql-action, .ql-snow .ql-tooltip a.ql-remove { color: var(--accent); }
+
+/* Desktop: give the editor + list a fixed height so each scrolls internally */
+@media (min-width: 761px) {
+  #noteEditor { height: calc(100dvh - 130px); }
+  .notelist { height: calc(100dvh - 130px); display: flex; flex-direction: column; }
+  .notelist #noteList { flex: 1; overflow-y: auto; }
+}
+
+/* Tablet & phone: the editor is a full-screen panel that flows with the page
+   scroll instead of trapping an internal scroll region. */
+@media (max-width: 760px) {
+  #noteEditor { height: auto; overflow: visible; }
+  .note-canvas { overflow: visible; }
+}
+
+@media (max-width: 640px) {
+  /* Full-bleed page on phones; toolbar scrolls horizontally to save height */
+  #noteEditorQuill.ql-container.ql-snow { font-size: 16px; }
+  .note-canvas { background: var(--panel); padding: 0; }
+  .note-page {
+    max-width: none; min-height: auto; margin: 0;
+    border: none; border-radius: 0; box-shadow: none;
+    padding: 16px 16px 48px;
+  }
+  .note-page-title { font-size: 23px; }
+  .note-doctoolbar { justify-content: flex-start; }
+  .note-doctoolbar .ql-toolbar.ql-snow { flex-wrap: nowrap; justify-content: flex-start; }
+}
+
+/* ---- Version history modal ---- */
+.note-history-modal {
+  width: min(920px, 94vw);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  overflow: hidden;
+}
+.note-history-modal::backdrop { background: rgba(0, 0, 0, 0.5); }
+.nh-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.nh-body { display: grid; grid-template-columns: 250px 1fr; height: min(64vh, 560px); }
+.nh-list { border-right: 1px solid var(--border); overflow-y: auto; background: var(--panel2); }
+.nh-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.nh-item:hover { background: var(--panel); }
+.nh-item.sel { background: rgba(var(--accent-rgb), 0.12); box-shadow: inset 3px 0 0 var(--accent); }
+.nh-when { font-size: 13px; font-weight: 600; }
+.nh-abs { font-size: 11px; margin-top: 2px; }
+.nh-badge { font-size: 10px; background: var(--accent); color: #fff; border-radius: 6px; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
+.nh-preview { overflow-y: auto; padding: 22px 26px; background: var(--bg); }
+.nh-preview h1 { font-size: 1.6em; } .nh-preview h2 { font-size: 1.3em; } .nh-preview h3 { font-size: 1.15em; }
+.nh-preview p { margin: 0 0 10px; } .nh-preview ul, .nh-preview ol { padding-left: 22px; margin: 0 0 10px; }
+.nh-preview img { max-width: 100%; border-radius: 6px; }
+.nh-preview a { color: var(--accent); }
+.nh-preview blockquote { border-left: 4px solid var(--border); color: var(--muted); margin: 0 0 10px; padding-left: 12px; }
+.nh-hint { padding: 22px; text-align: center; }
+.nh-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) {
+  .nh-body { grid-template-columns: 1fr; grid-template-rows: 40% 60%; height: 74vh; }
+  .nh-list { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* ---- Inline editor popup (slash menu + wiki-links) ---- */
+.editor-popup {
+  width: 260px;
+  max-height: 264px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  z-index: 1000;
+  scrollbar-width: thin;
+}
+.editor-popup .ep-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); padding: 6px 10px 4px;
+}
+.editor-popup .ep-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+}
+.editor-popup .ep-item.sel, .editor-popup .ep-item:hover {
+  background: rgba(var(--accent-rgb), 0.14);
+}
+.editor-popup .ep-icon {
+  flex-shrink: 0; width: 26px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+}
+.editor-popup .ep-label { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Wiki-links inside the editor and in previews */
+#noteEditorQuill .ql-editor a[href^="#note-"],
+.nh-preview a[href^="#note-"] {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.4);
+  cursor: pointer;
+}
+#noteEditorQuill .ql-editor a[href^="#note-"]:hover,
+.nh-preview a[href^="#note-"]:hover { border-bottom-color: var(--accent); }
+
+/* Tables (editor + history preview) */
+#noteEditorQuill .ql-editor table, .nh-preview table {
+  border-collapse: collapse; margin: 10px 0; width: auto; max-width: 100%;
+}
+#noteEditorQuill .ql-editor td, #noteEditorQuill .ql-editor th,
+.nh-preview td, .nh-preview th {
+  border: 1px solid var(--border);
+  padding: 6px 10px; min-width: 42px; vertical-align: top;
+}
+#noteEditorQuill .ql-editor th, .nh-preview th { background: var(--panel2); font-weight: 600; }
+
+/* Contextual table row/column toolbar */
+.note-table-tools {
+  gap: 4px; z-index: 1000;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+}
+.note-table-tools button {
+  font-size: 12px; font-family: inherit; cursor: pointer;
+  padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  color: var(--muted); background: var(--panel2); border: 1px solid var(--border);
+}
+.note-table-tools button:hover { color: var(--text); border-color: var(--accent); }
+.note-table-tools button.ttx:hover { color: var(--red); border-color: var(--red); }
+
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}
 .note-pinned .btn-pin,.file-pinned .btn-pin{color:#f5c518}
@@ -3072,10 +3360,12 @@ body.dark .drop-overlay {
 
 /* Print view for single notes */
 @media print {
-  .top-nav-container, main > section:not(.active), .nav-tabs, .nav-actions, .notelist, #noteToolbar, .note-search-bar, #noteBody, .note-control-grid, #noteBackBtn {
+  .top-nav-container, main > section:not(.active), .nav-tabs, .nav-actions,
+  .notelist, .note-topbar, .note-doctoolbar, .note-search-bar, #noteBackBtn {
     display: none !important;
   }
-  body, main, section, .noteslayout, #noteEditor, #noteView {
+  body, main, section, .noteslayout, #noteEditor, .note-canvas, .note-page,
+  #noteEditorQuill.ql-container.ql-snow, .ql-editor {
     background: white !important;
     color: black !important;
     border: none !important;
@@ -3083,13 +3373,12 @@ body.dark .drop-overlay {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
     height: auto !important;
     overflow: visible !important;
   }
-  #noteView {
-    display: block !important;
-    min-height: auto !important;
-  }
+  .note-page-title { color: black !important; padding: 0 0 8px !important; }
+  #noteEditorQuill .ql-editor { min-height: auto !important; }
 }
 
 /* ---------- View Transitions ---------- */

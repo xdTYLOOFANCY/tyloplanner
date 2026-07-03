@@ -2,6 +2,114 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.10.0 — 2026-07-03
+
+Tables in the notes editor.
+
+- **Insert tables** from the `/` slash menu (a 3×3 grid to start). While the
+  caret is inside a table, a small floating toolbar offers **+ Col / + Row /
+  − Col / − Row / ✕ Table**. Cells are fully editable and tables round-trip
+  through save/reload and export.
+- The HTML sanitizer now allows table markup (`table`, `thead`, `tbody`, `tr`,
+  `td`, `th`, …) while still stripping scripts / handlers inside cells.
+- Uses Quill's built-in table module — no new dependency.
+
+## 1.9.0 — 2026-07-03
+
+Slash commands and wiki-links in the notes editor.
+
+- **`/` slash menu.** Type `/` at the start of a line to open a command menu —
+  headings (H1–H3), bulleted / numbered / checklist lists, quote, code block,
+  and image. Filter by typing, navigate with ↑/↓, choose with Enter, dismiss
+  with Esc. No mouse required.
+- **`[[wiki-links]]`.** Type `[[` to autocomplete and link to another note by
+  title; clicking the link opens that note. Links are stored as ordinary
+  `#note-<id>` anchors (no schema change, and they pass the existing HTML
+  sanitizer), so they round-trip and export cleanly.
+- Both share one caret-anchored popup, styled to the app theme, and work on
+  desktop and mobile.
+
+## 1.8.0 — 2026-07-03
+
+Note version history + an undo fix.
+
+- **Version history.** Notes now keep a time-bucketed snapshot of their content
+  as you edit (at most one snapshot per ~10 minutes, newest 50 kept per note).
+  A **🕘 Version history** button in the editor opens a panel to browse past
+  versions, preview any of them, and **restore** one — the restore snapshots
+  your current content first, so it's itself undoable. Revisions live in a new
+  `note_revisions` table (migration `018`), cascade-delete with their note, and
+  are fetched on demand so they never bloat the app state payload.
+- **Undo fix.** The editor's undo history (Ctrl+Z / Ctrl+Y) is now cleared when
+  a note loads, so undo can no longer reach into the previously-open note and
+  corrupt content after switching notes. In-note undo/redo is unaffected.
+
+## 1.7.1 — 2026-07-02
+
+Performance, offline, and accessibility pass.
+
+- **Self-hosted Inter font.** The UI font was loaded from Google Fonts but
+  silently blocked by the Content-Security-Policy, so the app fell back to
+  system fonts and logged an error on every page load. Inter (latin) now ships
+  locally in `static/fonts/`, so it actually renders and the console error is
+  gone — with no external request.
+- **Lighter initial load.** `marked` and `chart.umd.js` are now `defer`red so
+  they no longer block HTML parsing, and **Quill (≈209 KB) is loaded lazily**
+  the first time you open a note instead of on every page load. The default
+  Dashboard no longer pays for the editor.
+- **Inline note images work offline.** The service worker now keeps a dedicated
+  runtime cache for uploaded images (`/api/files/<id>/view`), so images embedded
+  in notes still render without a connection.
+- **Accessibility.** Added `aria-label`s to icon-only buttons (notes toolbar,
+  export, find/replace, dialog close) so screen readers announce them.
+- **Fixes/cleanup.** Notes layout heights use `100dvh` (correct on mobile
+  browsers with a dynamic toolbar); removed dead code from the notes module;
+  added adversarial tests for the HTML sanitizer.
+
+## 1.7.0 — 2026-07-02
+
+A Google-Docs-style Notes experience, plus more formatting.
+
+- **Redesigned editor UI.** The Notes editor is now laid out like Google Docs:
+  a slim top bar (save status, word/char count, find, export, delete), a
+  sticky grouped formatting toolbar, and a centered "page" that floats on a
+  canvas with the document title sitting on the page. On phones the page goes
+  full-bleed and the toolbar scrolls horizontally. All themed to the app's
+  existing CSS variables (works in every theme, light and dark).
+- **More formatting** (all built into Quill — still no bundler/deps): text
+  **alignment** (left/center/right/justify), **subscript/superscript**,
+  **font size** and **font family** pickers, and headings extended to H1–H6.
+- **Find & replace.** The in-note find bar (toggled with the 🔍 button) gained
+  a replace field with **Replace** and **Replace all**.
+- The server-side HTML sanitizer already allows the classes/tags these
+  features emit (`ql-align-*`, `ql-size-*`, `ql-font-*`, `<sub>`/`<sup>`), so
+  everything round-trips safely.
+
+## 1.6.0 — 2026-07-02
+
+Notes get a real WYSIWYG editor.
+
+- **Rich-text Notes editor (Quill).** The Notes tab moved from a Markdown
+  textarea with a live preview to a true what-you-see-is-what-you-get editor,
+  Apple-Notes style. The toolbar covers headings, bold/italic/underline/strike,
+  text & highlight color, ordered / bulleted / **checklist** lists, indent,
+  blockquote, code blocks, links and inline images. Formatting is applied and
+  shown inline — no more split panes, Read Mode, or Markdown syntax to remember.
+- **Inline images.** Insert images straight into a note; they're uploaded
+  through the existing files storage (`/api/files`) and embedded by URL, so note
+  rows stay small.
+- **Storage & migration.** Notes now store sanitized rich HTML in `notes.body`,
+  tracked by a new `body_format` column (migration `017`). Existing Markdown
+  notes are converted to HTML automatically the first time they're opened and
+  saved — nothing to do, no data lost. Note bodies are run through a strict
+  server-side HTML allowlist sanitizer (stdlib only) on save.
+- **Kept:** folders, note search (list + in-note find), drag-and-drop,
+  pinning, mobile panel navigation, and Styled-HTML / Compiled-Notebook export
+  all continue to work.
+- **New vendored dependency.** Quill (`static/js/quill.js` +
+  `quill.snow.css`) ships prebuilt alongside the existing `chart.umd.js` /
+  `marked.min.js` — no bundler or build step added.
+
 ## 1.5.38 — 2026-06-30
 
 Three calendar quality-of-life additions.

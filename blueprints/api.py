@@ -2,12 +2,14 @@
 API blueprint — generic CRUD, full state, index page, and habit toggle.
 """
 import re
+import time
 from flask import Blueprint, request, jsonify, current_app
 
 import helpers
 from helpers import (
     db, uid, q, TABLES, APP_URL,
     kv_get, feed_key, totp_enabled, full_state_dict, db_retry,
+    sanitize_note_html, record_note_revision,
 )
 
 # ---------------------------------------------------------------------------
@@ -27,6 +29,9 @@ _RE_DATETIME = re.compile(
 # Maximum character length for free-text / URL fields
 _MAX_STR = 8000
 _MAX_SHORT = 255
+# Note bodies hold rich HTML (Quill), which is far bulkier than the equivalent
+# Markdown, so they get a much larger cap than other free-text fields.
+_MAX_BODY = 500_000
 
 # Allowed event types (matches what the frontend sends — planner.js EVENT_TYPES list)
 _EVENT_TYPES = {
@@ -97,7 +102,8 @@ _FIELD_RULES = {
     # ---- free-text / URL fields ----
     "name":             ("str", _MAX_STR),
     "title":            ("str", _MAX_STR),
-    "body":             ("str", _MAX_STR),
+    "body":             ("str", _MAX_BODY),
+    "body_format":      ("enum", frozenset(("md", "html"))),
     "description":      ("str", _MAX_STR),
     "note":             ("str", _MAX_STR),
     "subject":          ("str", _MAX_SHORT),
@@ -411,6 +417,8 @@ def create_row(table):
     data, err = _validate_fields(table, raw)
     if err:
         return jsonify({"error": err}), 400
+    if table == "notes" and data.get("body_format") == "html" and "body" in data:
+        data["body"] = sanitize_note_html(data["body"])
     cols = list(data.keys())
     rid = uid()
     sql = "INSERT INTO %s (id%s) VALUES (?%s)" % (
@@ -445,18 +453,30 @@ def update_row(table, rid):
     data, err = _validate_fields(table, raw)
     if err:
         return jsonify({"error": err}), 400
+    if table == "notes" and data.get("body_format") == "html" and "body" in data:
+        data["body"] = sanitize_note_html(data["body"])
     cols = list(data.keys())
     sql = "UPDATE %s SET %s WHERE id=?" % (table, ",".join(q(c) + "=?" for c in cols))
     with db(write=True) as con:
-        if table in ("notes", "tasks") and last_updated is not None:
+        current = None
+        if table in ("notes", "tasks"):
             current = con.execute(f"SELECT * FROM {table} WHERE id=?", (rid,)).fetchone()
-            if current and "updated" in current.keys() and current["updated"] is not None:
+            if last_updated is not None and current and current["updated"] is not None:
                 try:
                     if int(current["updated"]) > int(last_updated):
                         return jsonify({"error": "conflict", "current_data": dict(current)}), 409
                 except ValueError:
                     pass
-                    
+
+        # Snapshot the note's prior content into version history before overwriting.
+        if table == "notes" and "body" in data and current is not None:
+            keys = current.keys()
+            record_note_revision(
+                con, rid, current["title"], current["body"],
+                current["body_format"] if "body_format" in keys else "html",
+                current["updated"] if "updated" in keys else None,
+            )
+
         con.execute(sql, [data[c] for c in cols] + [rid])
 
     if table == "exams":
@@ -544,6 +564,61 @@ def move_notes():
             [folder_id] + note_ids
         )
     return jsonify({"ok": True})
+
+
+@bp.get("/api/notes/<nid>/revisions")
+def list_note_revisions(nid):
+    """List a note's saved revisions (metadata only, newest first)."""
+    with db() as con:
+        rows = con.execute(
+            "SELECT id, created, LENGTH(body) AS size FROM note_revisions "
+            "WHERE note_id=? ORDER BY created DESC",
+            (nid,),
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@bp.get("/api/notes/<nid>/revisions/<rev_id>")
+def get_note_revision(nid, rev_id):
+    """Full content of a single revision (for preview)."""
+    with db() as con:
+        row = con.execute(
+            "SELECT id, note_id, title, body, body_format, created FROM note_revisions "
+            "WHERE id=? AND note_id=?",
+            (rev_id, nid),
+        ).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(dict(row))
+
+
+@bp.post("/api/notes/<nid>/revisions/<rev_id>/restore")
+@db_retry()
+def restore_note_revision(nid, rev_id):
+    """Restore a note to a revision. The current content is snapshotted first
+    (forced), so a restore is itself undoable via history."""
+    now = int(time.time() * 1000)
+    with db(write=True) as con:
+        rev = con.execute(
+            "SELECT title, body, body_format FROM note_revisions WHERE id=? AND note_id=?",
+            (rev_id, nid),
+        ).fetchone()
+        if not rev:
+            return jsonify({"error": "not found"}), 404
+        cur = con.execute("SELECT * FROM notes WHERE id=?", (nid,)).fetchone()
+        if not cur:
+            return jsonify({"error": "not found"}), 404
+        keys = cur.keys()
+        record_note_revision(
+            con, nid, cur["title"], cur["body"],
+            cur["body_format"] if "body_format" in keys else "html",
+            cur["updated"] if "updated" in keys else now, force=True,
+        )
+        con.execute(
+            "UPDATE notes SET title=?, body=?, body_format=?, updated=? WHERE id=?",
+            (rev["title"], rev["body"], rev["body_format"] or "html", now, nid),
+        )
+    return jsonify({"ok": True, "updated": now})
 
 
 @bp.get("/api/notes/search")

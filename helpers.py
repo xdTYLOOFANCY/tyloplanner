@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.5.38"
+VERSION = "1.10.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -42,7 +42,7 @@ TABLES = {
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
     "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id"],
-    "notes":    ["title", "body", "updated", "is_pinned", "folder_id"],
+    "notes":    ["title", "body", "updated", "is_pinned", "folder_id", "body_format"],
     "note_folders": ["name", "parent_id", "icon", "order_index"],
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
     "folders":  ["name", "parent_id", "icon"],
@@ -447,6 +447,185 @@ def uid():
 
 def q(col):
     return '"%s"' % col
+
+
+# ---------------- rich-text (notes) HTML sanitizer ----------------
+# The notes editor (Quill) stores rich HTML in notes.body. The generic CRUD API
+# accepts a body from any authenticated client and that HTML is later re-rendered
+# raw in exports / compiled notebooks, so we run it through a strict allowlist
+# sanitizer server-side (defense in depth). Stdlib only — no new dependency.
+import html as _html
+from html.parser import HTMLParser as _HTMLParser
+
+# tag -> set of attributes kept on that tag. class/style are needed for Quill
+# formatting (alignment, indent, checklist markers, text/background color).
+_SANITIZE_ALLOWED = {
+    "p": {"class", "style"}, "br": set(), "span": {"class", "style"},
+    "strong": set(), "em": set(), "u": set(), "s": set(), "b": set(), "i": set(),
+    "h1": {"class", "style"}, "h2": {"class", "style"}, "h3": {"class", "style"},
+    "h4": {"class", "style"}, "h5": {"class", "style"}, "h6": {"class", "style"},
+    "ul": {"class"}, "ol": {"class"}, "li": {"class", "data-list"},
+    "blockquote": {"class"}, "pre": {"class", "spellcheck"}, "code": {"class"},
+    "div": {"class", "style"},
+    # tables (Quill's table module + reasonable pasted-table support)
+    "table": {"class"}, "thead": {"class"}, "tbody": {"class"}, "tfoot": {"class"},
+    "tr": {"class", "data-row"}, "colgroup": {"class"}, "col": {"span", "width", "class"},
+    "td": {"class", "data-row", "rowspan", "colspan"},
+    "th": {"class", "data-row", "rowspan", "colspan", "scope"},
+    "a": {"href", "title", "target", "rel", "class"},
+    "img": {"src", "alt", "width", "height", "class", "style"},
+    "sub": set(), "sup": set(), "hr": set(),
+}
+_SANITIZE_VOID = {"br", "hr", "img"}
+# tags whose *content* is dropped entirely, not just the tag
+_SANITIZE_DROP_CONTENT = {
+    "script", "style", "iframe", "object", "embed", "noscript",
+    "template", "svg", "math", "link", "meta", "base", "form",
+}
+_SANITIZE_SAFE_STYLE = {"color", "background-color", "background", "text-align"}
+
+
+class _HTMLSanitizer(_HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out = []
+        self._skip_depth = 0   # inside a drop-content element
+        self._open = []        # stack of emitted (balanced) tags
+
+    def _clean_url(self, v, tag):
+        u = (v or "").strip()
+        low = u.lower().replace("\t", "").replace("\n", "").replace("\r", "")
+        if low.startswith(("http://", "https://", "mailto:")) or u.startswith(("/", "#")):
+            return u
+        if tag == "img" and low.startswith("data:image/"):
+            return u
+        return None
+
+    def _clean_style(self, v):
+        props = []
+        for decl in (v or "").split(";"):
+            name, sep, val = decl.partition(":")
+            if not sep:
+                continue
+            name = name.strip().lower()
+            val = val.strip()
+            low = val.lower()
+            if name not in _SANITIZE_SAFE_STYLE:
+                continue
+            if not val or "url(" in low or "expression" in low or "javascript:" in low or "<" in low:
+                continue
+            props.append("%s: %s" % (name, val))
+        return "; ".join(props)
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in _SANITIZE_DROP_CONTENT:
+            self._skip_depth += 1
+            return
+        if self._skip_depth or tag not in _SANITIZE_ALLOWED:
+            return
+        allowed = _SANITIZE_ALLOWED[tag]
+        parts = []
+        for k, val in attrs:
+            k = (k or "").lower()
+            if k.startswith("on") or k not in allowed:
+                continue
+            if val is None:
+                parts.append(" " + k)
+                continue
+            if k in ("href", "src"):
+                val = self._clean_url(val, tag)
+                if val is None:
+                    continue
+            elif k == "style":
+                val = self._clean_style(val)
+                if not val:
+                    continue
+            parts.append(' %s="%s"' % (k, _html.escape(val, quote=True)))
+        self.out.append("<%s%s>" % (tag, "".join(parts)))
+        if tag not in _SANITIZE_VOID:
+            self._open.append(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        t = tag.lower()
+        # self-closed non-void element: balance it immediately
+        if not self._skip_depth and t in _SANITIZE_ALLOWED and t not in _SANITIZE_VOID:
+            if self._open and self._open[-1] == t:
+                self._open.pop()
+                self.out.append("</%s>" % t)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in _SANITIZE_DROP_CONTENT:
+            if self._skip_depth:
+                self._skip_depth -= 1
+            return
+        if self._skip_depth or tag in _SANITIZE_VOID or tag not in _SANITIZE_ALLOWED:
+            return
+        if tag in self._open:
+            while self._open:
+                t = self._open.pop()
+                self.out.append("</%s>" % t)
+                if t == tag:
+                    break
+
+    def handle_data(self, data):
+        if self._skip_depth:
+            return
+        self.out.append(_html.escape(data, quote=False))
+
+
+def sanitize_note_html(html_str):
+    """Return an XSS-safe subset of *html_str* for storing/rendering note bodies."""
+    if not html_str or not isinstance(html_str, str):
+        return html_str
+    p = _HTMLSanitizer()
+    p.feed(html_str)
+    p.close()
+    while p._open:
+        p.out.append("</%s>" % p._open.pop())
+    return "".join(p.out)
+
+
+# ---------------- note version history ----------------
+# One snapshot at most per bucket of editing; keep the newest N per note.
+NOTE_REVISION_BUCKET_MS = 10 * 60 * 1000   # ~10 minutes
+NOTE_REVISION_CAP = 50
+
+
+def record_note_revision(con, note_id, title, body, body_format, created_ts, force=False):
+    """Snapshot a note's prior content into note_revisions (time-bucketed).
+
+    Called inside an existing write transaction with the *pre-update* content.
+    Skips empty bodies and, unless *force*, skips if the newest revision is
+    younger than the bucket window. Prunes to the newest NOTE_REVISION_CAP.
+    """
+    if not body:
+        return
+    try:
+        created_ts = int(created_ts)
+    except (TypeError, ValueError):
+        created_ts = 0
+    if not created_ts:
+        created_ts = int(time.time() * 1000)
+    if not force:
+        row = con.execute(
+            "SELECT created FROM note_revisions WHERE note_id=? ORDER BY created DESC LIMIT 1",
+            (note_id,),
+        ).fetchone()
+        if row and (created_ts - int(row["created"])) < NOTE_REVISION_BUCKET_MS:
+            return
+    con.execute(
+        "INSERT INTO note_revisions(id, note_id, title, body, body_format, created) "
+        "VALUES(?,?,?,?,?,?)",
+        (uid(), note_id, title, body, body_format or "html", created_ts),
+    )
+    con.execute(
+        "DELETE FROM note_revisions WHERE note_id=? AND id NOT IN "
+        "(SELECT id FROM note_revisions WHERE note_id=? ORDER BY created DESC LIMIT ?)",
+        (note_id, note_id, NOTE_REVISION_CAP),
+    )
 
 
 # ---------------- key-value store ----------------
