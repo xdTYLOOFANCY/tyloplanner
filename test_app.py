@@ -255,6 +255,12 @@ class CrudTests(unittest.TestCase):
         self.assertIsInstance(s("<div><p>a</div></p><b>bold"), str)
         # HTML comments are dropped entirely
         self.assertNotIn("secret", s("<!-- secret --><p>x</p>"))
+        # tables are preserved (structure + data-row) but cell XSS is stripped
+        tbl = s('<table><tbody><tr><td data-row="r1">A1</td></tr></tbody></table>')
+        self.assertIn("<table>", tbl)
+        self.assertIn('data-row="r1"', tbl)
+        self.assertIn("A1", tbl)
+        self.assertNotIn("onerror", s('<table><tr><td><img src=x onerror=hack()>c</td></tr></table>').lower())
 
     def test_note_revision_created_and_restored(self):
         nid = self.c.post("/api/notes", json={

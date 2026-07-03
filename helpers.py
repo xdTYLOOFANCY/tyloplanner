@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -467,6 +467,11 @@ _SANITIZE_ALLOWED = {
     "ul": {"class"}, "ol": {"class"}, "li": {"class", "data-list"},
     "blockquote": {"class"}, "pre": {"class", "spellcheck"}, "code": {"class"},
     "div": {"class", "style"},
+    # tables (Quill's table module + reasonable pasted-table support)
+    "table": {"class"}, "thead": {"class"}, "tbody": {"class"}, "tfoot": {"class"},
+    "tr": {"class", "data-row"}, "colgroup": {"class"}, "col": {"span", "width", "class"},
+    "td": {"class", "data-row", "rowspan", "colspan"},
+    "th": {"class", "data-row", "rowspan", "colspan", "scope"},
     "a": {"href", "title", "target", "rel", "class"},
     "img": {"src", "alt", "width", "height", "class", "style"},
     "sub": set(), "sup": set(), "hr": set(),

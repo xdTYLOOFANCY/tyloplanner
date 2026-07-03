@@ -866,6 +866,31 @@ mark.cur{background:#f5a623;color:#1c2230}
 #noteEditorQuill .ql-editor a[href^="#note-"]:hover,
 .nh-preview a[href^="#note-"]:hover { border-bottom-color: var(--accent); }
 
+/* Tables (editor + history preview) */
+#noteEditorQuill .ql-editor table, .nh-preview table {
+  border-collapse: collapse; margin: 10px 0; width: auto; max-width: 100%;
+}
+#noteEditorQuill .ql-editor td, #noteEditorQuill .ql-editor th,
+.nh-preview td, .nh-preview th {
+  border: 1px solid var(--border);
+  padding: 6px 10px; min-width: 42px; vertical-align: top;
+}
+#noteEditorQuill .ql-editor th, .nh-preview th { background: var(--panel2); font-weight: 600; }
+
+/* Contextual table row/column toolbar */
+.note-table-tools {
+  gap: 4px; z-index: 1000;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+}
+.note-table-tools button {
+  font-size: 12px; font-family: inherit; cursor: pointer;
+  padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  color: var(--muted); background: var(--panel2); border: 1px solid var(--border);
+}
+.note-table-tools button:hover { color: var(--text); border-color: var(--accent); }
+.note-table-tools button.ttx:hover { color: var(--red); border-color: var(--red); }
+
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}
 .note-pinned .btn-pin,.file-pinned .btn-pin{color:#f5c518}

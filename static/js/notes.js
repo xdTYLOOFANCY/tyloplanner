@@ -122,6 +122,7 @@ function initQuill() {
     theme: "snow",
     placeholder: "Write anything…",
     modules: {
+      table: true,
       toolbar: {
         container: QUILL_TOOLBAR,
         handlers: { image: quillImageHandler }
@@ -142,8 +143,13 @@ function initQuill() {
     setTimeout(maybeTriggerEditorPopup, 0);
   });
   quill.on("selection-change", function(range) {
-    if (!range) { closeEditorPopup(); return; }
+    if (!range) {
+      closeEditorPopup();
+      if (tableTools) tableTools.style.display = "none";
+      return;
+    }
     setTimeout(maybeTriggerEditorPopup, 0);
+    setTimeout(updateTableTools, 0);
   });
   // Keyboard navigation for the inline popup (capture so it beats Quill's keys).
   quill.root.addEventListener("keydown", function(e) {
@@ -178,6 +184,8 @@ function getEditorBody() {
 // Load an HTML string into the editor without triggering an autosave.
 function setEditorBody(html) {
   if (!quill) return;
+  closeEditorPopup();
+  if (tableTools) tableTools.style.display = "none";
   suppressChange = true;
   try {
     if (html) {
@@ -244,8 +252,71 @@ var SLASH_ITEMS = [
   { icon: "☑", label: "Checklist", kw: "todo task", apply: function() { quill.format("list", "unchecked", "user"); } },
   { icon: "❝", label: "Quote", kw: "blockquote", apply: function() { quill.format("blockquote", true, "user"); } },
   { icon: "</>", label: "Code block", kw: "pre monospace", apply: function() { quill.format("code-block", true, "user"); } },
+  { icon: "▦", label: "Table", kw: "grid", apply: function() { insertTable(); } },
   { icon: "🖼", label: "Image", kw: "picture photo", apply: function() { quillImageHandler(); } }
 ];
+
+function insertTable() {
+  var t = quill.getModule("table");
+  if (!t) return;
+  var sel = quill.getSelection(true);
+  if (!sel) { quill.setSelection(quill.getLength() - 1, 0); }
+  t.insertTable(3, 3);
+  setTimeout(updateTableTools, 0);
+}
+
+// A small floating toolbar (add/remove rows & columns) shown while the caret is
+// inside a table.
+var tableTools = null;
+function buildTableTools() {
+  if (tableTools) return tableTools;
+  tableTools = document.createElement("div");
+  tableTools.className = "note-table-tools";
+  tableTools.style.display = "none";
+  var btns = [
+    ["+ Col", function(t) { t.insertColumnRight(); }],
+    ["+ Row", function(t) { t.insertRowBelow(); }],
+    ["− Col", function(t) { t.deleteColumn(); }],
+    ["− Row", function(t) { t.deleteRow(); }],
+    ["✕ Table", function(t) { t.deleteTable(); }]
+  ];
+  btns.forEach(function(spec) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = spec[0];
+    if (spec[0] === "✕ Table") b.className = "ttx";
+    b.addEventListener("mousedown", function(e) {
+      e.preventDefault();
+      var t = quill && quill.getModule("table");
+      if (!t) return;
+      try { spec[1](t); } catch (err) {}
+      setTimeout(updateTableTools, 0);
+    });
+    tableTools.appendChild(b);
+  });
+  document.body.appendChild(tableTools);
+  // Reposition while scrolling the canvas so the bar tracks its table.
+  window.addEventListener("scroll", function() {
+    if (tableTools && tableTools.style.display !== "none") updateTableTools();
+  }, true);
+  return tableTools;
+}
+
+function updateTableTools() {
+  if (!quill) return;
+  var bar = buildTableTools();
+  var t = quill.getModule("table");
+  var info = null;
+  try { info = t && t.getTable(); } catch (e) {}
+  var tableBlot = info && info[0];
+  var node = tableBlot && tableBlot.domNode;
+  if (!node) { bar.style.display = "none"; return; }
+  var rect = node.getBoundingClientRect();
+  bar.style.display = "flex";
+  bar.style.position = "fixed";
+  bar.style.left = Math.max(8, rect.left) + "px";
+  bar.style.top = Math.max(8, rect.top - 38) + "px";
+}
 
 function buildPopup() {
   if (editorPopup) return editorPopup;

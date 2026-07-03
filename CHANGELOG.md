@@ -2,6 +2,18 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.10.0 — 2026-07-03
+
+Tables in the notes editor.
+
+- **Insert tables** from the `/` slash menu (a 3×3 grid to start). While the
+  caret is inside a table, a small floating toolbar offers **+ Col / + Row /
+  − Col / − Row / ✕ Table**. Cells are fully editable and tables round-trip
+  through save/reload and export.
+- The HTML sanitizer now allows table markup (`table`, `thead`, `tbody`, `tr`,
+  `td`, `th`, …) while still stripping scripts / handlers inside cells.
+- Uses Quill's built-in table module — no new dependency.
+
 ## 1.9.0 — 2026-07-03
 
 Slash commands and wiki-links in the notes editor.
