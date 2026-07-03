@@ -2,6 +2,23 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.11.0 — 2026-07-03
+
+Editor polish: image resize, auto-links, cleaner exports, dropdown fix.
+
+- **Image resize & align.** Click an image in a note to select it — drag the
+  corner handle to resize (keeps aspect ratio) and use the little toolbar to
+  align left/center/right or reset the size.
+- **Auto-linkify URLs.** Typing or pasting a URL (`https://…` or `www.…`) now
+  turns it into a clickable link automatically.
+- **Cleaner exports.** Styled-HTML and Compiled-Notebook exports now cap image
+  width to the page (no more images spilling outside), scroll wide tables, and
+  **inline images as data URIs** so an exported file is self-contained and its
+  images render for anyone it's shared with.
+- **Fixed:** the font / size / heading toolbar dropdowns were being clipped and
+  hidden below the document; they now open above the page and stay fully
+  visible and clickable.
+
 ## 1.10.0 — 2026-07-03
 
 Tables in the notes editor.
