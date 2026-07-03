@@ -2,6 +2,21 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.8.0 — 2026-07-03
+
+Note version history + an undo fix.
+
+- **Version history.** Notes now keep a time-bucketed snapshot of their content
+  as you edit (at most one snapshot per ~10 minutes, newest 50 kept per note).
+  A **🕘 Version history** button in the editor opens a panel to browse past
+  versions, preview any of them, and **restore** one — the restore snapshots
+  your current content first, so it's itself undoable. Revisions live in a new
+  `note_revisions` table (migration `018`), cascade-delete with their note, and
+  are fetched on demand so they never bloat the app state payload.
+- **Undo fix.** The editor's undo history (Ctrl+Z / Ctrl+Y) is now cleared when
+  a note loads, so undo can no longer reach into the previously-open note and
+  corrupt content after switching notes. In-note undo/redo is unaffected.
+
 ## 1.7.1 — 2026-07-02
 
 Performance, offline, and accessibility pass.

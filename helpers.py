@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.7.1"
+VERSION = "1.8.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -581,6 +581,46 @@ def sanitize_note_html(html_str):
     while p._open:
         p.out.append("</%s>" % p._open.pop())
     return "".join(p.out)
+
+
+# ---------------- note version history ----------------
+# One snapshot at most per bucket of editing; keep the newest N per note.
+NOTE_REVISION_BUCKET_MS = 10 * 60 * 1000   # ~10 minutes
+NOTE_REVISION_CAP = 50
+
+
+def record_note_revision(con, note_id, title, body, body_format, created_ts, force=False):
+    """Snapshot a note's prior content into note_revisions (time-bucketed).
+
+    Called inside an existing write transaction with the *pre-update* content.
+    Skips empty bodies and, unless *force*, skips if the newest revision is
+    younger than the bucket window. Prunes to the newest NOTE_REVISION_CAP.
+    """
+    if not body:
+        return
+    try:
+        created_ts = int(created_ts)
+    except (TypeError, ValueError):
+        created_ts = 0
+    if not created_ts:
+        created_ts = int(time.time() * 1000)
+    if not force:
+        row = con.execute(
+            "SELECT created FROM note_revisions WHERE note_id=? ORDER BY created DESC LIMIT 1",
+            (note_id,),
+        ).fetchone()
+        if row and (created_ts - int(row["created"])) < NOTE_REVISION_BUCKET_MS:
+            return
+    con.execute(
+        "INSERT INTO note_revisions(id, note_id, title, body, body_format, created) "
+        "VALUES(?,?,?,?,?,?)",
+        (uid(), note_id, title, body, body_format or "html", created_ts),
+    )
+    con.execute(
+        "DELETE FROM note_revisions WHERE note_id=? AND id NOT IN "
+        "(SELECT id FROM note_revisions WHERE note_id=? ORDER BY created DESC LIMIT ?)",
+        (note_id, note_id, NOTE_REVISION_CAP),
+    )
 
 
 # ---------------- key-value store ----------------

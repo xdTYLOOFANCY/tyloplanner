@@ -159,6 +159,8 @@ function setEditorBody(html) {
     } else {
       quill.setText("", "silent");
     }
+    // Reset the undo stack so Ctrl+Z can't reach into the previously-open note.
+    if (quill.history) quill.history.clear();
   } finally {
     suppressChange = false;
   }
@@ -522,6 +524,94 @@ export function noteReplaceAll() {
   }
   noteBodySearch.idx = 0;
   runNoteBodySearch(true);
+}
+
+// ---- Version history ----
+var selectedRevisionId = null;
+
+function relTime(ts) {
+  var m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return "Just now";
+  if (m < 60) return m + (m === 1 ? " minute ago" : " minutes ago");
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + (h === 1 ? " hour ago" : " hours ago");
+  var d = Math.floor(h / 24);
+  if (d < 7) return d + (d === 1 ? " day ago" : " days ago");
+  return new Date(ts).toLocaleDateString();
+}
+
+export async function openNoteHistory() {
+  if (!currentNote) return;
+  var modal = document.getElementById("noteHistoryModal");
+  if (!modal) return;
+  selectedRevisionId = null;
+  var listEl = document.getElementById("nhList");
+  var prev = document.getElementById("nhPreview");
+  var meta = document.getElementById("nhPreviewMeta");
+  var restore = document.getElementById("nhRestoreBtn");
+  if (prev) prev.innerHTML = '<div class="muted nh-hint">Select a version on the left to preview it.</div>';
+  if (meta) meta.textContent = "";
+  if (restore) restore.style.display = "none";
+  if (listEl) listEl.innerHTML = '<div class="muted nh-hint">Loading…</div>';
+  if (typeof modal.showModal === "function") modal.showModal();
+  try {
+    var revs = await (await fetch("/api/notes/" + currentNote + "/revisions")).json();
+    renderRevisionList(revs);
+  } catch (e) {
+    if (listEl) listEl.innerHTML = '<div class="muted nh-hint">Could not load history.</div>';
+  }
+}
+
+function renderRevisionList(revs) {
+  var listEl = document.getElementById("nhList");
+  if (!listEl) return;
+  if (!revs || !revs.length) {
+    listEl.innerHTML = '<div class="muted nh-hint">No earlier versions yet. Snapshots are saved automatically as you keep editing.</div>';
+    return;
+  }
+  var html = "";
+  revs.forEach(function(r, i) {
+    html += '<div class="nh-item" data-id="' + r.id + '" onclick="previewRevision(\'' + r.id + '\')">' +
+      '<div class="nh-when">' + esc(relTime(r.created)) + (i === 0 ? ' <span class="nh-badge">newest</span>' : '') + '</div>' +
+      '<div class="muted nh-abs">' + esc(new Date(r.created).toLocaleString()) + '</div>' +
+      '</div>';
+  });
+  listEl.innerHTML = html;
+}
+
+export function previewRevision(rid) {
+  selectedRevisionId = rid;
+  var items = document.querySelectorAll("#nhList .nh-item");
+  items.forEach(function(el) { el.classList.toggle("sel", el.getAttribute("data-id") === rid); });
+  var prev = document.getElementById("nhPreview");
+  var meta = document.getElementById("nhPreviewMeta");
+  var restore = document.getElementById("nhRestoreBtn");
+  if (prev) prev.innerHTML = '<div class="muted nh-hint">Loading…</div>';
+  fetch("/api/notes/" + currentNote + "/revisions/" + rid)
+    .then(function(r) { return r.json(); })
+    .then(function(rev) {
+      // rev.body was sanitized server-side before storage.
+      if (prev) prev.innerHTML = rev.body_format === "html" ? (rev.body || "") : mdToHtml(rev.body || "");
+      if (meta) meta.textContent = "Version from " + new Date(rev.created).toLocaleString();
+      if (restore) restore.style.display = "";
+    })
+    .catch(function() {
+      if (prev) prev.innerHTML = '<div class="muted nh-hint">Could not load this version.</div>';
+    });
+}
+
+export async function restoreSelectedRevision() {
+  if (!currentNote || !selectedRevisionId) return;
+  if (!confirm("Restore this version? Your current content is saved to history first, so you can undo this.")) return;
+  await api("POST", "/api/notes/" + currentNote + "/revisions/" + selectedRevisionId + "/restore");
+  closeNoteHistory();
+  loadedNoteId = null;   // force the editor to reload the restored content
+  if (window.refreshApp) await window.refreshApp();
+}
+
+export function closeNoteHistory() {
+  var modal = document.getElementById("noteHistoryModal");
+  if (modal && modal.close) modal.close();
 }
 
 function isNoteDescendant(folderId, targetId) {

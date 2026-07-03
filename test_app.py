@@ -256,6 +256,35 @@ class CrudTests(unittest.TestCase):
         # HTML comments are dropped entirely
         self.assertNotIn("secret", s("<!-- secret --><p>x</p>"))
 
+    def test_note_revision_created_and_restored(self):
+        nid = self.c.post("/api/notes", json={
+            "title": "T", "body": "<p>v1</p>", "body_format": "html"}).get_json()["id"]
+        # editing snapshots the prior content into history
+        self.c.put("/api/notes/%s" % nid, json={
+            "title": "T", "body": "<p>v2</p>", "body_format": "html"})
+        revs = self.c.get("/api/notes/%s/revisions" % nid).get_json()
+        self.assertEqual(len(revs), 1)
+        rev = self.c.get("/api/notes/%s/revisions/%s" % (nid, revs[0]["id"])).get_json()
+        self.assertEqual(rev["body"], "<p>v1</p>")
+        # restore brings v1 back and snapshots current (v2) first
+        r = self.c.post("/api/notes/%s/revisions/%s/restore" % (nid, revs[0]["id"]))
+        self.assertEqual(r.status_code, 200)
+        note = next(n for n in self._rows("notes") if n["id"] == nid)
+        self.assertEqual(note["body"], "<p>v1</p>")
+        self.assertEqual(len(self.c.get("/api/notes/%s/revisions" % nid).get_json()), 2)
+
+    def test_note_revisions_absent_from_state(self):
+        nid = self.c.post("/api/notes", json={"body": "<p>a</p>", "body_format": "html"}).get_json()["id"]
+        self.c.put("/api/notes/%s" % nid, json={"body": "<p>b</p>", "body_format": "html"})
+        self.assertNotIn("note_revisions", self.c.get("/api/state").get_json())
+
+    def test_note_revisions_cascade_delete(self):
+        nid = self.c.post("/api/notes", json={"body": "<p>a</p>", "body_format": "html"}).get_json()["id"]
+        self.c.put("/api/notes/%s" % nid, json={"body": "<p>b</p>", "body_format": "html"})
+        self.assertEqual(len(self.c.get("/api/notes/%s/revisions" % nid).get_json()), 1)
+        self.c.delete("/api/notes/%s" % nid)
+        self.assertEqual(self.c.get("/api/notes/%s/revisions" % nid).get_json(), [])
+
     def test_delete_note_folder_relocates_contents(self):
         # Create parent note folder A, child note folder B, and grandchild note folder C
         fid_a = self.c.post("/api/note_folders", json={"name": "A", "parent_id": None}).get_json()["id"]
@@ -1455,7 +1484,7 @@ class DatabaseMigrationTests(unittest.TestCase):
         with helpers.db() as con:
             row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row["value"], "17")
+            self.assertEqual(row["value"], "18")
 
             notes_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
             self.assertIsNotNone(notes_fts)
@@ -2293,7 +2322,7 @@ class CliAdminTests(unittest.TestCase):
         # Verify the schema version was tracked in the kv table (the app's
         # source of truth is kv['db_version'], not PRAGMA user_version).
         row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
-        self.assertEqual(row["value"], "17")
+        self.assertEqual(row["value"], "18")
 
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()

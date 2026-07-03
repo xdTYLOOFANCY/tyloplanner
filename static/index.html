@@ -245,6 +245,7 @@
           </div>
           <div class="note-topbar-actions">
             <button class="btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Find &amp; replace" aria-label="Find and replace">&#128269;</button>
+            <button class="btn small ghost" onclick="openNoteHistory()" title="Version history" aria-label="Version history">&#128336;</button>
             <div class="dropdown" id="noteDownloadDropdown">
               <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note" aria-label="Export note">📥 Export</button>
               <div class="dropdown-content" id="noteDownloadMenu">
@@ -275,6 +276,22 @@
         </div>
       </div>
     </div>
+
+    <!-- Version history -->
+    <dialog id="noteHistoryModal" class="note-history-modal">
+      <div class="nh-head">
+        <strong>Version history</strong>
+        <button class="btn ghost small" onclick="closeNoteHistory()" aria-label="Close" style="font-size:16px;line-height:1;padding:4px 8px;">✕</button>
+      </div>
+      <div class="nh-body">
+        <div id="nhList" class="nh-list"></div>
+        <div id="nhPreview" class="nh-preview markdown-body"></div>
+      </div>
+      <div class="nh-foot">
+        <span id="nhPreviewMeta" class="muted"></span>
+        <button id="nhRestoreBtn" class="btn" style="display:none" onclick="restoreSelectedRevision()">Restore this version</button>
+      </div>
+    </dialog>
   </section>
 
   <section id="tab-files" style="position: relative;">

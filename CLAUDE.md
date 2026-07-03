@@ -85,8 +85,9 @@ Schema is **not** a Python constant — it's a set of ordered SQL files in
 numbered migration file** (never edit an applied one) and, if you added a
 writable column/table, add it to the `TABLES` whitelist so the generic CRUD
 API accepts it. Current tables: `events`, `exams`, `habits`, `workouts`,
-`tasks`, `notes`, `note_folders`, `files`, `folders`, `shortcuts`,
-`study_sessions`, plus the `kv` store and FTS5 search tables.
+`tasks`, `notes`, `note_folders`, `note_revisions` (per-note version history,
+not in `TABLES`/state — served by dedicated endpoints), `files`, `folders`,
+`shortcuts`, `study_sessions`, plus the `kv` store and FTS5 search tables.
 
 ## Adding a feature
 

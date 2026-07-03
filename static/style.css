@@ -790,6 +790,39 @@ mark.cur{background:#f5a623;color:#1c2230}
   .note-doctoolbar .ql-toolbar.ql-snow { flex-wrap: nowrap; justify-content: flex-start; }
 }
 
+/* ---- Version history modal ---- */
+.note-history-modal {
+  width: min(920px, 94vw);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  overflow: hidden;
+}
+.note-history-modal::backdrop { background: rgba(0, 0, 0, 0.5); }
+.nh-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.nh-body { display: grid; grid-template-columns: 250px 1fr; height: min(64vh, 560px); }
+.nh-list { border-right: 1px solid var(--border); overflow-y: auto; background: var(--panel2); }
+.nh-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.nh-item:hover { background: var(--panel); }
+.nh-item.sel { background: rgba(var(--accent-rgb), 0.12); box-shadow: inset 3px 0 0 var(--accent); }
+.nh-when { font-size: 13px; font-weight: 600; }
+.nh-abs { font-size: 11px; margin-top: 2px; }
+.nh-badge { font-size: 10px; background: var(--accent); color: #fff; border-radius: 6px; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
+.nh-preview { overflow-y: auto; padding: 22px 26px; background: var(--bg); }
+.nh-preview h1 { font-size: 1.6em; } .nh-preview h2 { font-size: 1.3em; } .nh-preview h3 { font-size: 1.15em; }
+.nh-preview p { margin: 0 0 10px; } .nh-preview ul, .nh-preview ol { padding-left: 22px; margin: 0 0 10px; }
+.nh-preview img { max-width: 100%; border-radius: 6px; }
+.nh-preview a { color: var(--accent); }
+.nh-preview blockquote { border-left: 4px solid var(--border); color: var(--muted); margin: 0 0 10px; padding-left: 12px; }
+.nh-hint { padding: 22px; text-align: center; }
+.nh-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) {
+  .nh-body { grid-template-columns: 1fr; grid-template-rows: 40% 60%; height: 74vh; }
+  .nh-list { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}
 .note-pinned .btn-pin,.file-pinned .btn-pin{color:#f5c518}
