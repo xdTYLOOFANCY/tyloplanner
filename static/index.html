@@ -9,11 +9,13 @@
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="js/quill.snow.css">
+<link rel="stylesheet" href="js/gridstack.min.css">
 <link rel="stylesheet" href="style.css?v=85">
 <!-- marked + chart are deferred so they don't block HTML parsing; quill.js is
      loaded lazily the first time the Notes tab opens (see ensureQuill in notes.js). -->
 <script defer src="js/marked.min.js"></script>
 <script defer src="js/chart.umd.js"></script>
+<script defer src="js/gridstack.all.js"></script>
 <script type="module" src="app.js?v=85"></script>
 <script defer src="js/sidebar.js"></script>
 
@@ -158,7 +160,7 @@
 </aside>
 <main>
   <section id="tab-dashboard" class="active">
-    <div id="customizerPanel" style="display: none; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px;"></div>
+    <div id="customizerPanel" style="display: none;"></div>
     <div id="dashShortcuts" class="shortcuts-row"></div>
     <div class="dashboard-grid" id="dashCards"></div>
   </section>

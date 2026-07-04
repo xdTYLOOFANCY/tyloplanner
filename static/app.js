@@ -12,13 +12,10 @@ import {
   renderDashboard, 
   addShortcut as _addShortcut,
   toggleEditMode,
-  cancelCustomize,
-  saveCustomize,
   applyPreset,
   toggleWidgetPresence,
-  startCardDrag,
-  startResize,
   toggleShowShortcuts as _toggleShowShortcuts,
+  toggleShowShortcutsMobile as _toggleShowShortcutsMobile,
   reorderShortcut as _reorderShortcut,
   toggleItem as _toggleItem,
   showDashboardEventDetails
@@ -209,6 +206,7 @@ window.saveNavLayout = function() { _saveNavLayout(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
 window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
+window.toggleShowShortcutsMobile = function() { _toggleShowShortcutsMobile(R); };
 window.searchEvents = searchEvents;
 window.hideSearchSoon = hideSearchSoon;
 window.navigateToAndEditEvent = navigateToAndEditEvent;
@@ -290,12 +288,8 @@ window.checkForUpdates = checkForUpdates;
 
 // Dashboard customization bindings
 window.toggleEditMode = toggleEditMode;
-window.cancelCustomize = cancelCustomize;
-window.saveCustomize = saveCustomize;
 window.applyPreset = applyPreset;
 window.toggleWidgetPresence = toggleWidgetPresence;
-window.startCardDrag = startCardDrag;
-window.startResize = startResize;
 window.showDashboardEventDetails = showDashboardEventDetails;
 
 // ---------- tabs ----------

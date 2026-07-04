@@ -27,8 +27,8 @@ def record_failed(ip):
     failed_attempts[ip].append(time.time())
 
 # Files the login page / PWA need before sign-in:
-LOGIN_ASSETS = {"/login", "/login/2fa", "/style.css", "/logo.svg", "/favicon.ico",
-                "/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png", "/js/login.js"}
+LOGIN_ASSETS = {"/login", "/login/2fa", "/setup", "/style.css", "/logo.svg", "/favicon.ico",
+                "/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png", "/js/login.js", "/js/setup.js"}
 
 
 def parse_user_agent(ua_string):
@@ -88,11 +88,17 @@ def create_user_session():
 
 @bp.before_app_request
 def guard():
-    if not helpers.AUTH_ENABLED:
+    if not helpers.AUTH_ENABLED and helpers.is_auth_setup_complete():
         return None
     p = request.path
-    if p in LOGIN_ASSETS:
+    if p in LOGIN_ASSETS or p.startswith("/api/setup") or p.startswith("/api/oauth") or p == "/api/auth/providers":
         return None
+        
+    if not helpers.is_auth_setup_complete():
+        if p.startswith("/api/"):
+            return jsonify({"error": "setup required"}), 403
+        return redirect("/setup")
+
     if p == "/calendar.ics":
         if hmac.compare_digest(request.args.get("key", ""), feed_key()):
             return None
@@ -153,7 +159,7 @@ def login_submit():
     
     u = request.form.get("username", "")
     pw = request.form.get("password", "")
-    ok = (hmac.compare_digest(u, helpers.AUTH_USERNAME)
+    ok = (hmac.compare_digest(u, helpers.get_auth_username())
           and helpers.verify_password(pw))
     if not ok:
         record_failed(ip)
@@ -199,7 +205,7 @@ def logout():
 def tfa_setup():
     secret = pyotp.random_base32()
     kv_set("totp_pending", secret)
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=helpers.AUTH_USERNAME, issuer_name="TyloPlanner")
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=helpers.get_auth_username(), issuer_name="TyloPlanner")
     return jsonify({"secret": secret, "uri": uri})
 
 
@@ -208,7 +214,7 @@ def tfa_qr():
     secret = kv_get("totp_pending")
     if not secret:
         return jsonify({"error": "no 2FA setup in progress"}), 404
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=helpers.AUTH_USERNAME, issuer_name="TyloPlanner")
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=helpers.get_auth_username(), issuer_name="TyloPlanner")
     img = qrcode.make(uri)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -242,17 +248,18 @@ def tfa_disable():
 
 @bp.post("/api/settings/password")
 def change_password():
-    if not helpers.AUTH_ENABLED:
-        return jsonify({"error": "Authentication is not enabled"}), 400
-        
+    # Allow setting a password even if AUTH_ENABLED is false
     data = request.get_json(force=True) or {}
     cur_pw = data.get("current_password", "")
     new_pw = data.get("new_password", "")
     tfa_code = data.get("tfa_code", "")
     
     from helpers import verify_password, set_password, totp_enabled, kv_get
-    if not verify_password(cur_pw):
-        return jsonify({"error": "Incorrect current password"}), 400
+    
+    has_password = bool(kv_get("password_hash"))
+    if has_password:
+        if not verify_password(cur_pw):
+            return jsonify({"error": "Incorrect current password"}), 400
         
     if totp_enabled():
         if not tfa_code:
@@ -313,4 +320,222 @@ def revoke_session():
         return jsonify({"ok": True, "logged_out": True})
         
     return jsonify({"ok": True, "logged_out": False})
+
+
+# ---------------- Setup ----------------
+@bp.get("/setup")
+def setup_page():
+    if helpers.is_auth_setup_complete():
+        return redirect("/")
+    return helpers.get_rendered_file("setup.html")
+
+
+@bp.post("/api/setup")
+def setup_submit():
+    if helpers.is_auth_setup_complete():
+        return jsonify({"error": "Already setup"}), 400
+    
+    data = request.get_json(force=True) or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    
+    if not username or len(password) < 4:
+        return jsonify({"error": "Invalid username or password too short"}), 400
+        
+    helpers.kv_set("admin_username", username)
+    helpers.set_password(password)
+    helpers.kv_set("auth_setup_complete", "true")
+    
+    create_user_session()
+    return jsonify({"ok": True})
+
+
+# ---------------- OAuth ----------------
+import requests
+import secrets
+
+@bp.get("/api/auth/providers")
+def get_providers():
+    return jsonify({"providers": helpers.get_oauth_providers()})
+
+@bp.get("/api/oauth/status")
+def oauth_status():
+    if not session.get("auth"):
+        return jsonify({"error": "unauthorized"}), 401
+    
+    return jsonify({
+        "github": bool(helpers.kv_get("oauth_github_client_id")),
+        "google": bool(helpers.kv_get("oauth_google_client_id"))
+    })
+
+
+@bp.post("/api/oauth/init")
+def oauth_init():
+    data = request.get_json(force=True) or {}
+    provider = data.get("provider")
+    action = data.get("action", "login") # 'login' or 'link'
+    
+    if provider == "github":
+        client_id = helpers.kv_get("oauth_github_client_id")
+        if action == "link":
+            client_id = data.get("client_id")
+            client_secret = data.get("client_secret")
+            if not client_id or not client_secret:
+                return jsonify({"error": "Missing credentials"}), 400
+            session["oauth_link_github_id"] = client_id
+            session["oauth_link_github_secret"] = client_secret
+            
+        if not client_id:
+            return jsonify({"error": "GitHub not configured"}), 400
+            
+        state = secrets.token_urlsafe(16)
+        session["oauth_state"] = state
+        session["oauth_action"] = action
+        session["oauth_provider"] = "github"
+        
+        redirect_uri = f"{helpers.APP_URL}/api/oauth/callback"
+        url = f"https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&state={state}&scope=read:user"
+        return jsonify({"url": url})
+        
+    elif provider == "google":
+        client_id = helpers.kv_get("oauth_google_client_id")
+        if action == "link":
+            client_id = data.get("client_id")
+            client_secret = data.get("client_secret")
+            if not client_id or not client_secret:
+                return jsonify({"error": "Missing credentials"}), 400
+            session["oauth_link_google_id"] = client_id
+            session["oauth_link_google_secret"] = client_secret
+            
+        if not client_id:
+            return jsonify({"error": "Google not configured"}), 400
+            
+        state = secrets.token_urlsafe(16)
+        session["oauth_state"] = state
+        session["oauth_action"] = action
+        session["oauth_provider"] = "google"
+        
+        redirect_uri = f"{helpers.APP_URL}/api/oauth/callback"
+        url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&state={state}&scope=email profile"
+        return jsonify({"url": url})
+        
+    return jsonify({"error": "Unknown provider"}), 400
+
+
+@bp.get("/api/oauth/callback")
+def oauth_callback():
+    code = request.args.get("code")
+    state = request.args.get("state")
+    
+    if not code or not state or state != session.get("oauth_state"):
+        return redirect("/login?error=oauth_failed")
+        
+    provider = session.get("oauth_provider")
+    action = session.get("oauth_action")
+    redirect_uri = f"{helpers.APP_URL}/api/oauth/callback"
+    
+    try:
+        user_id = None
+        if provider == "github":
+            client_id = session.get("oauth_link_github_id") if action == "link" else helpers.kv_get("oauth_github_client_id")
+            client_secret = session.get("oauth_link_github_secret") if action == "link" else helpers.kv_get("oauth_github_client_secret")
+            
+            res = requests.post("https://github.com/login/oauth/access_token", data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri
+            }, headers={"Accept": "application/json"}).json()
+            
+            access_token = res.get("access_token")
+            if not access_token:
+                raise Exception("No access token")
+                
+            user_res = requests.get("https://api.github.com/user", headers={
+                "Authorization": f"Bearer {access_token}"
+            }).json()
+            user_id = str(user_res.get("id"))
+            
+        elif provider == "google":
+            client_id = session.get("oauth_link_google_id") if action == "link" else helpers.kv_get("oauth_google_client_id")
+            client_secret = session.get("oauth_link_google_secret") if action == "link" else helpers.kv_get("oauth_google_client_secret")
+            
+            res = requests.post("https://oauth2.googleapis.com/token", data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri
+            }).json()
+            
+            access_token = res.get("access_token")
+            if not access_token:
+                raise Exception("No access token")
+                
+            user_res = requests.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={
+                "Authorization": f"Bearer {access_token}"
+            }).json()
+            user_id = user_res.get("id")
+            
+        if not user_id:
+            raise Exception("No user ID from provider")
+            
+        if action == "link":
+            # Either first time setup or linking from settings
+            if provider == "github":
+                helpers.kv_set("oauth_github_client_id", session.pop("oauth_link_github_id"))
+                helpers.kv_set("oauth_github_client_secret", session.pop("oauth_link_github_secret"))
+                helpers.kv_set("oauth_github_linked_user_id", user_id)
+            else:
+                helpers.kv_set("oauth_google_client_id", session.pop("oauth_link_google_id"))
+                helpers.kv_set("oauth_google_client_secret", session.pop("oauth_link_google_secret"))
+                helpers.kv_set("oauth_google_linked_user_id", user_id)
+                
+            helpers.update_auth_enabled()
+            if not helpers.is_auth_setup_complete():
+                helpers.kv_set("auth_setup_complete", "true")
+                create_user_session()
+                return redirect("/")
+            return redirect("/#settings")
+            
+        elif action == "login":
+            expected_id = helpers.kv_get(f"oauth_{provider}_linked_user_id")
+            if str(expected_id) == str(user_id):
+                create_user_session()
+                return redirect("/")
+            else:
+                return redirect("/login?error=oauth_unauthorized")
+                
+    except Exception as e:
+        print("OAuth Error:", e)
+        return redirect("/login?error=oauth_failed")
+        
+    return redirect("/login")
+
+
+@bp.post("/api/oauth/unlink")
+def oauth_unlink():
+    if not session.get("auth"):
+        return jsonify({"error": "unauthorized"}), 401
+        
+    data = request.get_json(force=True) or {}
+    provider = data.get("provider")
+    
+    if provider not in ["github", "google"]:
+        return jsonify({"error": "invalid provider"}), 400
+        
+    # Check failsafe: cannot unlink if password not set and no other oauth configured
+    has_pw = bool(helpers.kv_get("password_hash")) or bool(helpers.AUTH_PASSWORD)
+    other_provider = "google" if provider == "github" else "github"
+    has_other_oauth = bool(helpers.kv_get(f"oauth_{other_provider}_client_id") and helpers.kv_get(f"oauth_{other_provider}_linked_user_id"))
+    
+    if not has_pw and not has_other_oauth:
+        return jsonify({"error": "Cannot unlink last authentication method. Set a password first."}), 400
+        
+    helpers.kv_del(f"oauth_{provider}_client_id")
+    helpers.kv_del(f"oauth_{provider}_client_secret")
+    helpers.kv_del(f"oauth_{provider}_linked_user_id")
+    helpers.update_auth_enabled()
+    
+    return jsonify({"ok": True})
 

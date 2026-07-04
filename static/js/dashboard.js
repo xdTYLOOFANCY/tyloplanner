@@ -13,18 +13,27 @@ let currentLayout = [];
 let widgetsData = {};
 let saveTimeout = null;
 let greetingInterval = null;
+let gridInstance = null;
+let lastIsMobileRender = null;
 
-const ALL_WIDGETS = [
-  { id: 'deadlines', name: 'Next Deadlines' },
-  { id: 'today_plan', name: 'Today\'s Plan' },
-  { id: 'habits', name: 'Habits Today' },
-  { id: 'workouts', name: 'Training This Week' },
-  { id: 'tasks', name: 'Open To-Dos' },
-  { id: 'shortcuts', name: 'Web Shortcuts' },
-  { id: 'quick_add', name: 'Quick Add' },
-  { id: 'recent_files', name: 'Recent Files' },
-  { id: 'study_timer', name: 'Study Timer' }
-];
+// Single source of truth for widget types: name (customizer label), render
+// function, and whether it's a togglable singleton (vs. an "add another
+// instance" type like Notepad/Mini Chart). Add a widget type here only.
+const WIDGET_REGISTRY = {
+  deadlines:    { name: 'Next Deadlines',     render: renderDeadlinesWidget,   toggleable: true },
+  today_plan:   { name: 'Today\'s Plan',      render: renderTodayPlanWidget,   toggleable: true },
+  habits:       { name: 'Habits Today',       render: renderHabitsWidget,      toggleable: true },
+  workouts:     { name: 'Training This Week', render: renderWorkoutsWidget,    toggleable: true },
+  tasks:        { name: 'Open To-Dos',        render: renderTasksWidget,       toggleable: true },
+  shortcuts:    { name: 'Web Shortcuts',      render: renderShortcutsWidget,   toggleable: true },
+  quick_add:    { name: 'Quick Add',          render: renderQuickAddWidget,    toggleable: true },
+  recent_files: { name: 'Recent Files',       render: renderRecentFilesWidget, toggleable: true },
+  study_timer:  { name: 'Study Timer',        render: renderStudyTimerWidget,  toggleable: true },
+  quick_notes:  { name: 'Notepad',            render: renderQuickNotesWidget },
+  analytics:    { name: 'Mini Chart',         render: renderAnalyticsWidget },
+  custom_text:  { name: 'Custom Text',        render: renderCustomTextWidget },
+  greeting:     { name: 'Clock',              render: renderGreetingWidget }
+};
 
 function saveWidgetsData() {
   if (saveTimeout) clearTimeout(saveTimeout);
@@ -36,6 +45,43 @@ function saveWidgetsData() {
       SET.dashboard_widgets_data = JSON.stringify(widgetsData);
     }
   }, 1000);
+}
+
+// Layout autosave: every edit (drag, resize, add, remove, reorder) persists
+// automatically after a short debounce — there is no separate Save button.
+let layoutSaveTimeout = null;
+
+function layoutPayload() {
+  return {
+    dashboard_desktop_layout: JSON.stringify(currentLayout.map(function(item) {
+      return { id: item.id, type: item.type, x: item.x, y: item.y, w: item.w, h: item.h };
+    })),
+    dashboard_mobile_layout: JSON.stringify(currentLayout.map(function(item) {
+      return { id: item.id, type: item.type, x: item.mx, y: item.my, w: item.mw, h: item.mh };
+    }))
+  };
+}
+
+async function persistLayout() {
+  var payload = layoutPayload();
+  await api("POST", "/api/settings", payload);
+  if (SET) {
+    SET.dashboard_desktop_layout = payload.dashboard_desktop_layout;
+    SET.dashboard_mobile_layout = payload.dashboard_mobile_layout;
+  }
+}
+
+function scheduleLayoutSave() {
+  if (layoutSaveTimeout) clearTimeout(layoutSaveTimeout);
+  layoutSaveTimeout = setTimeout(persistLayout, 800);
+}
+
+function flushLayoutSave() {
+  if (layoutSaveTimeout) {
+    clearTimeout(layoutSaveTimeout);
+    layoutSaveTimeout = null;
+  }
+  return persistLayout();
 }
 
 
@@ -78,7 +124,7 @@ function initLayoutAndStyle() {
       };
     });
   }
-  currentLayout = compactAll(currentLayout);
+  // ponytail: no compaction on load — widgets stay exactly where the user put them
 }
 
 function getFileIcon(mimetype) {
@@ -834,8 +880,9 @@ window.deleteWidgetInstance = function(id) {
     currentLayout = currentLayout.filter(x => x.id !== id);
     delete widgetsData[id];
     saveWidgetsData();
+    scheduleLayoutSave();
     closeWidgetSettingsModal();
-    renderDashboard();
+    renderDashboard(true);
   }
 };
 
@@ -861,136 +908,99 @@ window.saveWidgetSettings = function(id) {
 
   saveWidgetsData();
   closeWidgetSettingsModal();
-  renderDashboard();
+  renderDashboard(true);
 };
 
-window.addNewWidgetInstance = function() {
-  var type = document.getElementById('addWidgetType').value;
-  var id = type + "_" + Date.now();
-  
-  var maxY = 1;
+// Append a widget below everything else (both layouts) without disturbing
+// any existing positions.
+function appendWidget(id, type) {
+  var maxY = 1, maxMy = 1;
   currentLayout.forEach(function(item) {
-    var val = item.y + item.h;
-    if (val > maxY) maxY = val;
+    if (item.y + item.h > maxY) maxY = item.y + item.h;
+    if (item.my + item.mh > maxMy) maxMy = item.my + item.mh;
   });
+  currentLayout.push({ id: id, type: type, x: 1, y: maxY, w: 6, h: 2, mx: 1, my: maxMy, mw: 6, mh: 2 });
+}
 
-  var maxMy = 1;
-  currentLayout.forEach(function(item) {
-    var val = item.my + item.mh;
-    if (val > maxMy) maxMy = val;
-  });
-
-  var newWidget = {
-    id: id,
-    type: type,
-    x: 1,
-    y: maxY,
-    w: 6,
-    h: 2,
-    mx: 1,
-    my: maxMy,
-    mw: 6,
-    mh: 2
-  };
-  
-  currentLayout.push(newWidget);
-  currentLayout = compactAll(currentLayout);
-  renderDashboard();
+window.addWidgetInstance = function(type) {
+  if (!WIDGET_REGISTRY[type]) return;
+  appendWidget(type + "_" + Date.now(), type);
+  scheduleLayoutSave();
+  renderDashboard(true);
 };
 
 function getCardHTML(type, id) {
-  if (type === 'deadlines') return renderDeadlinesWidget(id);
-  if (type === 'today' || type === 'today_plan') return renderTodayPlanWidget(id);
-  if (type === 'habits') return renderHabitsWidget(id);
-  if (type === 'workouts') return renderWorkoutsWidget(id);
-  if (type === 'tasks') return renderTasksWidget(id);
-  if (type === 'shortcuts') return renderShortcutsWidget(id);
-  if (type === 'quick_add') return renderQuickAddWidget(id);
-  if (type === 'recent_files') return renderRecentFilesWidget(id);
-  if (type === 'quick_notes') return renderQuickNotesWidget(id);
-  if (type === 'analytics') return renderAnalyticsWidget(id);
-  if (type === 'custom_text') return renderCustomTextWidget(id);
-  if (type === 'greeting') return renderGreetingWidget(id);
-  if (type === 'study_timer') return renderStudyTimerWidget(id);
-  return '';
+  var entry = WIDGET_REGISTRY[type === 'today' ? 'today_plan' : type];
+  return entry ? entry.render(id) : '';
 }
 
+// Customize drawer: slides in from the right, everything applies and
+// autosaves immediately — no Save/Cancel buttons.
 function renderCustomizerPanelHTML() {
+  var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
+  var showShortcutsMobile = SET ? SET.show_shortcuts_mobile === "1" : false;
+  var isMobileView = window.innerWidth <= 640;
+
   var html = '';
-  html += '<div class="card db-customizer" style="margin-bottom: 20px; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel2); box-shadow: 0 4px 20px rgba(0,0,0,0.15);">';
-  html += '<div style="display: flex; flex-direction: column; gap: 16px;">';
-  
-  html += '<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">';
-  html += '<span style="font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px;">🎨 Dashboard Customizer</span>';
-  html += '<span style="font-size: 12px; color: var(--text-muted);">Drag widgets to position, drag bottom-right corner to resize.</span>';
+  html += '<div class="drawer-head">';
+  html += '  <div>';
+  html += '    <div class="drawer-title">Customize dashboard</div>';
+  html += '    <div class="drawer-hint">' + (isMobileView
+    ? 'Drag the handle on a card to reorder. Changes save automatically.'
+    : 'Drag cards by their handle, resize from the corner. Changes save automatically.') + '</div>';
+  html += '  </div>';
+  html += '  <button class="btn small drawer-done" onclick="toggleEditMode()">Done</button>';
   html += '</div>';
 
-  html += '<div style="display: flex; flex-wrap: wrap; gap: 24px;">';
-  // Layout presets
-  html += '<div style="flex: 1.5; min-width: 250px;">';
-  html += '<h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Presets</h4>';
-  html += '<div style="display: flex; gap: 8px; flex-wrap: wrap;">';
-  html += '<button class="btn ghost small" onclick="applyPreset(\'balanced\')">Balanced</button>';
-  html += '<button class="btn ghost small" onclick="applyPreset(\'academic\')">Academic Focus</button>';
-  html += '<button class="btn ghost small" onclick="applyPreset(\'active\')">Active/Healthy</button>';
-  html += '<button class="btn ghost small" onclick="applyPreset(\'minimalist\')">Minimalist</button>';
-  html += '</div>';
-  html += '</div>';
-
-  // Toggle widgets presence
-  html += '<div style="flex: 2; min-width: 300px;">';
-  html += '<h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Toggle Widgets</h4>';
-  html += '<div style="display: flex; gap: 12px; flex-wrap: wrap;">';
-  ALL_WIDGETS.forEach(function(w) {
-    var active = currentLayout.some(function(item) { return item.id === w.id || item.type === w.id; });
-    html += '<div onclick="toggleWidgetPresence(\'' + w.id + '\', ' + !active + ')" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; background: var(--panel); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); user-select: none;">';
-    html += '<span class="hcheck' + (active ? ' on' : '') + '">' + (active ? '✓' : '') + '</span>';
-    html += '<span>' + w.name + '</span>';
+  // --- Widgets: one row per type. Singletons get an on/off toggle; ---
+  // --- multi-instance types (Notepad, Mini Chart, ...) get "+ Add". ---
+  html += '<div class="drawer-section">';
+  html += '<h4>Widgets</h4>';
+  html += '<div class="drawer-list">';
+  Object.keys(WIDGET_REGISTRY).forEach(function(id) {
+    var entry = WIDGET_REGISTRY[id];
+    html += '<div class="drawer-row">';
+    html += '<span class="drawer-row-name">' + esc(entry.name) + '</span>';
+    if (entry.toggleable) {
+      var active = currentLayout.some(function(item) { return item.id === id || item.type === id; });
+      html += '<span class="hcheck' + (active ? ' on' : '') + '" onclick="toggleWidgetPresence(\'' + id + '\', ' + !active + ')">' + (active ? '\u2713' : '') + '</span>';
+    } else {
+      html += '<button class="btn ghost small" onclick="addWidgetInstance(\'' + id + '\')">+ Add</button>';
+    }
     html += '</div>';
   });
   html += '</div>';
+  html += '<div class="drawer-hint" style="margin-top:8px;">Tip: click the \u2699\ufe0f on a card to rename, recolor or remove it.</div>';
   html += '</div>';
 
-  // Add new widget instance
-  html += '<div style="flex: 1.5; min-width: 250px;">';
-  html += '<h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Add Widget Instance</h4>';
-  html += '<div style="display: flex; gap: 8px;">';
-  html += '  <select id="addWidgetType" style="padding: 6px; font-size: 13px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); flex: 1;">';
-  html += '    <option value="study_timer">Study Timer</option>';
-  html += '    <option value="quick_notes">Notepad</option>';
-  html += '    <option value="analytics">Mini Chart</option>';
-  html += '    <option value="custom_text">Custom Text</option>';
-  html += '    <option value="greeting">Clock</option>';
-  html += '    <option value="deadlines">Deadlines</option>';
-  html += '    <option value="today_plan">Today\'s Plan</option>';
-  html += '    <option value="habits">Habits</option>';
-  html += '    <option value="workouts">Workouts</option>';
-  html += '    <option value="tasks">To-Dos</option>';
-  html += '    <option value="shortcuts">Shortcuts</option>';
-  html += '    <option value="quick_add">Quick Add</option>';
-  html += '    <option value="recent_files">Recent Files</option>';
-  html += '  </select>';
-  html += '  <button class="btn small" onclick="addNewWidgetInstance()" style="background: var(--accent); color: #fff; border-color: var(--accent);">Add</button>';
+  // --- Presets ---
+  html += '<div class="drawer-section">';
+  html += '<h4>Layout presets</h4>';
+  html += '<div class="drawer-btn-row">';
+  html += '<button class="btn ghost small" onclick="applyPreset(\'balanced\')">Balanced</button>';
+  html += '<button class="btn ghost small" onclick="applyPreset(\'academic\')">Academic</button>';
+  html += '<button class="btn ghost small" onclick="applyPreset(\'active\')">Active</button>';
+  html += '<button class="btn ghost small" onclick="applyPreset(\'minimalist\')">Minimalist</button>';
   html += '</div>';
+  html += '<div class="drawer-hint" style="margin-top:8px;">Applying a preset replaces your current layout.</div>';
   html += '</div>';
 
-  html += '</div>'; // End flex-wrap
+  // --- Shortcuts ---
+  html += '<div class="drawer-section">';
+  html += '<div class="drawer-section-head">';
+  html += '<h4>Web shortcuts</h4>';
+  html += '<button class="btn ghost small" onclick="addShortcut()">+ Add</button>';
+  html += '</div>';
+  html += '<div class="drawer-row">';
+  html += '<span class="drawer-row-name">Show shortcut row</span>';
+  html += '<span id="showShortcutsToggle" class="hcheck' + (showShortcuts ? ' on' : '') + '" onclick="toggleShowShortcuts()">' + (showShortcuts ? '\u2713' : '') + '</span>';
+  html += '</div>';
+  html += '<div class="drawer-row">';
+  html += '<span class="drawer-row-name">Show shortcuts on mobile</span>';
+  html += '<span id="showShortcutsMobileToggle" class="hcheck' + (showShortcutsMobile ? ' on' : '') + '" onclick="toggleShowShortcutsMobile()">' + (showShortcutsMobile ? '\u2713' : '') + '</span>';
+  html += '</div>';
 
-  // Manage Shortcuts section
-  var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
-  html += '<div style="flex: 1 1 100%; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px;">';
-  html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">';
-  html += '<h4 style="margin: 0; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">🔗 Manage Shortcuts</h4>';
-  html += '<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">';
-  html += '<div onclick="toggleShowShortcuts()" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; user-select: none;">';
-  html += '<span id="showShortcutsToggle" class="hcheck' + (showShortcuts ? ' on' : '') + '">' + (showShortcuts ? '✓' : '') + '</span>';
-  html += '<span>Show standalone row</span>';
-  html += '</div>';
-  html += '<button class="btn small" onclick="addShortcut()" style="background: var(--accent); color: #fff; border-color: var(--accent); padding: 4px 12px; font-size: 12px; margin-left: 4px;">+ Add Shortcut</button>';
-  html += '</div>';
-  html += '</div>';
-
-  html += '<div style="display: flex; flex-direction: column; gap: 6px; max-height: 250px; overflow-y: auto; padding-right: 4px;">';
+  html += '<div class="drawer-list" style="margin-top:8px;">';
   if (S.shortcuts && S.shortcuts.length) {
     var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
     var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
@@ -1004,127 +1014,20 @@ function renderCustomizerPanelHTML() {
 
     sorted.forEach(function(s) {
       var isOff = disabled.indexOf(s.id) !== -1;
-      
-      html += '<div class="list-item" draggable="true" ondragstart="dragShortcutStart(event,\'' + s.id + '\')" ondragover="dragShortcutOver(event)" ondrop="dropShortcut(event,\'' + s.id + '\')" ondragend="dragShortcutEnd(event)" style="cursor:grab; display:flex; align-items:center; gap:10px; background:var(--panel); padding:8px 12px; border-radius:6px; border:1px solid var(--border); margin:0;">';
-      html += '<span class="muted" style="cursor:grab; padding-right:4px; user-select:none;">☰</span>';
-      html += '<div class="grow" style="flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + esc(s.name) + ' <span class="muted" style="font-size:11px;">(' + esc(s.url) + ')</span></div>';
-      html += '<div style="display:flex; align-items:center; gap:6px; cursor:pointer;" onclick="toggleItem(\'' + s.id + '\')">';
-      html += '<span style="font-size:11px; color:var(--text-muted); user-select:none;">Active</span>';
-      html += '<span class="hcheck' + (isOff ? '' : ' on') + '">' + (isOff ? '' : '✓') + '</span>';
-      html += '</div>';
-      html += '<button class="btn danger small" onclick="delRow(\'shortcuts\', \'' + s.id + '\')" style="padding:2px 8px; font-size:11px; margin-left:8px;">Remove</button>';
+      html += '<div class="drawer-row" draggable="true" ondragstart="dragShortcutStart(event,\'' + s.id + '\')" ondragover="dragShortcutOver(event)" ondrop="dropShortcut(event,\'' + s.id + '\')" ondragend="dragShortcutEnd(event)" style="cursor:grab;">';
+      html += '<span class="muted" style="user-select:none;">\u2630</span>';
+      html += '<span class="drawer-row-name" title="' + esc(s.url) + '">' + esc(s.name) + '</span>';
+      html += '<span class="hcheck' + (isOff ? '' : ' on') + '" onclick="toggleItem(\'' + s.id + '\')">' + (isOff ? '' : '\u2713') + '</span>';
+      html += '<button class="btn danger small" onclick="delRow(\'shortcuts\', \'' + s.id + '\')" style="padding:2px 8px; font-size:11px;">\u00d7</button>';
       html += '</div>';
     });
   } else {
-    html += '<div class="muted" style="font-size:13px; padding:8px; text-align:center;">No shortcuts added yet. Click "+ Add Shortcut" above to get started.</div>';
+    html += '<div class="muted" style="font-size:13px; padding:4px 0;">No shortcuts yet.</div>';
   }
-  html += '</div>'; // End list container
-  html += '</div>'; // End section container
-
-  // Action buttons
-  html += '<div style="display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px;">';
-  html += '<button class="btn ghost small" onclick="cancelCustomize()">Cancel</button>';
-  html += '<button class="btn small" onclick="saveCustomize()" style="background: var(--accent); color: #fff; border-color: var(--accent);">Save Changes</button>';
+  html += '</div>';
   html += '</div>';
 
-  html += '</div>'; // End column flex
-  html += '</div>'; // End card
-  
   return html;
-}
-
-
-function hasCollision(item, other, isMobile) {
-  if (isMobile) {
-    return item.mx < other.mx + other.mw &&
-           item.mx + item.mw > other.mx &&
-           item.my < other.my + other.mh &&
-           item.my + item.mh > other.my;
-  } else {
-    return item.x < other.x + other.w &&
-           item.x + item.w > other.x &&
-           item.y < other.y + other.h &&
-           item.y + item.h > other.y;
-  }
-}
-
-function compactLayout(layout, activeId, isMobile) {
-  var sorted = layout.slice().sort(function(a, b) {
-    if (a.id === activeId) return -1;
-    if (b.id === activeId) return 1;
-    var ay = isMobile ? a.my : a.y;
-    var by = isMobile ? b.my : b.y;
-    if (ay !== by) return ay - by;
-    var axVal = isMobile ? a.mx : a.x;
-    var bxVal = isMobile ? b.mx : b.x;
-    return axVal - bxVal;
-  });
-  
-  var placed = [];
-  sorted.forEach(function(item) {
-    var copy = Object.assign({}, item);
-    if (copy.id === activeId) {
-      placed.push(copy);
-      return;
-    }
-    
-    while (placed.some(function(other) { return hasCollision(copy, other, isMobile); })) {
-      if (isMobile) {
-        copy.my++;
-      } else {
-        copy.y++;
-      }
-    }
-    placed.push(copy);
-  });
-  
-  // Compact upwards
-  var compacted = [];
-  var sortedForCompaction = placed.slice().sort(function(a, b) {
-    if (a.id === activeId) return -1;
-    if (b.id === activeId) return 1;
-    var ay = isMobile ? a.my : a.y;
-    var by = isMobile ? b.my : b.y;
-    if (ay !== by) return ay - by;
-    var axVal = isMobile ? a.mx : a.x;
-    var bxVal = isMobile ? b.mx : b.x;
-    return axVal - bxVal;
-  });
-  
-  sortedForCompaction.forEach(function(item) {
-    var copy = Object.assign({}, item);
-    if (copy.id === activeId) {
-      compacted.push(copy);
-      return;
-    }
-    
-    if (isMobile) {
-      while (copy.my > 1) {
-        copy.my--;
-        if (compacted.some(function(other) { return hasCollision(copy, other, isMobile); })) {
-          copy.my++;
-          break;
-        }
-      }
-    } else {
-      while (copy.y > 1) {
-        copy.y--;
-        if (compacted.some(function(other) { return hasCollision(copy, other, isMobile); })) {
-          copy.y++;
-          break;
-        }
-      }
-    }
-    compacted.push(copy);
-  });
-  
-  return compacted;
-}
-
-function compactAll(layout) {
-  var withDesktop = compactLayout(layout, null, false);
-  var withBoth = compactLayout(withDesktop, null, true);
-  return withBoth;
 }
 
 
@@ -1163,7 +1066,122 @@ function startClockUpdates() {
   }, 10000);
 }
 
-export function renderDashboard() {
+function buildCardBodyHTML(item) {
+  var cardContent = getCardHTML(item.type || item.id, item.id);
+  if (!cardContent) return null;
+  var wData = widgetsData[item.id] || {};
+  var borderColor = wData.border_color;
+  var borderStyle = borderColor ? "border-color: " + borderColor + " !important;" : "";
+  var gear = isEditMode
+    ? '<button class="card-settings-btn" onclick="openWidgetSettings(event, \'' + item.id + '\')" style="position: absolute; top: 6px; right: 6px; z-index: 12; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; cursor: pointer; color: var(--text); font-size: 11px;">⚙️</button>'
+    : '';
+  var dragHandle = isEditMode ? '<div class="card-drag-handle"></div>' : '';
+  return { borderStyle: borderStyle, gear: gear, dragHandle: dragHandle, cardContent: cardContent };
+}
+
+function renderGridStackHTML() {
+  var html = "";
+  currentLayout.forEach(function(item) {
+    var body = buildCardBodyHTML(item);
+    if (!body) return;
+    html += '<div class="grid-stack-item" gs-id="' + item.id + '" gs-x="' + (item.x - 1) + '" gs-y="' + (item.y - 1) + '" gs-w="' + item.w + '" gs-h="' + item.h + '">';
+    html += '  <div class="grid-stack-item-content card" data-id="' + item.id + '" style="' + body.borderStyle + '">';
+    html += body.dragHandle + body.gear + body.cardContent;
+    html += '  </div>';
+    html += '</div>';
+  });
+  return html;
+}
+
+function initGridStack(container) {
+  if (!window.GridStack) return;
+  gridInstance = window.GridStack.init({
+    column: 12,
+    cellHeight: 150,
+    margin: 8,
+    // float: widgets stay exactly where the user drops them — nothing gets
+    // pushed/compacted to the top.
+    float: true,
+    animate: true,
+    staticGrid: !isEditMode,
+    alwaysShowResizeHandle: true,
+    handle: '.card-drag-handle',
+    resizable: { handles: 'se' }
+  }, container);
+
+  gridInstance.on('change', function(event, changedItems) {
+    (changedItems || []).forEach(function(gsItem) {
+      var layoutItem = currentLayout.find(function(x) { return x.id === gsItem.id; });
+      if (layoutItem) {
+        layoutItem.x = gsItem.x + 1;
+        layoutItem.y = gsItem.y + 1;
+        layoutItem.w = gsItem.w;
+        layoutItem.h = gsItem.h;
+      }
+    });
+    scheduleLayoutSave();
+  });
+}
+
+// Mobile has no free-form grid: widgets stack full-width, ordered by `my`,
+// reordered only via drag-handle (no resize — height is always auto-content).
+function renderMobileListHTML() {
+  var sorted = currentLayout.slice().sort(function(a, b) { return a.my - b.my; });
+  var html = "";
+  sorted.forEach(function(item) {
+    var body = buildCardBodyHTML(item);
+    if (!body) return;
+    // Only the handle is a drag source (draggable) so buttons/inputs/textareas
+    // inside the widget content keep working normally; the whole card is a
+    // valid drop target so dropping anywhere on it reorders.
+    var dropAttrs = isEditMode
+      ? ' ondragover="dragWidgetOver(event)" ondrop="dropWidget(event,\'' + item.id + '\')"'
+      : '';
+    var dragHandle = isEditMode
+      ? '<div class="card-drag-handle" draggable="true" ondragstart="dragWidgetStart(event,\'' + item.id + '\')" ondragend="dragWidgetEnd(event)"></div>'
+      : '';
+    html += '<div class="card" data-id="' + item.id + '" style="' + body.borderStyle + '"' + dropAttrs + '>';
+    html += dragHandle + body.gear + body.cardContent;
+    html += '</div>';
+  });
+  return html;
+}
+
+var mobileDragId = null;
+
+window.dragWidgetStart = function(e, id) {
+  mobileDragId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  var card = e.currentTarget.closest('.card');
+  if (card) card.classList.add('dragging');
+};
+
+window.dragWidgetOver = function(e) {
+  e.preventDefault();
+};
+
+window.dropWidget = function(e, dropId) {
+  e.preventDefault();
+  if (!mobileDragId || mobileDragId === dropId) { mobileDragId = null; return; }
+  var sorted = currentLayout.slice().sort(function(a, b) { return a.my - b.my; });
+  var dragIdx = sorted.findIndex(function(x) { return x.id === mobileDragId; });
+  var dropIdx = sorted.findIndex(function(x) { return x.id === dropId; });
+  mobileDragId = null;
+  if (dragIdx === -1 || dropIdx === -1) return;
+  var moved = sorted.splice(dragIdx, 1)[0];
+  sorted.splice(dropIdx, 0, moved);
+  sorted.forEach(function(item, i) { item.my = i + 1; });
+  scheduleLayoutSave();
+  renderDashboard(true);
+};
+
+window.dragWidgetEnd = function(e) {
+  var card = e.currentTarget.closest('.card');
+  if (card) card.classList.remove('dragging');
+  mobileDragId = null;
+};
+
+export function renderDashboard(force) {
   safeRender("dashboard", () => {
     var now = new Date(), hr = now.getHours();
     var g = hr < 6 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
@@ -1190,57 +1208,33 @@ export function renderDashboard() {
     if (panel) {
       if (isEditMode) {
         panel.style.display = "block";
+        panel.className = "customizer-drawer";
         panel.innerHTML = renderCustomizerPanelHTML();
       } else {
         panel.style.display = "none";
+        panel.className = "";
         panel.innerHTML = "";
       }
     }
 
-    // Set grid edit mode classes
-    var container = document.getElementById("dashCards");
-    if (container) {
-      container.className = "dashboard-grid";
-      container.setAttribute("data-customizing", isEditMode ? "true" : "false");
-
-      // No native drag & drop container listeners needed (handled via pointer events)
+    // While editing, external re-renders (live sync ticks every few seconds)
+    // must NOT rebuild the grid: tearing down Gridstack mid-interaction
+    // orphans its drag/resize listeners and kills the handles until a page
+    // refresh. Grid rebuilds during edit only happen via explicit actions
+    // (add/remove widget, preset, done) which pass force=true. The drawer
+    // above is still refreshed so shortcut edits show up immediately.
+    if (isEditMode && !force) {
+      return;
     }
 
-    // Render cards based on currentLayout configuration
-    // On mobile (flex-column), sort by mobile y-position so visual order matches the layout intent
+    var container = document.getElementById("dashCards");
     var isMobileRender = window.innerWidth <= 640;
-    var renderLayout = isMobileRender
-      ? currentLayout.slice().sort(function(a, b) {
-          if (a.my !== b.my) return a.my - b.my;
-          return a.mx - b.mx;
-        })
-      : currentLayout;
+    lastIsMobileRender = isMobileRender;
 
-    var html = "";
-    renderLayout.forEach(function(item) {
-      var cardContent = getCardHTML(item.type || item.id, item.id);
-      if (!cardContent) return;
-      
-      var wData = widgetsData[item.id] || {};
-      var borderColor = wData.border_color;
-      var borderStyle = borderColor ? "border-color: " + borderColor + " !important; " : "";
-
-      var styleStr = 
-        "--x: " + item.x + "; --w: " + item.w + "; --y: " + item.y + "; --h: " + item.h + "; " +
-        "--mx: " + item.mx + "; --mw: " + item.mw + "; --my: " + item.my + "; --mh: " + item.mh + "; " +
-        "grid-column: var(--x) / span var(--w); grid-row: var(--y) / span var(--h); " + borderStyle;
-        
-      html += '<div class="card" data-id="' + item.id + '" style="' + styleStr + '">';
-      
-      if (isEditMode) {
-        html += '<div class="card-drag-handle" onmousedown="startCardDrag(event, \'' + item.id + '\')" ontouchstart="startCardDrag(event, \'' + item.id + '\')"></div>';
-        html += '<button class="card-settings-btn" onclick="openWidgetSettings(event, \'' + item.id + '\')" style="position: absolute; top: 6px; right: 6px; z-index: 12; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; cursor: pointer; color: var(--text); font-size: 11px;">⚙️</button>';
-        html += '<div class="card-resize-handle" onmousedown="startResize(event, \'' + item.id + '\')" ontouchstart="startResize(event, \'' + item.id + '\')"></div>';
-      }
-      
-      html += cardContent;
-      html += '</div>';
-    });
+    if (gridInstance) {
+      try { gridInstance.destroy(false); } catch (e) {}
+      gridInstance = null;
+    }
 
     if (container) {
       if (window.Alpine && typeof window.Alpine.destroyTree === 'function') {
@@ -1252,12 +1246,26 @@ export function renderDashboard() {
           }
         });
       }
-      container.innerHTML = html;
+
+      container.setAttribute("data-customizing", isEditMode ? "true" : "false");
+
+      if (isMobileRender) {
+        // Mobile: no free-form grid — full-width stacked cards, reordered by drag handle only.
+        container.className = "dashboard-grid dashboard-mobile-list";
+        container.innerHTML = renderMobileListHTML();
+      } else {
+        // Desktop/tablet: Gridstack-powered free-form grid (drag + resize + collision).
+        container.className = "dashboard-grid grid-stack";
+        container.innerHTML = renderGridStackHTML();
+        initGridStack(container);
+      }
     }
 
-    // Render shortcuts
+    // Render shortcuts (hidden on mobile unless explicitly re-enabled there)
     var shortcutHtml = '';
     var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
+    var showShortcutsMobile = SET ? SET.show_shortcuts_mobile === "1" : false;
+    if (isMobileRender && !showShortcutsMobile) showShortcuts = false;
     if (showShortcuts && S.shortcuts) {
       var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',') : [];
       var order = (SET && SET.shortcut_order) ? SET.shortcut_order.split(',') : [];
@@ -1323,6 +1331,13 @@ export async function toggleShowShortcuts(refresh) {
   await refresh();
 }
 
+export async function toggleShowShortcutsMobile(refresh) {
+  var el = document.getElementById("showShortcutsMobileToggle");
+  var show = el.tagName === 'INPUT' ? el.checked : !el.classList.contains('on');
+  await api("POST", "/api/settings", { show_shortcuts_mobile: show ? "1" : "0" });
+  await refresh();
+}
+
 export async function toggleItem(id, refresh) {
   var disabled = (SET && SET.disabled_shortcuts) ? SET.disabled_shortcuts.split(',').filter(Boolean) : [];
   var idx = disabled.indexOf(id);
@@ -1347,383 +1362,45 @@ export async function reorderShortcut(dragId, dropId, refresh) {
 }
 
 // Customizer actions & event handlers
+// Opening enters edit mode; closing (button or drawer's "Done") flushes any
+// pending autosave and exits — edits are always kept, there is no cancel.
 export function toggleEditMode() {
   isEditMode = !isEditMode;
   var btn = document.getElementById("customizeBtn");
   if (btn) {
     if (isEditMode) {
       btn.classList.add("active");
-      btn.textContent = "Close Customizer";
+      btn.textContent = "✓ Done";
       initLayoutAndStyle();
     } else {
       btn.classList.remove("active");
       btn.textContent = "⚙️ Customize";
     }
   }
-  renderDashboard();
-}
-
-export function cancelCustomize() {
-  isEditMode = false;
-  var btn = document.getElementById("customizeBtn");
-  if (btn) {
-    btn.classList.remove("active");
-    btn.textContent = "⚙️ Customize";
+  if (!isEditMode) {
+    flushLayoutSave();
   }
-  renderDashboard();
-}
-
-export async function saveCustomize() {
-  var payload = {
-    dashboard_desktop_layout: JSON.stringify(currentLayout.map(function(item) {
-      return { id: item.id, type: item.type, x: item.x, y: item.y, w: item.w, h: item.h };
-    })),
-    dashboard_mobile_layout: JSON.stringify(currentLayout.map(function(item) {
-      return { id: item.id, type: item.type, x: item.mx, y: item.my, w: item.mw, h: item.mh };
-    }))
-  };
-
-  await api("POST", "/api/settings", payload);
-  
-  isEditMode = false;
-  var btn = document.getElementById("customizeBtn");
-  if (btn) {
-    btn.classList.remove("active");
-    btn.textContent = "⚙️ Customize";
-  }
-
-  if (window.refreshApp) {
-    await window.refreshApp();
-  } else {
-    renderDashboard();
-  }
+  renderDashboard(true);
 }
 
 export function applyPreset(name) {
   if (PRESETS[name]) {
     currentLayout = JSON.parse(JSON.stringify(PRESETS[name]));
-    currentLayout = compactAll(currentLayout);
-    renderDashboard();
+    scheduleLayoutSave();
+    renderDashboard(true);
   }
 }
-
-
 
 export function toggleWidgetPresence(id, checked) {
   if (checked) {
     if (!currentLayout.some(x => x.id === id || x.type === id)) {
-      var defaultItem = PRESETS.balanced.find(x => x.id === id);
-      if (!defaultItem && id === 'today_plan') {
-        defaultItem = PRESETS.balanced.find(x => x.id === 'today');
-      }
-      if (defaultItem) {
-        var copy = JSON.parse(JSON.stringify(defaultItem));
-        if (copy.id === 'today') {
-          copy.id = 'today_plan';
-          copy.type = 'today_plan';
-        }
-        currentLayout.push(copy);
-      } else {
-        currentLayout.push({ id: id, type: id, x: 1, y: 5, w: 6, h: 2, mx: 1, my: 9, mw: 6, mh: 2 });
-      }
+      appendWidget(id, id);
     }
   } else {
     currentLayout = currentLayout.filter(x => x.id !== id && x.type !== id && x.id !== (id === 'today_plan' ? 'today' : ''));
   }
-  currentLayout = compactAll(currentLayout);
-  renderDashboard();
-}
-
-export function startCardDrag(e, id) {
-  if (!isEditMode) return;
-  if (e.target.closest('button, input, select, textarea')) return;
-  e.preventDefault();
-  
-  var isTouch = e.type === 'touchstart';
-  var startX = isTouch ? e.touches[0].clientX : e.clientX;
-  var startY = isTouch ? e.touches[0].clientY : e.clientY;
-  
-  var card = document.querySelector(`.card[data-id="${id}"]`);
-  var container = document.getElementById("dashCards");
-  if (!card || !container) return;
-  
-  var containerRect = container.getBoundingClientRect();
-  var startRect = card.getBoundingClientRect();
-  
-  var grabX = startX - startRect.left;
-  var grabY = startY - startRect.top;
-  
-  var itemIndex = currentLayout.findIndex(x => x.id === id);
-  if (itemIndex === -1) return;
-  var item = currentLayout[itemIndex];
-  
-  var isMobile = window.innerWidth <= 768;
-  var colWidth = containerRect.width / (isMobile ? 6 : 12);
-  var rowHeight = 150 + (isMobile ? 12 : 16);
-  
-  // Create placeholder
-  var placeholder = document.createElement('div');
-  placeholder.className = 'card-placeholder';
-  if (isMobile) {
-    placeholder.style.gridColumn = `${item.mx} / span ${item.mw}`;
-    placeholder.style.gridRow = `${item.my} / span ${item.mh}`;
-  } else {
-    placeholder.style.gridColumn = `${item.x} / span ${item.w}`;
-    placeholder.style.gridRow = `${item.y} / span ${item.h}`;
-  }
-  container.appendChild(placeholder);
-  
-  // Style card for visual dragging
-  card.classList.add('dragging');
-  card.style.position = 'absolute';
-  card.style.zIndex = '1000';
-  card.style.width = startRect.width + 'px';
-  card.style.height = startRect.height + 'px';
-  card.style.pointerEvents = 'none';
-  
-  var initialLeft = startRect.left - containerRect.left;
-  var initialTop = startRect.top - containerRect.top;
-  card.style.left = initialLeft + 'px';
-  card.style.top = initialTop + 'px';
-  
-  var tempLayout = JSON.parse(JSON.stringify(currentLayout));
-  var lastTargetX = isMobile ? item.mx : item.x;
-  var lastTargetY = isMobile ? item.my : item.y;
-  
-  function onMove(moveEvent) {
-    var clientX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
-    var clientY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
-    
-    var left = clientX - containerRect.left - grabX;
-    var top = clientY - containerRect.top - grabY;
-    
-    card.style.left = left + 'px';
-    card.style.top = top + 'px';
-    
-    var targetX = Math.round(left / colWidth) + 1;
-    var targetY = Math.round(top / rowHeight) + 1;
-    
-    if (isMobile) {
-      targetX = Math.max(1, Math.min(6 - item.mw + 1, targetX));
-      targetY = Math.max(1, targetY);
-    } else {
-      targetX = Math.max(1, Math.min(12 - item.w + 1, targetX));
-      targetY = Math.max(1, targetY);
-    }
-    
-    if (targetX !== lastTargetX || targetY !== lastTargetY) {
-      lastTargetX = targetX;
-      lastTargetY = targetY;
-      
-      var activeItem = tempLayout.find(x => x.id === id);
-      if (activeItem) {
-        if (isMobile) {
-          activeItem.mx = targetX;
-          activeItem.my = targetY;
-        } else {
-          activeItem.x = targetX;
-          activeItem.y = targetY;
-        }
-      }
-      
-      var compacted = compactLayout(tempLayout, id, isMobile);
-      
-      if (isMobile) {
-        placeholder.style.gridColumn = `${targetX} / span ${item.mw}`;
-        placeholder.style.gridRow = `${targetY} / span ${item.mh}`;
-      } else {
-        placeholder.style.gridColumn = `${targetX} / span ${item.w}`;
-        placeholder.style.gridRow = `${targetY} / span ${item.h}`;
-      }
-      
-      compacted.forEach(c => {
-        if (c.id === id) return;
-        var el = container.querySelector(`.card[data-id="${c.id}"]`);
-        if (el) {
-          if (isMobile) {
-            el.style.gridColumn = `${c.mx} / span ${c.mw}`;
-            el.style.gridRow = `${c.my} / span ${c.mh}`;
-          } else {
-            el.style.gridColumn = `${c.x} / span ${c.w}`;
-            el.style.gridRow = `${c.y} / span ${c.h}`;
-          }
-        }
-      });
-      
-      tempLayout = compacted;
-    }
-  }
-  
-  function onEnd() {
-    window.removeEventListener(isTouch ? 'touchmove' : 'mousemove', onMove);
-    window.removeEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
-    
-    card.classList.remove('dragging');
-    card.style.position = '';
-    card.style.zIndex = '';
-    card.style.width = '';
-    card.style.height = '';
-    card.style.pointerEvents = '';
-    card.style.left = '';
-    card.style.top = '';
-    
-    if (placeholder.parentNode) {
-      placeholder.parentNode.removeChild(placeholder);
-    }
-    
-    var activeItem = tempLayout.find(x => x.id === id);
-    if (activeItem) {
-      if (isMobile) {
-        activeItem.mx = lastTargetX;
-        activeItem.my = lastTargetY;
-      } else {
-        activeItem.x = lastTargetX;
-        activeItem.y = lastTargetY;
-      }
-    }
-    
-    currentLayout = compactAll(tempLayout);
-    renderDashboard();
-  }
-  
-  window.addEventListener(isTouch ? 'touchmove' : 'mousemove', onMove, { passive: false });
-  window.addEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
-}
-
-export function startResize(e, id) {
-  if (!isEditMode) return;
-  e.preventDefault();
-  e.stopPropagation();
-  
-  var isTouch = e.type === 'touchstart';
-  var startX = isTouch ? e.touches[0].clientX : e.clientX;
-  var startY = isTouch ? e.touches[0].clientY : e.clientY;
-  
-  var card = document.querySelector(`.card[data-id="${id}"]`);
-  var container = document.getElementById("dashCards");
-  if (!card || !container) return;
-  
-  var containerRect = container.getBoundingClientRect();
-  
-  var isMobile = window.innerWidth <= 768;
-  var colWidth = containerRect.width / (isMobile ? 6 : 12);
-  var rowHeight = 150 + (isMobile ? 12 : 16);
-  
-  var itemIndex = currentLayout.findIndex(x => x.id === id);
-  if (itemIndex === -1) return;
-  var item = currentLayout[itemIndex];
-  
-  var startW = isMobile ? item.mw : item.w;
-  var startH = isMobile ? item.mh : item.h;
-  
-  var placeholder = document.createElement('div');
-  placeholder.className = 'card-placeholder';
-  if (isMobile) {
-    placeholder.style.gridColumn = `${item.mx} / span ${item.mw}`;
-    placeholder.style.gridRow = `${item.my} / span ${item.mh}`;
-  } else {
-    placeholder.style.gridColumn = `${item.x} / span ${item.w}`;
-    placeholder.style.gridRow = `${item.y} / span ${item.h}`;
-  }
-  container.appendChild(placeholder);
-  
-  card.style.opacity = '0.5';
-  
-  var tempLayout = JSON.parse(JSON.stringify(currentLayout));
-  var lastW = startW;
-  var lastH = startH;
-  
-  function onMove(moveEvent) {
-    var clientX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
-    var clientY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
-    
-    var deltaX = clientX - startX;
-    var deltaY = clientY - startY;
-    
-    var deltaW = Math.round(deltaX / colWidth);
-    var deltaH = Math.round(deltaY / rowHeight);
-    
-    var targetW = startW + deltaW;
-    var targetH = startH + deltaH;
-    
-    if (isMobile) {
-      targetW = Math.max(2, Math.min(6 - item.mx + 1, targetW));
-      targetH = Math.max(1, targetH);
-    } else {
-      targetW = Math.max(2, Math.min(12 - item.x + 1, targetW));
-      targetH = Math.max(1, targetH);
-    }
-    
-    if (targetW !== lastW || targetH !== lastH) {
-      lastW = targetW;
-      lastH = targetH;
-      
-      var activeItem = tempLayout.find(x => x.id === id);
-      if (activeItem) {
-        if (isMobile) {
-          activeItem.mw = targetW;
-          activeItem.mh = targetH;
-        } else {
-          activeItem.w = targetW;
-          activeItem.h = targetH;
-        }
-      }
-      
-      var compacted = compactLayout(tempLayout, id, isMobile);
-      
-      if (isMobile) {
-        placeholder.style.gridColumn = `${item.mx} / span ${targetW}`;
-        placeholder.style.gridRow = `${item.my} / span ${targetH}`;
-      } else {
-        placeholder.style.gridColumn = `${item.x} / span ${targetW}`;
-        placeholder.style.gridRow = `${item.y} / span ${targetH}`;
-      }
-      
-      compacted.forEach(c => {
-        if (c.id === id) return;
-        var el = container.querySelector(`.card[data-id="${c.id}"]`);
-        if (el) {
-          if (isMobile) {
-            el.style.gridColumn = `${c.mx} / span ${c.mw}`;
-            el.style.gridRow = `${c.my} / span ${c.mh}`;
-          } else {
-            el.style.gridColumn = `${c.x} / span ${c.w}`;
-            el.style.gridRow = `${c.y} / span ${c.h}`;
-          }
-        }
-      });
-      
-      tempLayout = compacted;
-    }
-  }
-  
-  function onEnd() {
-    window.removeEventListener(isTouch ? 'touchmove' : 'mousemove', onMove);
-    window.removeEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
-    
-    card.style.opacity = '';
-    
-    if (placeholder.parentNode) {
-      placeholder.parentNode.removeChild(placeholder);
-    }
-    
-    var activeItem = tempLayout.find(x => x.id === id);
-    if (activeItem) {
-      if (isMobile) {
-        activeItem.mw = lastW;
-        activeItem.mh = lastH;
-      } else {
-        activeItem.w = lastW;
-        activeItem.h = lastH;
-      }
-    }
-    
-    currentLayout = compactAll(tempLayout);
-    renderDashboard();
-  }
-  
-  window.addEventListener(isTouch ? 'touchmove' : 'mousemove', onMove, { passive: false });
-  window.addEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
+  scheduleLayoutSave();
+  renderDashboard(true);
 }
 
 // Global listener for localized DOM patching on dashboard
@@ -1735,4 +1412,16 @@ window.addEventListener("tylo:task-updated", function(e) {
       el.remove();
     }
   }
+});
+
+// Re-render if the viewport crosses the mobile-list <-> Gridstack breakpoint.
+var dashboardResizeTimeout = null;
+window.addEventListener("resize", function() {
+  if (lastIsMobileRender === null) return;
+  clearTimeout(dashboardResizeTimeout);
+  dashboardResizeTimeout = setTimeout(function() {
+    if ((window.innerWidth <= 640) !== lastIsMobileRender) {
+      renderDashboard(true);
+    }
+  }, 150);
 });

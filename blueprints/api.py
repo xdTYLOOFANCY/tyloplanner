@@ -354,7 +354,11 @@ def get_state():
         "connected": kv_get("strava_refresh") is not None,
         "last_sync": kv_get("strava_last_sync"),
     }
-    out["auth"] = {"enabled": helpers.AUTH_ENABLED, "totp": totp_enabled()}
+    out["auth"] = {
+        "enabled": helpers.AUTH_ENABLED,
+        "has_password": bool(helpers.kv_get("password_hash")),
+        "totp": totp_enabled()
+    }
     out["app_url"] = APP_URL
     out["feed_url"] = APP_URL + "/calendar.ics" + ("?key=" + feed_key() if helpers.AUTH_ENABLED else "")
     return jsonify(out)

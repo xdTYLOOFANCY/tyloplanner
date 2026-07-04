@@ -377,21 +377,21 @@ function renderSecurity() {
   var box = document.getElementById("securityBox");
   if (!box || !SET) return;
   var html = "";
-  if (!S.auth.enabled) {
-    html = '<p style="font-size:14px">Login is disabled \u2014 set <b>AUTH_PASSWORD</b> in <b>.env</b> to enable it (required before 2FA makes sense).</p>';
-  } else {
+  var html = '';
+
+  if (S.auth.has_password) {
     if (SET.totp_enabled) {
-      html = '<p style="font-size:14px;margin-bottom:10px">\u2705 Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>' +
+      html += '<p style="font-size:14px;margin-bottom:10px">\u2705 Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>' +
         '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaDisable()">' +
         '<button class="btn danger" onclick="tfaDisable()">Disable 2FA</button></div>';
     } else if (tfaPending) {
-      html = '<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>' +
+      html += '<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>' +
         '<img src="/api/2fa/qr?t=' + Date.now() + '" alt="2FA QR" style="width:180px;border-radius:10px;background:#fff;padding:8px">' +
         '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaConfirm()">' +
         '<button class="btn" onclick="tfaConfirm()">Confirm &amp; enable</button>' +
         '<button class="btn ghost" onclick="tfaPending=false;renderSecurity()">Cancel</button></div>';
     } else {
-      html = '<p style="font-size:14px;margin-bottom:10px">Add a second login step with an authenticator app (TOTP):</p>' +
+      html += '<p style="font-size:14px;margin-bottom:10px">Add a second login step with an authenticator app (TOTP):</p>' +
         '<button class="btn" onclick="tfaStart()">Enable 2FA</button>';
     }
 
@@ -418,6 +418,27 @@ function renderSecurity() {
       '  </div>' +
       '  <button class="btn" onclick="changePassword()" style="align-self:flex-start;margin-top:4px;">Update Password</button>' +
       '</div>';
+  } else {
+    // Set Password form
+    html += '<h4 style="margin-bottom:12px;font-size:14px;color:var(--text)">Set Password</h4>' +
+      '<div style="display:flex;flex-direction:column;gap:10px;max-width:320px;">' +
+      '  <div style="display:flex;flex-direction:column;gap:4px;">' +
+      '    <label class="muted" style="font-size:12px;">New Password</label>' +
+      '    <input id="changePwNew" type="password" placeholder="••••••••" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);">' +
+      '  </div>' +
+      '  <div style="display:flex;flex-direction:column;gap:4px;">' +
+      '    <label class="muted" style="font-size:12px;">Confirm Password</label>' +
+      '    <input id="changePwConfirm" type="password" placeholder="••••••••" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);" onkeydown="if(event.keyCode===13)changePassword()">' +
+      '  </div>' +
+      '  <button class="btn" onclick="changePassword()" style="align-self:flex-start;margin-top:4px;">Set Password</button>' +
+      '</div>';
+  }
+
+  if (S.auth.enabled) {
+    // Add OAuth Configuration section
+    html += '<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">' +
+      '<h4 style="margin-bottom:12px;font-size:14px;color:var(--text)">OAuth Configuration</h4>' +
+      '<div id="oauthSettingsBox"><p class="muted" style="font-size:13px">Loading OAuth configuration...</p></div>';
 
     // Add active sessions section
     html += '<hr style="border:none;border-top:1px solid var(--border);margin:20px 0">' +
@@ -441,8 +462,123 @@ function renderSecurity() {
       sessionsNeedReload = false;
       loadActiveSessions();
     }
+    loadOauthConfig();
   }
 }
+
+async function loadOauthConfig() {
+  var container = document.getElementById("oauthSettingsBox");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/oauth/status");
+    if (!res.ok) throw new Error("Failed");
+    const data = await res.json();
+    
+    let html = '';
+    ['github', 'google'].forEach(provider => {
+      const isLinked = data[provider];
+      const title = provider.charAt(0).toUpperCase() + provider.slice(1);
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;">';
+      html += '  <div style="display:flex;align-items:center;gap:12px;">';
+      html += `    <div style="font-weight:500;">${title}</div>`;
+      if (isLinked) {
+        html += '    <span style="font-size:11px;padding:2px 6px;background:rgba(46,160,67,0.15);color:#3fb950;border-radius:10px;">Linked</span>';
+      } else {
+        html += '    <span style="font-size:11px;padding:2px 6px;background:rgba(139,148,158,0.15);color:var(--muted);border-radius:10px;">Not Linked</span>';
+      }
+      html += '  </div>';
+      
+      if (isLinked) {
+        html += `  <button class="btn danger" style="padding:4px 8px;font-size:12px;" onclick="unlinkOauth('${provider}')">Unlink</button>`;
+      } else {
+        html += `  <button class="btn ghost" style="padding:4px 8px;font-size:12px;" onclick="linkOauthSetup('${provider}')">Link</button>`;
+      }
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<p class="loginerror">Failed to load OAuth configuration.</p>';
+  }
+}
+
+async function unlinkOauth(provider) {
+  if (!confirm(`Are you sure you want to unlink ${provider}?`)) return;
+  
+  try {
+    const res = await fetch("/api/oauth/unlink", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      loadOauthConfig();
+    } else {
+      alert(data.error || "Failed to unlink.");
+    }
+  } catch (e) {
+    alert("Network error.");
+  }
+}
+
+function linkOauthSetup(provider) {
+  const container = document.getElementById("oauthSettingsBox");
+  container.innerHTML = `
+    <div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;">
+      <h5 style="margin-bottom:12px;font-size:13px;font-weight:600;">Link ${provider.charAt(0).toUpperCase() + provider.slice(1)}</h5>
+      <div style="margin-bottom:8px;">
+        <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">Client ID</label>
+        <input id="linkOauthClientId" style="width:100%;padding:6px;font-size:13px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">Client Secret</label>
+        <input id="linkOauthClientSecret" type="password" style="width:100%;padding:6px;font-size:13px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" style="padding:4px 12px;font-size:12px;" onclick="submitLinkOauth('${provider}')">Authorize</button>
+        <button class="btn ghost" style="padding:4px 12px;font-size:12px;" onclick="loadOauthConfig()">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+// These are invoked from inline onclick handlers rendered above, so expose them.
+window.loadOauthConfig = loadOauthConfig;
+window.unlinkOauth = unlinkOauth;
+window.linkOauthSetup = linkOauthSetup;
+window.submitLinkOauth = submitLinkOauth;
+
+async function submitLinkOauth(provider) {
+  const clientId = document.getElementById("linkOauthClientId").value.trim();
+  const clientSecret = document.getElementById("linkOauthClientSecret").value.trim();
+  
+  if (!clientId || !clientSecret) {
+    alert("Client ID and Secret are required.");
+    return;
+  }
+  
+  try {
+    const res = await fetch("/api/oauth/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: provider,
+        action: "link",
+        client_id: clientId,
+        client_secret: clientSecret
+      })
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      alert(data.error || "Failed to initialize OAuth linking.");
+    }
+  } catch (e) {
+    alert("Network error.");
+  }
+}
+
 
 async function loadActiveSessions() {
   var container = document.getElementById("activeSessionsBox");
@@ -537,14 +673,15 @@ export async function tfaDisable(refresh) {
 }
 
 export async function changePassword(refresh) {
-  var curPw = document.getElementById("changePwCurrent").value;
+  var curPwEl = document.getElementById("changePwCurrent");
+  var curPw = curPwEl ? curPwEl.value : "";
   var newPw = document.getElementById("changePwNew").value;
   var confirmPw = document.getElementById("changePwConfirm").value;
   
   var tfaEl = document.getElementById("changePwTfa");
   var tfaCode = tfaEl ? tfaEl.value.trim() : "";
 
-  if (!curPw) {
+  if (S.auth.has_password && !curPw) {
     alert("Please enter your current password.");
     return;
   }
@@ -571,8 +708,8 @@ export async function changePassword(refresh) {
       new_password: newPw,
       tfa_code: tfaCode
     });
-    toast("Password updated successfully!");
-    document.getElementById("changePwCurrent").value = "";
+    toast(S.auth.has_password ? "Password updated successfully!" : "Password set successfully!");
+    if (curPwEl) curPwEl.value = "";
     document.getElementById("changePwNew").value = "";
     document.getElementById("changePwConfirm").value = "";
     if (tfaEl) tfaEl.value = "";

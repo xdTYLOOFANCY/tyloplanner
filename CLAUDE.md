@@ -75,6 +75,11 @@ User settings live in the `kv` table with a `set_` prefix.
 - Update `CHANGELOG.md` and the relevant file in `docs/` with user-facing
   changes. Use `/changelog-entry` to draft and prepend a versioned entry
   automatically. The app version string is `VERSION` in `helpers.py`.
+- **Any change to `static/` that affects visible rendering or interaction
+  must pass `/verify-ui` before being declared done.** For larger UI work
+  (new components, layout changes, multi-tab overhauls), also run the
+  `ui-reviewer` subagent and fix its findings first. Never hand back a UI
+  change verified only by reading the code.
 
 ## Database & migrations
 
@@ -102,6 +107,32 @@ feature"):
    `renderThing()`, import it in `static/app.js`, and call it from
    `renderAll()`. Use the existing `api()` helper for requests.
 3. Add coverage in `test_app.py` for any new endpoint or table.
+
+## Known failure modes (check these before declaring a fix done)
+
+- **Live sync vs. user input:** the `?since_version=` poll triggers
+  `renderAll()`, which re-renders the active tab every few seconds. Any input,
+  contenteditable, or drag interaction must survive that re-render — skip
+  re-rendering a widget while it has focus or an edit in progress. This bug
+  has recurred in Notes typing, grades editing, and the ECTS goal field.
+- **Settings silently don't persist** unless the key exists in
+  `SETTING_DEFAULTS` (`helpers.py`, ~line 652). If a new setting "resets after
+  a few seconds", this is why — the live sync overwrites it with the default.
+- **Seeing frontend changes in the browser:** bump `VERSION` in `helpers.py`
+  and restart so the service worker serves fresh assets; don't loop hard
+  reloads (causes an empty boot).
+- **Dev login:** the username comes from kv `admin_username`, not "admin".
+  Reset credentials with `python3 app.py --reset-password <pw>`.
+
+## Housekeeping
+
+- Throwaway debug scripts/HTML/probes go in the session scratchpad directory,
+  never the repo root. Delete any probe files you created before finishing.
+- When verifying UI in the browser preview: take a `preview_snapshot` before
+  clicking anything, and switch tabs by clicking the stable selector
+  `#tabs button[data-tab="<name>"]` — don't guess selectors. Verify layout at
+  desktop (1280×800) and mobile (375×812) widths; the mobile layout uses
+  `#bottomNav` and must not regress. Use `/verify-ui` for the full checklist.
 
 ## refer to user  
 

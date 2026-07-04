@@ -2,6 +2,34 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.13.0 — 2026-07-04
+
+Dashboard rebuilt: a real grid engine, free placement, and a new customize drawer.
+
+- **Gridstack-powered widget grid (desktop/tablet).** The hand-rolled
+  drag/resize math is gone; widgets now move and resize through the vendored
+  Gridstack.js engine — smooth snapping, proper collision handling, and a
+  resize handle that's always visible while customizing. Interactions no
+  longer die mid-edit (background syncs used to tear the grid down under
+  your cursor, requiring a page refresh).
+- **Free placement.** Widgets stay exactly where you put them — nothing is
+  compacted or crammed to the top anymore, on load or while editing. Gaps
+  are yours to keep.
+- **New customize drawer.** Editing now opens a slide-in panel from the
+  right (a bottom sheet on phones) with a logical layout: widget toggles and
+  "+ Add" for multi-instance widgets, layout presets, and shortcut
+  management. Every change applies and saves automatically — the Save
+  Changes/Cancel buttons are gone; just press Done (or the header button)
+  when finished.
+- **A dedicated mobile dashboard.** Below 640px the free-form grid is
+  replaced by full-width stacked cards, reordered by drag handle (no fiddly
+  touch resizing). The mobile order is stored separately from the desktop
+  layout. Website shortcuts are hidden on mobile by default, with a
+  "Show shortcuts on mobile" toggle in the drawer.
+- **Widget registry under the hood.** All widget types now live in one
+  registry object, so future widgets are a single entry plus a render
+  function.
+
 ## 1.12.1 — 2026-07-03
 
 Offline sync can no longer wedge the app at startup.

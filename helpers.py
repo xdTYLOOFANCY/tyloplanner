@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.12.1"
+VERSION = "1.13.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -659,6 +659,7 @@ SETTING_DEFAULTS = {
     "cal_sync_hours": "6",
     "accent_color": "#4f8cff",
     "show_shortcuts": "1",
+    "show_shortcuts_mobile": "0",
     "shortcut_order": "",
     "disabled_shortcuts": "",
     "persist_active_tab": "1",
@@ -911,13 +912,30 @@ def send_notification(title, msg, tags=""):
 
 
 # ---------------- authentication helpers ----------------
+def is_auth_setup_complete():
+    try:
+        complete = kv_get("auth_setup_complete") == "true"
+        if not complete and AUTH_PASSWORD:
+            # Seamless migration for existing users with .env
+            from werkzeug.security import generate_password_hash
+            kv_set("password_hash", generate_password_hash(AUTH_PASSWORD))
+            kv_set("admin_username", AUTH_USERNAME)
+            kv_set("auth_setup_complete", "true")
+            return True
+        return complete
+    except Exception:
+        return False
+
+
 def verify_password(pw):
     import hmac
     from werkzeug.security import check_password_hash
     hash_val = kv_get("password_hash")
     if hash_val:
         return check_password_hash(hash_val, pw)
-    return hmac.compare_digest(pw, AUTH_PASSWORD)
+    if AUTH_PASSWORD:
+        return hmac.compare_digest(pw, AUTH_PASSWORD)
+    return False
 
 
 def set_password(pw):
@@ -927,14 +945,31 @@ def set_password(pw):
     AUTH_ENABLED = True
 
 
+def get_auth_username():
+    return kv_get("admin_username") or AUTH_USERNAME
+
+
+def get_oauth_providers():
+    providers = []
+    # Check Github
+    if kv_get("oauth_github_client_id") and kv_get("oauth_github_linked_user_id"):
+        providers.append("github")
+    # Check Google
+    if kv_get("oauth_google_client_id") and kv_get("oauth_google_linked_user_id"):
+        providers.append("google")
+    return providers
+
+
 def update_auth_enabled():
     global AUTH_ENABLED
     try:
-        # Check if kv table exists and has password_hash
+        # Check if kv table exists and has password_hash or oauth
         has_hash = bool(kv_get("password_hash"))
+        has_oauth = bool(get_oauth_providers())
     except Exception:
         has_hash = False
-    AUTH_ENABLED = has_hash or bool(AUTH_PASSWORD)
+        has_oauth = False
+    AUTH_ENABLED = has_hash or has_oauth or bool(AUTH_PASSWORD)
 
 
 # Run initial check at import time
