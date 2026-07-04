@@ -2,6 +2,14 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.13.1 — 2026-07-04
+
+- **Fixed OAuth linking form collapsing mid-entry.** The Settings → Security
+  → OAuth Configuration box re-rendered from scratch on every live-sync poll
+  (every few seconds), so opening "Link" and typing a Client ID/Secret got
+  wiped out before you could finish. The OAuth box now survives re-renders
+  the same way the Active Sessions list already did.
+
 ## 1.13.0 — 2026-07-04
 
 Dashboard rebuilt: a real grid engine, free placement, and a new customize drawer.

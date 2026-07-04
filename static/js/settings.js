@@ -9,6 +9,7 @@ import { renderBackupList } from './backup.js';
 var stravaEditing = false;
 var tfaPending = false;
 var sessionsNeedReload = false;
+var oauthEditing = false;
 
 function setVal(id, v) {
   var el = document.getElementById(id);
@@ -452,6 +453,12 @@ function renderSecurity() {
   var sessionsAlreadyLoaded = !sessionsNeedReload && existingSessionsHtml &&
     !existingSessionsHtml.includes("Loading active sessions");
 
+  // Preserve the live OAuth box node (not just its HTML) so an in-progress
+  // Link form or focused input survives a live-sync re-render.
+  var existingOauthEl = document.getElementById("oauthSettingsBox");
+  var preserveOauth = !!existingOauthEl && (oauthEditing ||
+    (existingOauthEl.innerHTML && !existingOauthEl.innerHTML.includes("Loading OAuth configuration")));
+
   box.innerHTML = html;
 
   if (S.auth.enabled) {
@@ -462,13 +469,20 @@ function renderSecurity() {
       sessionsNeedReload = false;
       loadActiveSessions();
     }
-    loadOauthConfig();
+
+    var newOauthEl = document.getElementById("oauthSettingsBox");
+    if (preserveOauth && newOauthEl) {
+      newOauthEl.replaceWith(existingOauthEl);
+    } else {
+      loadOauthConfig();
+    }
   }
 }
 
 async function loadOauthConfig() {
   var container = document.getElementById("oauthSettingsBox");
   if (!container) return;
+  oauthEditing = false;
   try {
     const res = await fetch("/api/oauth/status");
     if (!res.ok) throw new Error("Failed");
@@ -522,6 +536,7 @@ async function unlinkOauth(provider) {
 }
 
 function linkOauthSetup(provider) {
+  oauthEditing = true;
   const container = document.getElementById("oauthSettingsBox");
   container.innerHTML = `
     <div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;">
