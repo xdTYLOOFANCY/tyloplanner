@@ -1347,7 +1347,7 @@ mark.cur{background:#f5a623;color:#1c2230}
 
 .btn-pin{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;line-height:1;transition:color 0.2s}
 .btn-pin:hover{color:var(--accent)}
-.note-pinned .btn-pin,.file-pinned .btn-pin{color:#f5c518}
+.note-pinned .btn-pin{color:#f5c518}
 .note-pinned,.file-pinned{background:var(--panel2);border-left:3px solid var(--accent)}
 .checkbox-task{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:14px}
 .checkbox-task .hcheck{flex-shrink:0}
@@ -1389,6 +1389,14 @@ dialog.modal::backdrop {
 }
 .modal-content{background:var(--panel);width:90%;max-width:400px;border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.5);border:1px solid var(--border)}
 .scope-modal .btn{width:100%;text-align:center;justify-content:center;}
+
+/* Right-click context menu */
+.ctx-menu{position:fixed;z-index:2100;min-width:170px;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:5px;display:flex;flex-direction:column}
+.ctx-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;padding:8px 12px;font-size:13px;color:var(--text);cursor:pointer;border-radius:6px;font-family:inherit}
+.ctx-item:hover{background:rgba(127,127,127,.15)}
+.ctx-item.danger{color:var(--red)}
+.ctx-icon{width:18px;text-align:center;flex-shrink:0}
+.ctx-sep{height:1px;background:var(--border);margin:4px 6px}
 
 
 @media (max-width: 640px) {
@@ -1677,40 +1685,6 @@ body.dark .drop-overlay {
   white-space: nowrap;
   color: var(--text);
 }
-.folder-card .folder-actions {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  opacity: 0;
-  display: flex;
-  gap: 4px;
-  transition: opacity 0.2s;
-}
-.folder-card:hover .folder-actions {
-  opacity: 1;
-}
-.folder-action-btn {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  border-radius: 6px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
-}
-.folder-action-btn:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.folder-action-btn.danger:hover {
-  border-color: var(--red);
-  color: var(--red);
-}
 
 /* File Toolbar */
 .file-toolbar {
@@ -1809,16 +1783,6 @@ body.dark .drop-overlay {
   color: var(--muted);
   margin-top: 2px;
 }
-.file-item .file-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.file-item:hover .file-actions {
-  opacity: 1;
-}
 
 /* Folder Explorer Headers & Breadcrumbs */
 .breadcrumbs {
@@ -1871,11 +1835,6 @@ body.dark .drop-overlay {
   animation: fadeIn 0.15s ease-out;
 }
 
-@media (max-width: 768px) {
-  .file-item .file-actions {
-    opacity: 1;
-  }
-}
 
 /* Advanced tasks styles */
 .task-card {
@@ -2038,8 +1997,9 @@ body.dark .drop-overlay {
 }
 
 .grid-stack-item-content.card {
-  height: 100%;
-  width: 100%;
+  /* No width/height override: Gridstack sizes the content via absolute
+     insets (top/right/bottom/left = margin option) — forcing 100% here
+     makes cards overflow their bottom inset and erases the vertical gap. */
   overflow: hidden;
 }
 
@@ -3321,11 +3281,6 @@ body.dark .drop-overlay {
   .file-item { flex-wrap: wrap; }
   .file-item .grow { min-width: 0; }
   .file-item .grow > div { overflow-wrap: anywhere; }
-  .file-item .file-actions {
-    flex: 0 0 100%;
-    justify-content: flex-end;
-    margin-top: 4px;
-  }
 
   /* Settings: better section layout */
   .settings-section {
@@ -4423,3 +4378,41 @@ main { view-transition-name: main-content; }
   }
 }
 
+
+/* Upload progress panel (Drive-style bottom-right card) */
+#uploadProgressPanel{position:fixed;bottom:20px;right:20px;width:320px;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.4);z-index:99;display:none;overflow:hidden}
+.upload-panel-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border);background:var(--panel2)}
+.upload-panel-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px}
+.upload-panel-close:hover{color:var(--text)}
+#uploadPanelRows{max-height:40vh;overflow-y:auto;padding:8px 14px 10px}
+.upload-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px}
+.upload-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upload-row-bar{flex:0 0 90px;height:5px;background:var(--panel2);border:1px solid var(--border);border-radius:3px;overflow:hidden}
+.upload-row-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .15s ease}
+.upload-row-pct{flex:0 0 34px;text-align:right;color:var(--muted)}
+.upload-row.done .upload-row-pct{color:#4caf7d}
+.upload-row.failed .upload-row-pct{color:#e05555}
+.upload-row.failed .upload-row-bar span{background:#e05555;width:100%}
+@media (max-width: 700px){
+  #uploadProgressPanel{bottom:calc(80px + env(safe-area-inset-bottom));right:16px}
+}
+
+/* Files grid view (thumbnail cards) */
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.file-card{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:6px;position:relative;cursor:pointer;transition:transform .2s,border-color .2s}
+.file-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.file-card.selected{border-color:var(--accent);background:color-mix(in srgb,var(--panel2) 90%,var(--accent))}
+.file-card.file-pinned{border-left:3px solid var(--accent)}
+.file-card .file-thumb{height:100px;display:flex;align-items:center;justify-content:center;background:var(--panel);border-radius:8px;overflow:hidden}
+.file-card .file-thumb-img{width:100%;height:100%;object-fit:cover}
+.file-card .file-thumb-icon{font-size:40px;line-height:1}
+.file-card .file-card-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.file-card .file-meta{font-size:11px}
+.file-card .file-card-check{position:absolute;top:6px;left:6px;z-index:2;background:var(--panel)}
+.file-card .file-card-check{opacity:0;transition:opacity .2s}
+.file-card:hover .file-card-check,.file-card .file-card-check.on{opacity:1}
+@media (max-width: 700px){
+  .files-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+  /* No hover on touch: keep controls visible */
+  .file-card .file-card-check{opacity:1}
+}

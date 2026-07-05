@@ -39,16 +39,17 @@ import {
   openNoteHistory, previewRevision, restoreSelectedRevision, closeNoteHistory,
   handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack, toggleNoteSearchBar,
   navigateToNoteFolder, createNoteFolderPrompt, renameNoteFolderPrompt, changeNoteFolderIconPrompt, deleteNoteFolderConfirm,
+  noteContextMenu, noteFolderContextMenu,
   onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
   onNoteFolderDragStart, onNoteFolderDragEnd,
   toggleNoteDownloadMenu, downloadNoteAs, downloadNoteFolder, downloadAllNotesNotebook
 } from './js/notes.js';
 import {
-  renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort,
+  renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort, setFileView,
   navigateToFolder, createFolderPrompt, renameFolderPrompt, changeFolderIconPrompt, deleteFolderConfirm,
-  previewFile, renameFilePrompt,
+  previewFile, renameFilePrompt, fileContextMenu, folderContextMenu,
   onFileDragStart, onFileDragEnd, onFolderDragOver, onFolderDragLeave, onFolderDrop,
-  toggleSelectAllFiles, onFileSelectChange, moveSelectedFilesToFolder, deleteSelectedFiles,
+  toggleSelectAllFiles, onFileSelectChange, moveSelectedFilesToFolder, deleteSelectedFiles, downloadSelectedFiles,
   clearFileSelection, handleFileSearchKeydown, fileSearchInput
 } from './js/files.js';
 import {
@@ -164,6 +165,8 @@ window.changeFolderIconPrompt = function(id, oldIcon) { changeFolderIconPrompt(i
 window.deleteFolderConfirm = function(id) { deleteFolderConfirm(id, R); };
 window.renameFilePrompt = function(id, oldName) { renameFilePrompt(id, oldName, R); };
 window.previewFile = previewFile;
+window.fileContextMenu = fileContextMenu;
+window.folderContextMenu = folderContextMenu;
 window.togglePlannerCalendarsPanel = _togglePlannerCalendarsPanel;
 window.renderPlannerCalendarsPanel = _renderPlannerCalendarsPanel;
 window.toggleCalendarType = function(id, checked) { _toggleCalendarType(id, checked); };
@@ -178,6 +181,7 @@ window.toggleSelectAllFiles = toggleSelectAllFiles;
 window.onFileSelectChange = onFileSelectChange;
 window.moveSelectedFilesToFolder = moveSelectedFilesToFolder;
 window.deleteSelectedFiles = deleteSelectedFiles;
+window.downloadSelectedFiles = downloadSelectedFiles;
 window.clearFileSelection = clearFileSelection;
 window.refreshApp = R;
 window.importData = function(ev) { importData(ev, R); };
@@ -253,6 +257,8 @@ window.editEvent = editEvent;
 window.saveShortcuts = saveShortcuts;
 window.resetShortcutsToDefault = resetShortcutsToDefault;
 window.selectNote = selectNote;
+window.noteContextMenu = noteContextMenu;
+window.noteFolderContextMenu = noteFolderContextMenu;
 window.openNote = openNote;
 window.notesGoBack = notesGoBack;
 window.toggleNoteSearchBar = toggleNoteSearchBar;
@@ -275,6 +281,7 @@ window.downloadNoteFolder = downloadNoteFolder;
 window.downloadAllNotesNotebook = downloadAllNotesNotebook;
 window.toggleFilePin = toggleFilePin;
 window.setFileSort = setFileSort;
+window.setFileView = setFileView;
 window.renderFiles = renderFiles;
 window.fileSearchInput = fileSearchInput;
 window.handleFileSearchKeydown = handleFileSearchKeydown;

@@ -41,7 +41,127 @@ export function toast(msg) {
   document.body.appendChild(t); setTimeout(function() { t.remove(); }, 2500);
 }
 
-// ---------- API ----------
+// ---------- dialogs (modal replacements for confirm()/prompt()) ----------
+function openAskDialog(bodyHtml, wire) {
+  var dlg = document.createElement("dialog");
+  dlg.className = "modal";
+  dlg.innerHTML = '<div class="modal-content" style="max-width:340px; width:90%;">' + bodyHtml + '</div>';
+  document.body.appendChild(dlg);
+  function done(cb) {
+    return function(val) { try { dlg.close(); } catch (e) {} dlg.remove(); cb(val); };
+  }
+  dlg.showModal();
+  return { dlg: dlg, done: done };
+}
+
+// Modal confirm(). Resolves true/false. opts: {title, okText, cancelText, danger}
+export function askConfirm(message, opts) {
+  opts = opts || {};
+  return new Promise(function(resolve) {
+    var d = openAskDialog(
+      '<h3 style="margin:0 0 10px; font-size:16px; font-weight:700;">' + esc(opts.title || "Are you sure?") + '</h3>' +
+      '<p style="font-size:13px; margin:0 0 16px; line-height:1.5;">' + esc(message) + '</p>' +
+      '<div style="display:flex; gap:8px; justify-content:flex-end;">' +
+        '<button class="btn ghost" data-act="cancel">' + esc(opts.cancelText || "Cancel") + '</button>' +
+        '<button class="btn' + (opts.danger ? ' danger' : '') + '" data-act="ok">' + esc(opts.okText || "OK") + '</button>' +
+      '</div>');
+    var finish = d.done(resolve);
+    d.dlg.addEventListener("click", function(ev) {
+      var act = ev.target.getAttribute && ev.target.getAttribute("data-act");
+      if (act === "ok") finish(true);
+      else if (act === "cancel" || ev.target === d.dlg) finish(false);
+    });
+    d.dlg.addEventListener("cancel", function(ev) { ev.preventDefault(); finish(false); });
+    d.dlg.querySelector('[data-act="ok"]').focus();
+  });
+}
+
+// Modal prompt(). Resolves the entered string, or null on cancel.
+// opts: {title, okText, placeholder, options:[{value,label}]} — options renders a <select>.
+export function askPrompt(message, defaultValue, opts) {
+  opts = opts || {};
+  return new Promise(function(resolve) {
+    var field;
+    if (opts.options) {
+      field = '<select data-field style="width:100%; box-sizing:border-box; margin:0 0 16px; padding:8px;">' +
+        opts.options.map(function(o) {
+          return '<option value="' + esc(o.value) + '"' + (o.value === defaultValue ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+        }).join("") + '</select>';
+    } else {
+      field = '<input data-field type="text" value="' + esc(defaultValue == null ? "" : defaultValue) + '"' +
+        (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') +
+        ' style="width:100%; box-sizing:border-box; margin:0 0 16px; padding:8px;">';
+    }
+    var d = openAskDialog(
+      '<h3 style="margin:0 0 12px; font-size:16px; font-weight:700;">' + esc(message) + '</h3>' +
+      field +
+      '<div style="display:flex; gap:8px; justify-content:flex-end;">' +
+        '<button class="btn ghost" data-act="cancel">Cancel</button>' +
+        '<button class="btn" data-act="ok">' + esc(opts.okText || "OK") + '</button>' +
+      '</div>');
+    var input = d.dlg.querySelector("[data-field]");
+    var finish = d.done(resolve);
+    function ok() { finish(input.value); }
+    d.dlg.addEventListener("click", function(ev) {
+      var act = ev.target.getAttribute && ev.target.getAttribute("data-act");
+      if (act === "ok") ok();
+      else if (act === "cancel" || ev.target === d.dlg) finish(null);
+    });
+    d.dlg.addEventListener("cancel", function(ev) { ev.preventDefault(); finish(null); });
+    input.addEventListener("keydown", function(ev) { if (ev.key === "Enter") { ev.preventDefault(); ok(); } });
+    input.focus();
+    if (input.select) input.select();
+  });
+}
+
+// ---------- context menu ----------
+var _ctxMenuEl = null;
+function _ctxOutside(e) { if (_ctxMenuEl && !_ctxMenuEl.contains(e.target)) closeContextMenu(); }
+function _ctxEsc(e) { if (e.key === "Escape") closeContextMenu(); }
+export function closeContextMenu() {
+  if (_ctxMenuEl) { _ctxMenuEl.remove(); _ctxMenuEl = null; }
+  document.removeEventListener("mousedown", _ctxOutside, true);
+  document.removeEventListener("keydown", _ctxEsc, true);
+  window.removeEventListener("scroll", closeContextMenu, true);
+  window.removeEventListener("resize", closeContextMenu);
+}
+
+// Right-click menu at the event's cursor position.
+// items: [{label, icon, danger, onClick}] or {sep:true}
+export function showContextMenu(ev, items) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  closeContextMenu();
+  var m = document.createElement("div");
+  m.className = "ctx-menu";
+  items.forEach(function(it) {
+    if (it.sep) {
+      var s = document.createElement("div");
+      s.className = "ctx-sep";
+      m.appendChild(s);
+      return;
+    }
+    var b = document.createElement("button");
+    b.className = "ctx-item" + (it.danger ? " danger" : "");
+    b.innerHTML = (it.icon ? '<span class="ctx-icon">' + esc(it.icon) + '</span>' : '') + esc(it.label);
+    b.addEventListener("click", function() { closeContextMenu(); it.onClick(); });
+    m.appendChild(b);
+  });
+  document.body.appendChild(m);
+  _ctxMenuEl = m;
+  var x = ev.clientX, y = ev.clientY;
+  if (x + m.offsetWidth > window.innerWidth - 8) x = Math.max(8, window.innerWidth - m.offsetWidth - 8);
+  if (y + m.offsetHeight > window.innerHeight - 8) y = Math.max(8, window.innerHeight - m.offsetHeight - 8);
+  m.style.left = x + "px";
+  m.style.top = y + "px";
+  setTimeout(function() {
+    document.addEventListener("mousedown", _ctxOutside, true);
+    document.addEventListener("keydown", _ctxEsc, true);
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("resize", closeContextMenu);
+  }, 0);
+}
+
 // ---------- API ----------
 function generateClientId() {
   return Math.random().toString(36).substring(2, 14);

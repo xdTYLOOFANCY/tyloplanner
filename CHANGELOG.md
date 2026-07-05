@@ -2,6 +2,51 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.14.0 — 2026-07-05
+
+- **Right-click context menus.** Files and folders in the Files tab now have a
+  right-click menu (rename, move to folder, download, pin, delete for files;
+  open, rename, change icon, delete for folders). Planner events get a Google
+  Calendar-style right-click menu with Edit, Duplicate, and Delete — in week,
+  multi-day, and month views. Notes and note folders get the same treatment
+  (open, pin, move to folder, rename, change icon, delete), and on the
+  Dashboard you can right-click a web shortcut (open, remove) or any widget
+  (settings, remove).
+- **Proper dialogs instead of browser popups.** All `prompt()`/`confirm()`
+  boxes in Files, Planner, Notes, and Dashboard are now in-app modals: folder
+  create/rename/icon, file rename, every delete confirmation, note-conflict
+  resolution (Overwrite / Reload), version restore, widget removal, and the
+  add-shortcut flow. "Move to…" opens a folder picker.
+- **Cleaner file lists.** The always-visible per-file rename/download/delete
+  buttons, the pin stars, the per-folder hover buttons, and the header's
+  rename/icon/delete buttons for the open folder are gone — those actions all
+  live in the right-click menu now (right-click a breadcrumb to act on that
+  folder). The selection checkboxes stay for bulk actions, and the selection
+  bar gained a **Download** button for mass-downloading selected files
+  alongside the existing move and delete.
+- **Bulk right-click.** With multiple files selected, right-clicking any of
+  them shows a bulk menu — download, move, or delete all selected files, or
+  clear the selection.
+
+## 1.13.3 — 2026-07-05
+
+- **Grid view with thumbnails in Files.** A new ☰/▦ toggle next to the sort
+  buttons switches between the classic list and a Drive-style card grid.
+  Image files show a real thumbnail; other types show their type icon.
+  Selection, pinning, rename/download/delete, drag-to-folder, and search all
+  work in both views, and your choice is remembered.
+- **Upload queue.** Batches now upload at most 5 files at a time; the rest
+  wait in the progress panel marked "queued" until a slot frees up.
+
+## 1.13.2 — 2026-07-05
+
+- **Upload progress panel in Files.** Uploads (button, camera, and drag-drop)
+  now show a Google Drive-style progress card in the bottom-right corner with
+  a per-file progress bar, and files upload in parallel instead of one at a
+  time. Failed files are marked in the panel (hover for the error) without
+  blocking the rest of the batch. The panel survives live-sync re-renders and
+  auto-hides a moment after everything finishes.
+
 ## 1.13.1 — 2026-07-04
 
 - **Fixed OAuth linking form collapsing mid-entry.** The Settings → Security

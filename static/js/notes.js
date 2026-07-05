@@ -1,7 +1,7 @@
 // TyloPlanner — notes module (editor, markdown, search, cross-links).
 
 import { S, safeRender } from './state.js';
-import { esc, api, z, mdToHtml } from './utils.js';
+import { esc, api, z, mdToHtml, toast, askConfirm, askPrompt, showContextMenu } from './utils.js';
 
 var currentNote = null, noteTimer = null;
 var noteBodySearch = { q: "", idx: 0 };
@@ -651,18 +651,19 @@ export function selectNote(id) {
       renderNoteList();
     }).catch(function(err) {
       if (err.message && err.message.includes("conflict")) {
-        var choice = prompt("This note was modified elsewhere. Overwrite or Reload?", "Reload");
-        if (choice && choice.toLowerCase().startsWith("o")) {
-          api("PUT", "/api/notes/" + pendingNoteId, {
-            title: pendingTitle,
-            body: pendingBody,
-            body_format: "html",
-            updated: updatedTime,
-            last_updated: Date.now() // force overwrite next time
-          });
-        } else {
-          window.refreshApp && window.refreshApp();
-        }
+        askConfirm("This note was modified elsewhere. Overwrite it with your version, or reload the newer one?", { title: "Note conflict", okText: "Overwrite", cancelText: "Reload", danger: true }).then(function(overwrite) {
+          if (overwrite) {
+            api("PUT", "/api/notes/" + pendingNoteId, {
+              title: pendingTitle,
+              body: pendingBody,
+              body_format: "html",
+              updated: updatedTime,
+              last_updated: Date.now() // force overwrite next time
+            });
+          } else {
+            window.refreshApp && window.refreshApp();
+          }
+        });
       } else {
         console.error(err);
       }
@@ -729,8 +730,8 @@ export function noteChanged() {
           statusEl.textContent = "Conflict! Modified elsewhere.";
           statusEl.className = "note-status danger";
         }
-        var choice = prompt("This note was modified elsewhere. Overwrite or Reload?", "Reload");
-        if (choice && choice.toLowerCase().startsWith("o")) {
+        var overwrite = await askConfirm("This note was modified elsewhere. Overwrite it with your version, or reload the newer one?", { title: "Note conflict", okText: "Overwrite", cancelText: "Reload", danger: true });
+        if (overwrite) {
           var updatedTime2 = Date.now();
           await api("PUT", "/api/notes/" + pendingNoteId, {
             title: pendingTitle,
@@ -766,11 +767,18 @@ export function noteChanged() {
 }
 
 export async function deleteNote(refresh) {
-  if (!confirm("Delete this note?")) return;
-  await api("DELETE", "/api/notes/" + currentNote);
-  currentNote = null;
-  localStorage.removeItem("active_note_id");
-  await refresh();
+  return deleteNoteById(currentNote, refresh);
+}
+
+export async function deleteNoteById(id, refresh) {
+  if (!id) return;
+  if (!await askConfirm("Delete this note?", { title: "Delete note", okText: "Delete", danger: true })) return;
+  await api("DELETE", "/api/notes/" + id);
+  if (currentNote === id) {
+    currentNote = null;
+    localStorage.removeItem("active_note_id");
+  }
+  await (refresh || window.refreshApp)();
 }
 
 export async function toggleNotePin(id, ev) {
@@ -1008,7 +1016,7 @@ export function previewRevision(rid) {
 
 export async function restoreSelectedRevision() {
   if (!currentNote || !selectedRevisionId) return;
-  if (!confirm("Restore this version? Your current content is saved to history first, so you can undo this.")) return;
+  if (!await askConfirm("Restore this version? Your current content is saved to history first, so you can undo this.", { title: "Restore version", okText: "Restore" })) return;
   await api("POST", "/api/notes/" + currentNote + "/revisions/" + selectedRevisionId + "/restore");
   closeNoteHistory();
   loadedNoteId = null;   // force the editor to reload the restored content
@@ -1088,7 +1096,7 @@ function renderNoteList() {
   var fHtml = "";
   folders.forEach(function(f) {
     var icon = f.icon || "📁";
-    fHtml += '<div class="list-item" style="padding:6px 10px; cursor:pointer;" draggable="true" ondragstart="onNoteFolderDragStart(event, \'' + f.id + '\')" ondragend="onNoteFolderDragEnd(event)" onclick="navigateToNoteFolder(\'' + f.id + '\')" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' +
+    fHtml += '<div class="list-item" style="padding:6px 10px; cursor:pointer;" oncontextmenu="noteFolderContextMenu(event, \'' + f.id + '\')" draggable="true" ondragstart="onNoteFolderDragStart(event, \'' + f.id + '\')" ondragend="onNoteFolderDragEnd(event)" onclick="navigateToNoteFolder(\'' + f.id + '\')" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' +
       '<span class="task-drag-handle" style="cursor:grab; color:var(--muted); margin-right:6px;">☰</span>' +
       '<span style="margin-right:8px;">' + esc(icon) + '</span>' +
       '<span style="font-weight:600;">' + esc(f.name) + '</span>' +
@@ -1141,7 +1149,7 @@ function renderNoteList() {
         highlightText((n.body || "").slice(start, end), q) + (end < (n.body || "").length ? "\u2026" : "") + '</div>';
     }
     var pinned = n.is_pinned ? 'note-pinned' : '';
-    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" data-id="' + n.id + '" onclick="selectNote(\'' + n.id + '\')" draggable="true" ondragstart="onNoteDragStart(event, \'' + n.id + '\')" ondragend="onNoteDragEnd(event)">' +
+    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" data-id="' + n.id + '" oncontextmenu="noteContextMenu(event, \'' + n.id + '\')" onclick="selectNote(\'' + n.id + '\')" draggable="true" ondragstart="onNoteDragStart(event, \'' + n.id + '\')" ondragend="onNoteDragEnd(event)">' +
       '<button class="btn-pin" onclick="toggleNotePin(\'' + n.id + '\',event)" title="' + (n.is_pinned ? 'Unpin' : 'Pin') + '">\u2605</button>' +
       '<div class="grow"><div>' + title + '</div>' + snippet +
       '<div class="muted">' + new Date(n.updated || 0).toLocaleDateString() + '</div></div></div>';
@@ -1255,11 +1263,11 @@ export function navigateToNoteFolder(id) {
 }
 
 export async function createNoteFolderPrompt(refresh) {
-  var name = prompt("Enter folder name:");
+  var name = await askPrompt("New folder", "", { okText: "Create", placeholder: "Folder name" });
   if (name === null) return;
   name = name.trim();
-  if (!name) { alert("Folder name cannot be empty."); return; }
-  
+  if (!name) { toast("Folder name cannot be empty."); return; }
+
   var actualRefresh = refresh || window.refreshApp;
   await api("POST", "/api/note_folders", {
     name: name,
@@ -1269,29 +1277,29 @@ export async function createNoteFolderPrompt(refresh) {
 }
 
 export async function renameNoteFolderPrompt(id, oldName, refresh) {
-  var name = prompt("Rename folder:", oldName);
+  var name = await askPrompt("Rename folder", oldName, { okText: "Rename" });
   if (name === null) return;
   name = name.trim();
-  if (!name) { alert("Folder name cannot be empty."); return; }
-  
+  if (!name) { toast("Folder name cannot be empty."); return; }
+
   var actualRefresh = refresh || window.refreshApp;
   await api("PUT", "/api/note_folders/" + id, { name: name });
   if (actualRefresh) await actualRefresh();
 }
 
 export async function changeNoteFolderIconPrompt(id, oldIcon, refresh) {
-  var icon = prompt("Enter an emoji or character for this folder icon:", oldIcon || "📁");
+  var icon = await askPrompt("Folder icon (emoji or character)", oldIcon || "📁", { okText: "Save" });
   if (icon === null) return;
   icon = icon.trim();
   if (!icon) icon = "📁";
-  
+
   var actualRefresh = refresh || window.refreshApp;
   await api("PUT", "/api/note_folders/" + id, { icon: icon });
   if (actualRefresh) await actualRefresh();
 }
 
 export async function deleteNoteFolderConfirm(id, refresh) {
-  if (!confirm("Delete this folder? Its contents will be moved to the parent directory.")) return;
+  if (!await askConfirm("Delete this folder? Its contents will be moved to the parent directory.", { title: "Delete folder", okText: "Delete", danger: true })) return;
   
   var actualRefresh = refresh || window.refreshApp;
   await api("DELETE", "/api/note_folders/" + id);
@@ -1303,6 +1311,46 @@ export async function deleteNoteFolderConfirm(id, refresh) {
   }
   
   if (actualRefresh) await actualRefresh();
+}
+
+// Move a note via a folder picker dialog (used by the context menu).
+export async function moveNoteDialog(id) {
+  var n = (S.notes || []).find(function(x) { return x.id === id; });
+  if (!n) return;
+  var options = [{ value: "", label: "Root" }];
+  (S.note_folders || []).forEach(function(folder) {
+    var depth = getNoteBreadcrumbs(folder.id).length - 1;
+    options.push({ value: folder.id, label: Array(depth + 1).join("  ") + folder.name });
+  });
+  var target = await askPrompt("Move “" + (n.title || "Untitled") + "” to…", n.folder_id || "", { okText: "Move", options: options });
+  if (target === null) return;
+  await api("PUT", "/api/notes/" + id, { folder_id: target || null });
+  if (window.refreshApp) await window.refreshApp();
+}
+
+// Right-click menus
+export function noteContextMenu(ev, id) {
+  var n = (S.notes || []).find(function(x) { return x.id === id; });
+  if (!n) return;
+  showContextMenu(ev, [
+    { label: "Open", icon: "📝", onClick: function() { selectNote(id); } },
+    { label: n.is_pinned ? "Unpin" : "Pin", icon: "★", onClick: function() { toggleNotePin(id, ev); } },
+    { label: "Move to…", icon: "📁", onClick: function() { moveNoteDialog(id); } },
+    { sep: true },
+    { label: "Delete", icon: "✕", danger: true, onClick: function() { deleteNoteById(id); } }
+  ]);
+}
+
+export function noteFolderContextMenu(ev, id) {
+  var folder = (S.note_folders || []).find(function(x) { return x.id === id; });
+  if (!folder) return;
+  showContextMenu(ev, [
+    { label: "Open", icon: "📂", onClick: function() { navigateToNoteFolder(id); } },
+    { label: "Rename", icon: "✏️", onClick: function() { renameNoteFolderPrompt(id, folder.name || ""); } },
+    { label: "Change icon", icon: "🏷️", onClick: function() { changeNoteFolderIconPrompt(id, folder.icon || "📁"); } },
+    { sep: true },
+    { label: "Delete", icon: "✕", danger: true, onClick: function() { deleteNoteFolderConfirm(id); } }
+  ]);
 }
 
 export function onNoteDragStart(e, noteId) {

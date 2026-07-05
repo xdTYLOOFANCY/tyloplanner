@@ -1,15 +1,116 @@
 // TyloPlanner — file storage module.
 
 import { S, safeRender } from './state.js';
-import { esc, api, toast } from './utils.js';
+import { esc, api, toast, askConfirm, askPrompt, showContextMenu } from './utils.js';
 
 var fileSort = "date";
+var fileView = localStorage.getItem("file_view") || "list";
 var activeFolderId = null;
 var selectedFileIds = [];
 var draggedFileIds = [];
 var lastFileSearchQuery = "";
 var fileSearchResults = null;
 var fileSearchTimeout = null;
+
+// UPLOAD PROGRESS PANEL
+// Lives on document.body so live-sync renderAll() can never wipe it mid-upload.
+function getUploadPanel() {
+  var panel = document.getElementById("uploadProgressPanel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "uploadProgressPanel";
+    panel.innerHTML = '<div class="upload-panel-header"><span id="uploadPanelTitle">Uploading…</span>' +
+      '<button class="upload-panel-close" onclick="document.getElementById(\'uploadProgressPanel\').style.display=\'none\'">✕</button></div>' +
+      '<div id="uploadPanelRows"></div>';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = "block";
+  return panel;
+}
+
+function uploadOneFile(file, folderId, row) {
+  return new Promise(function(resolve) {
+    var fd = new FormData();
+    fd.append("file", file);
+    if (folderId) fd.append("folder_id", folderId);
+
+    var bar = row.querySelector(".upload-row-bar span");
+    var pct = row.querySelector(".upload-row-pct");
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/files/upload");
+    xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+    xhr.upload.onprogress = function(e) {
+      if (e.lengthComputable) {
+        var p = Math.round((e.loaded / e.total) * 100);
+        bar.style.width = p + "%";
+        pct.textContent = p + "%";
+      }
+    };
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        bar.style.width = "100%";
+        row.classList.add("done");
+        pct.textContent = "✓";
+        resolve(true);
+      } else {
+        var msg = "failed";
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) {}
+        row.classList.add("failed");
+        pct.textContent = "✕";
+        row.title = msg;
+        resolve(false);
+      }
+    };
+    xhr.onerror = function() {
+      row.classList.add("failed");
+      pct.textContent = "✕";
+      row.title = "network error";
+      resolve(false);
+    };
+    xhr.send(fd);
+  });
+}
+
+async function uploadFilesWithProgress(files) {
+  var panel = getUploadPanel();
+  var rows = document.getElementById("uploadPanelRows");
+  var title = document.getElementById("uploadPanelTitle");
+  rows.innerHTML = "";
+  title.textContent = "Uploading " + files.length + " file" + (files.length > 1 ? "s" : "") + "…";
+
+  var folderId = activeFolderId;
+  var queue = [];
+  for (var i = 0; i < files.length; i++) {
+    var row = document.createElement("div");
+    row.className = "upload-row";
+    row.innerHTML = '<div class="upload-row-name">' + esc(files[i].name) + '</div>' +
+      '<div class="upload-row-bar"><span></span></div>' +
+      '<div class="upload-row-pct">queued</div>';
+    rows.appendChild(row);
+    queue.push({ file: files[i], row: row });
+  }
+
+  // Max 5 concurrent uploads; the rest wait in the queue.
+  var results = [];
+  async function worker() {
+    while (queue.length) {
+      var job = queue.shift();
+      job.row.querySelector(".upload-row-pct").textContent = "0%";
+      results.push(await uploadOneFile(job.file, folderId, job.row));
+    }
+  }
+  var workers = [];
+  for (var w = 0; w < Math.min(5, files.length); w++) workers.push(worker());
+  await Promise.all(workers);
+  var ok = results.filter(Boolean).length;
+  var failed = results.length - ok;
+  title.textContent = failed ? (ok + " uploaded, " + failed + " failed") : ("Uploaded " + ok + " file" + (ok > 1 ? "s" : ""));
+  if (!failed) {
+    setTimeout(function() { panel.style.display = "none"; }, 2500);
+    toast("Uploaded " + ok + " file" + (ok > 1 ? "s" : ""));
+  }
+  if (window.refreshApp) await window.refreshApp();
+}
 
 function fmtSize(bytes) {
   if (bytes == null) return "—";
@@ -84,19 +185,12 @@ export function renderFiles() {
       breadcrumbsHtml += '<span class="breadcrumb-separator">/</span>';
       var isLast = (idx === path.length - 1);
       var folderIcon = f.icon ? f.icon + ' ' : '';
-      breadcrumbsHtml += '<span class="breadcrumb-item' + (isLast ? ' active' : '') + '" onclick="' + (isLast ? '' : 'navigateToFolder(\'' + f.id + '\')') + '" ondragover="onFolderDragOver(event)" ondragleave="onFolderDragLeave(event)" ondrop="onFolderDrop(event, \'' + f.id + '\')">' + folderIcon + esc(f.name) + '</span>';
+      // Folder breadcrumbs are right-clickable: rename/icon/delete moved there.
+      breadcrumbsHtml += '<span class="breadcrumb-item' + (isLast ? ' active' : '') + '" oncontextmenu="folderContextMenu(event, \'' + f.id + '\')" onclick="' + (isLast ? '' : 'navigateToFolder(\'' + f.id + '\')') + '" ondragover="onFolderDragOver(event)" ondragleave="onFolderDragLeave(event)" ondrop="onFolderDrop(event, \'' + f.id + '\')">' + folderIcon + esc(f.name) + '</span>';
     });
     breadcrumbsHtml += '</div>';
-    
+
     var actionsHtml = '<div class="folder-actions-group">';
-    if (activeFolderId) {
-      var currentFolder = folders.find(function(f) { return f.id === activeFolderId; });
-      var currentFolderName = currentFolder ? currentFolder.name : "";
-      var currentFolderIcon = currentFolder ? (currentFolder.icon || "📁") : "📁";
-      actionsHtml += '<button class="btn small ghost" onclick="renameFolderPrompt(\'' + activeFolderId + '\', \'' + esc(currentFolderName).replace(/'/g, "\\'") + '\')">✏️ Rename</button>';
-      actionsHtml += '<button class="btn small ghost" onclick="changeFolderIconPrompt(\'' + activeFolderId + '\', \'' + esc(currentFolderIcon).replace(/'/g, "\\'") + '\')">🏷️ Icon</button>';
-      actionsHtml += '<button class="btn danger small" onclick="deleteFolderConfirm(\'' + activeFolderId + '\')">✕ Delete</button>';
-    }
     actionsHtml += '<button class="btn small" onclick="createFolderPrompt()">+ Folder</button>';
     actionsHtml += '<button class="btn small" onclick="document.getElementById(\'fileInput\').click()">📤 Upload</button>';
     actionsHtml += '<button class="btn small mobile-only" onclick="document.getElementById(\'cameraInput\').click()">📸 Camera</button>';
@@ -132,14 +226,9 @@ export function renderFiles() {
       folderListHtml += '<div class="folders-grid">';
       subfolders.forEach(function(f) {
         var folderIcon = f.icon || "📁";
-        folderListHtml += '<div class="folder-card" onclick="navigateToFolder(\'' + f.id + '\')" ondragover="onFolderDragOver(event)" ondragleave="onFolderDragLeave(event)" ondrop="onFolderDrop(event, \'' + f.id + '\')">' +
+        folderListHtml += '<div class="folder-card" oncontextmenu="folderContextMenu(event, \'' + f.id + '\')" onclick="navigateToFolder(\'' + f.id + '\')" ondragover="onFolderDragOver(event)" ondragleave="onFolderDragLeave(event)" ondrop="onFolderDrop(event, \'' + f.id + '\')">' +
           '<div class="folder-icon">' + esc(folderIcon) + '</div>' +
           '<div class="folder-name" title="' + esc(f.name) + '">' + esc(f.name) + '</div>' +
-          '<div class="folder-actions" onclick="event.stopPropagation();">' +
-            '<button class="folder-action-btn" onclick="renameFolderPrompt(\'' + f.id + '\', \'' + esc(f.name).replace(/'/g, "\\'") + '\')" title="Rename">✏️</button>' +
-            '<button class="folder-action-btn" onclick="changeFolderIconPrompt(\'' + f.id + '\', \'' + esc(folderIcon).replace(/'/g, "\\'") + '\')" title="Change Icon">🏷️</button>' +
-            '<button class="folder-action-btn danger" onclick="deleteFolderConfirm(\'' + f.id + '\')" title="Delete">✕</button>' +
-          '</div>' +
           '</div>';
       });
       folderListHtml += '</div>';
@@ -194,6 +283,7 @@ export function renderFiles() {
         '<div>' + selectedFileIds.length + ' file' + (selectedFileIds.length > 1 ? 's' : '') + ' selected</div>' +
         '<div style="display:flex; gap:8px; align-items:center;">' +
           '<select onchange="moveSelectedFilesToFolder(this.value); this.value=\'\';" style="padding:4px 8px; font-size:12px;">' + selectOptionsHtml + '</select>' +
+          '<button class="btn small" onclick="downloadSelectedFiles()">⬇️ Download</button>' +
           '<button class="btn danger small" onclick="deleteSelectedFiles()">✕ Delete</button>' +
           '<button class="btn ghost small" onclick="clearFileSelection()">Cancel</button>' +
         '</div>' +
@@ -238,6 +328,9 @@ export function renderFiles() {
       '</div>';
   }
 
+  if (fileView === "grid") {
+    html += '<div class="files-grid">';
+  }
   list.forEach(function(f) {
     var pinned = f.is_pinned ? 'file-pinned' : '';
     var isPreviewable = f.mimetype && (
@@ -246,7 +339,35 @@ export function renderFiles() {
       f.mimetype.startsWith("audio/") ||
       f.mimetype.startsWith("video/")
     );
-    
+
+    var isChecked = selectedFileIds.indexOf(f.id) !== -1;
+    var selectedClass = isChecked ? 'selected' : '';
+    var metaHtml = fmtSize(f.size) + ' &middot; ' + new Date(f.uploaded || 0).toLocaleDateString();
+    if (q && f.folder_id !== activeFolderId) {
+      var folderPath = getBreadcrumbs(f.folder_id);
+      var folderPathStr = folderPath.map(function(folder) { return folder.name; }).join(" / ");
+      metaHtml += ' &middot; <span class="muted">in ' + (folderPathStr ? esc(folderPathStr) : 'Root') + '</span>';
+    }
+
+    // Per-file rename/download/delete moved to the right-click context menu.
+
+    if (fileView === "grid") {
+      var thumbHtml;
+      if (f.mimetype && f.mimetype.startsWith("image/")) {
+        thumbHtml = '<img class="file-thumb-img" src="/api/files/' + f.id + '/view" loading="lazy" alt="">';
+      } else {
+        thumbHtml = '<span class="file-thumb-icon">' + getFileIcon(f.mimetype) + '</span>';
+      }
+      html += '<div class="file-card ' + pinned + ' ' + selectedClass + '" oncontextmenu="fileContextMenu(event, \'' + f.id + '\')" draggable="true" ondragstart="onFileDragStart(event, \'' + f.id + '\')" ondragend="onFileDragEnd(event)"' +
+        (isPreviewable ? ' onclick="previewFile(\'' + f.id + '\')"' : '') + '>' +
+        '<span class="hcheck file-card-check' + (isChecked ? ' on' : '') + '" onclick="event.stopPropagation(); onFileSelectChange(\'' + f.id + '\', ' + !isChecked + ')">' + (isChecked ? '✓' : '') + '</span>' +
+        '<div class="file-thumb">' + thumbHtml + '</div>' +
+        '<div class="file-card-name" title="' + esc(f.filename || "Unnamed") + '">' + esc(f.filename || "Unnamed") + '</div>' +
+        '<div class="file-meta">' + metaHtml + '</div>' +
+        '</div>';
+      return;
+    }
+
     var icon = getFileIcon(f.mimetype);
     var iconHtml = '<span style="font-size: 16px; margin-right: 6px;">' + icon + '</span>';
     var fileLinkHtml = '';
@@ -256,39 +377,28 @@ export function renderFiles() {
       fileLinkHtml = '<span style="display:flex; align-items:center; font-weight:600;">' + iconHtml + esc(f.filename || "Unnamed") + '</span>';
     }
 
-    var isChecked = selectedFileIds.indexOf(f.id) !== -1;
-    var selectedClass = isChecked ? 'selected' : '';
     var checkboxHtml = '<span class="hcheck' + (isChecked ? ' on' : '') + '" onclick="event.stopPropagation(); onFileSelectChange(\'' + f.id + '\', ' + !isChecked + ')" style="margin-right:8px;">' + (isChecked ? '✓' : '') + '</span>';
 
-    var metaHtml = fmtSize(f.size) + ' &middot; ' + new Date(f.uploaded || 0).toLocaleDateString();
-    if (q && f.folder_id !== activeFolderId) {
-      var folderPath = getBreadcrumbs(f.folder_id);
-      var folderPathStr = folderPath.map(function(folder) { return folder.name; }).join(" / ");
-      if (folderPathStr) {
-        metaHtml += ' &middot; <span class="muted">in ' + esc(folderPathStr) + '</span>';
-      } else {
-        metaHtml += ' &middot; <span class="muted">in Root</span>';
-      }
-    }
-
-    html += '<div class="list-item file-item ' + pinned + ' ' + selectedClass + '" draggable="true" ondragstart="onFileDragStart(event, \'' + f.id + '\')" ondragend="onFileDragEnd(event)">' +
+    html += '<div class="list-item file-item ' + pinned + ' ' + selectedClass + '" oncontextmenu="fileContextMenu(event, \'' + f.id + '\')" draggable="true" ondragstart="onFileDragStart(event, \'' + f.id + '\')" ondragend="onFileDragEnd(event)">' +
       checkboxHtml +
-      '<button class="btn-pin" onclick="toggleFilePin(\'' + f.id + '\',event)" title="' + (f.is_pinned ? 'Unpin' : 'Pin') + '">★</button>' +
       '<div class="grow" style="cursor:grab;">' +
       '<div>' + fileLinkHtml + '</div>' +
       '<div class="file-meta">' + metaHtml + '</div>' +
       '</div>' +
-      '<div class="file-actions" onclick="event.stopPropagation()"> ' +
-      '<button class="btn small ghost" onclick="renameFilePrompt(\'' + f.id + '\', \'' + esc(f.filename || "").replace(/'/g, "\\'") + '\')" title="Rename">✏️</button>' +
-      '<a class="btn small ghost" href="/api/files/' + f.id + '/download" style="text-decoration:none">Download</a>' +
-      '<button class="btn danger small" onclick="delFile(\'' + f.id + '\')">✕</button>' +
-      '</div>' +
       '</div>';
   });
+  if (fileView === "grid") {
+    html += '</div>';
+    if (!list.length) html = "";
+  }
   document.getElementById("fileList").innerHTML = html || (q ? '<div class="muted">No files match.</div>' : '<div class="muted">No files in this folder.</div>');
   ["date", "name", "size"].forEach(function(s) {
     var btn = document.getElementById("fileSort-" + s);
     if (btn) btn.className = "btn-sort" + (fileSort === s ? " active" : "");
+  });
+  ["list", "grid"].forEach(function(v) {
+    var btn = document.getElementById("fileView-" + v);
+    if (btn) btn.className = "btn-sort" + (fileView === v ? " active" : "");
   });
 
   // 4. Initialize Drag & Drop listeners (upload drop zone)
@@ -333,24 +443,7 @@ export function renderFiles() {
       
       var files = e.dataTransfer.files;
       if (!files || !files.length) return;
-      
-      for (var i = 0; i < files.length; i++) {
-        var fd = new FormData();
-        fd.append("file", files[i]);
-        if (activeFolderId) {
-          fd.append("folder_id", activeFolderId);
-        }
-        var r = await fetch("/api/files/upload", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
-        if (!r.ok) {
-          var err = await r.json().catch(function() { return { error: r.statusText }; });
-          alert("Upload failed: " + (err.error || "unknown error"));
-          return;
-        }
-      }
-      toast("Uploaded " + files.length + " file" + (files.length > 1 ? "s" : ""));
-      if (window.refreshApp) {
-        await window.refreshApp();
-      }
+      await uploadFilesWithProgress(files);
     });
   }
   });
@@ -359,53 +452,25 @@ export function renderFiles() {
 export async function uploadFile(refresh) {
   var input = document.getElementById("fileInput");
   var files = input.files;
-  if (!files || !files.length) { alert("Choose a file first."); return; }
-  for (var i = 0; i < files.length; i++) {
-    var fd = new FormData();
-    fd.append("file", files[i]);
-    if (activeFolderId) {
-      fd.append("folder_id", activeFolderId);
-    }
-    var r = await fetch("/api/files/upload", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
-    if (!r.ok) {
-      var e = await r.json().catch(function() { return { error: r.statusText }; });
-      alert("Upload failed: " + (e.error || "unknown error"));
-      input.value = "";
-      return;
-    }
-  }
+  if (!files || !files.length) { toast("Choose a file first."); return; }
+  var picked = Array.prototype.slice.call(files);
   input.value = "";
-  toast("Uploaded " + files.length + " file" + (files.length > 1 ? "s" : ""));
-  await refresh();
+  await uploadFilesWithProgress(picked);
 }
 
 export async function uploadCameraFile(refresh) {
   var input = document.getElementById("cameraInput");
   var files = input.files;
   if (!files || !files.length) return;
-  for (var i = 0; i < files.length; i++) {
-    var fd = new FormData();
-    fd.append("file", files[i]);
-    if (activeFolderId) {
-      fd.append("folder_id", activeFolderId);
-    }
-    var r = await fetch("/api/files/upload", { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd });
-    if (!r.ok) {
-      var e = await r.json().catch(function() { return { error: r.statusText }; });
-      alert("Upload failed: " + (e.error || "unknown error"));
-      input.value = "";
-      return;
-    }
-  }
+  var picked = Array.prototype.slice.call(files);
   input.value = "";
-  toast("Uploaded camera capture");
-  await refresh();
+  await uploadFilesWithProgress(picked);
 }
 
 export async function delFile(id, refresh) {
-  if (!confirm("Delete this file?")) return;
+  if (!await askConfirm("Delete this file?", { title: "Delete file", okText: "Delete", danger: true })) return;
   await api("DELETE", "/api/files/" + id);
-  await refresh();
+  await (refresh || window.refreshApp)();
 }
 
 export async function toggleFilePin(id, ev) {
@@ -419,6 +484,12 @@ export async function toggleFilePin(id, ev) {
 }
 
 export function setFileSort(s) { fileSort = s; renderFiles(); }
+
+export function setFileView(v) {
+  fileView = v;
+  localStorage.setItem("file_view", v);
+  renderFiles();
+}
 
 export function fileSearchInput() {
   var searchEl = document.getElementById("fileSearch");
@@ -475,11 +546,6 @@ export function handleFileSearchKeydown(e) {
         firstFileLink.click();
         return;
       }
-      var firstFileItem = fileList.querySelector(".list-item.file-item");
-      if (firstFileItem) {
-        var dlBtn = firstFileItem.querySelector("a.btn");
-        if (dlBtn) dlBtn.click();
-      }
     }
   }
 }
@@ -492,11 +558,11 @@ export function navigateToFolder(id) {
 }
 
 export async function createFolderPrompt(refresh) {
-  var name = prompt("Enter folder name:");
+  var name = await askPrompt("New folder", "", { okText: "Create", placeholder: "Folder name" });
   if (name === null) return;
   name = name.trim();
-  if (!name) { alert("Folder name cannot be empty."); return; }
-  
+  if (!name) { toast("Folder name cannot be empty."); return; }
+
   var actualRefresh = refresh || window.refreshApp;
   await api("POST", "/api/folders", {
     name: name,
@@ -506,51 +572,106 @@ export async function createFolderPrompt(refresh) {
 }
 
 export async function renameFolderPrompt(id, oldName, refresh) {
-  var name = prompt("Rename folder:", oldName);
+  var name = await askPrompt("Rename folder", oldName, { okText: "Rename" });
   if (name === null) return;
   name = name.trim();
-  if (!name) { alert("Folder name cannot be empty."); return; }
-  
+  if (!name) { toast("Folder name cannot be empty."); return; }
+
   var actualRefresh = refresh || window.refreshApp;
   await api("PUT", "/api/folders/" + id, { name: name });
   if (actualRefresh) await actualRefresh();
 }
 
 export async function changeFolderIconPrompt(id, oldIcon, refresh) {
-  var icon = prompt("Enter an emoji or character for this folder icon:", oldIcon || "📁");
+  var icon = await askPrompt("Folder icon (emoji or character)", oldIcon || "📁", { okText: "Save" });
   if (icon === null) return;
   icon = icon.trim();
   if (!icon) icon = "📁";
-  
+
   var actualRefresh = refresh || window.refreshApp;
   await api("PUT", "/api/folders/" + id, { icon: icon });
   if (actualRefresh) await actualRefresh();
 }
 
 export async function deleteFolderConfirm(id, refresh) {
-  if (!confirm("Delete this folder? Its contents will be moved to the parent directory.")) return;
-  
+  if (!await askConfirm("Delete this folder? Its contents will be moved to the parent directory.", { title: "Delete folder", okText: "Delete", danger: true })) return;
+
   var actualRefresh = refresh || window.refreshApp;
   await api("DELETE", "/api/folders/" + id);
-  
+
   if (activeFolderId === id) {
     var folders = S.folders || [];
     var folder = folders.find(function(f) { return f.id === id; });
     activeFolderId = folder ? folder.parent_id : null;
   }
-  
+
   if (actualRefresh) await actualRefresh();
 }
 
 export async function renameFilePrompt(id, oldName, refresh) {
-  var name = prompt("Rename file:", oldName);
+  var name = await askPrompt("Rename file", oldName, { okText: "Rename" });
   if (name === null) return;
   name = name.trim();
-  if (!name) { alert("Filename cannot be empty."); return; }
-  
+  if (!name) { toast("Filename cannot be empty."); return; }
+
   var actualRefresh = refresh || window.refreshApp;
   await api("PUT", "/api/files/" + id, { filename: name });
   if (actualRefresh) await actualRefresh();
+}
+
+// Move one or more files via a folder picker dialog (used by the context menu).
+export async function moveFilesDialog(ids) {
+  if (!ids.length) return;
+  var f = (S.files || []).find(function(x) { return x.id === ids[0]; });
+  var label = ids.length === 1 ? "“" + ((f && f.filename) || "file") + "”" : ids.length + " files";
+  var options = [{ value: "", label: "Root" }];
+  (S.folders || []).forEach(function(folder) {
+    var depth = getBreadcrumbs(folder.id).length - 1;
+    options.push({ value: folder.id, label: Array(depth + 1).join("  ") + folder.name });
+  });
+  var target = await askPrompt("Move " + label + " to…", (f && f.folder_id) || "", { okText: "Move", options: options });
+  if (target === null) return;
+  await api("POST", "/api/files/move", { file_ids: ids, folder_id: target || null });
+  selectedFileIds = [];
+  if (window.refreshApp) await window.refreshApp();
+}
+
+// Right-click menus
+export function fileContextMenu(ev, id) {
+  // Right-clicking one of several selected files acts on the whole selection.
+  if (selectedFileIds.length > 1 && selectedFileIds.indexOf(id) !== -1) {
+    var n = selectedFileIds.length;
+    showContextMenu(ev, [
+      { label: "Download " + n + " files", icon: "⬇️", onClick: downloadSelectedFiles },
+      { label: "Move " + n + " files to…", icon: "📁", onClick: function() { moveFilesDialog(selectedFileIds.slice()); } },
+      { label: "Clear selection", icon: "◻️", onClick: clearFileSelection },
+      { sep: true },
+      { label: "Delete " + n + " files", icon: "✕", danger: true, onClick: deleteSelectedFiles }
+    ]);
+    return;
+  }
+  var f = (S.files || []).find(function(x) { return x.id === id; });
+  if (!f) return;
+  showContextMenu(ev, [
+    { label: "Rename", icon: "✏️", onClick: function() { renameFilePrompt(id, f.filename || ""); } },
+    { label: "Move to…", icon: "📁", onClick: function() { moveFilesDialog([id]); } },
+    { label: "Download", icon: "⬇️", onClick: function() { window.location.href = "/api/files/" + id + "/download"; } },
+    { label: f.is_pinned ? "Unpin" : "Pin", icon: "★", onClick: function() { toggleFilePin(id, ev); } },
+    { sep: true },
+    { label: "Delete", icon: "✕", danger: true, onClick: function() { delFile(id); } }
+  ]);
+}
+
+export function folderContextMenu(ev, id) {
+  var folder = (S.folders || []).find(function(x) { return x.id === id; });
+  if (!folder) return;
+  showContextMenu(ev, [
+    { label: "Open", icon: "📂", onClick: function() { navigateToFolder(id); } },
+    { label: "Rename", icon: "✏️", onClick: function() { renameFolderPrompt(id, folder.name || ""); } },
+    { label: "Change icon", icon: "🏷️", onClick: function() { changeFolderIconPrompt(id, folder.icon || "📁"); } },
+    { sep: true },
+    { label: "Delete", icon: "✕", danger: true, onClick: function() { deleteFolderConfirm(id); } }
+  ]);
 }
 
 // Media Preview operations
@@ -722,8 +843,24 @@ export async function moveSelectedFilesToFolder(targetFolderId) {
   }
 }
 
+export function downloadSelectedFiles() {
+  // ponytail: sequential anchor clicks — the browser may ask once to allow
+  // multiple downloads; a server-side zip endpoint is the upgrade path.
+  selectedFileIds.forEach(function(id, i) {
+    setTimeout(function() {
+      var a = document.createElement("a");
+      a.href = "/api/files/" + id + "/download";
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, i * 400);
+  });
+  toast("Downloading " + selectedFileIds.length + " file" + (selectedFileIds.length > 1 ? "s" : "") + "…");
+}
+
 export async function deleteSelectedFiles() {
-  if (!confirm("Delete the " + selectedFileIds.length + " selected files?")) return;
+  if (!await askConfirm("Delete the " + selectedFileIds.length + " selected files?", { title: "Delete files", okText: "Delete", danger: true })) return;
   for (var i = 0; i < selectedFileIds.length; i++) {
     var id = selectedFileIds[i];
     await api("DELETE", "/api/files/" + id);

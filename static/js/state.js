@@ -55,6 +55,9 @@ const INACTIVE_INTERVAL = 30000;
 
 async function checkVersion() {
   if (!navigator.onLine) return;
+  // A re-render restores scrollTop, which fires a scroll event that would
+  // close an open right-click menu — defer the sync until it's closed.
+  if (document.querySelector(".ctx-menu")) return;
   try {
     const res = await api("GET", "/api/state-version");
     if (res && res.version !== undefined && res.version !== currentVersion) {

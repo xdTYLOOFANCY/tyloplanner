@@ -1,5 +1,5 @@
 import { S, SET, safeRender } from './state.js';
-import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce } from './utils.js';
+import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce, askConfirm, showContextMenu } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 
@@ -407,6 +407,7 @@ function isMobileViewport() {
 
 export function renderPlanner() {
   if (isDragCreating) return;
+  initPlannerContextMenu();
   safeRender("planner", () => {
     isRendering = true;
   lastRenderToday = todayStr();
@@ -475,7 +476,7 @@ export function renderPlanner() {
         var isCont = isMulti && e._multiRole !== 'start';
         var tstr = (e.start && !isCont) ? e.start + ' ' : '';
         var mcls = isMulti ? ' multi multi-' + e._multiRole : '';
-        html += '<div class="month-event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + mcls + '" data-occ="' + (e._occDate || e.virtualDate || e.date) + '" style="' + eventColorStyle(e) + '" onclick="showEventPopover(\'' + e.id + '\', this)">' + esc(tstr + e.title) + rep + '</div>';
+        html += '<div class="month-event ' + esc(e.source && e.source.startsWith("ics") ? e.source : e.type) + mcls + '" data-id="' + e.id + '" data-occ="' + (e._occDate || e.virtualDate || e.date) + '" style="' + eventColorStyle(e) + '" onclick="showEventPopover(\'' + e.id + '\', this)">' + esc(tstr + e.title) + rep + '</div>';
       });
       if (moreCount > 0) {
         html += '<div class="month-more" onclick="showDayPopover(\'' + iso + '\', this)">+' + moreCount + ' more</div>';
@@ -1877,8 +1878,8 @@ export function saveShortcuts() {
   window.dispatchEvent(new CustomEvent('close-shortcuts-modal'));
 }
 
-export function resetShortcutsToDefault() {
-  if (confirm("Reset all shortcuts to defaults?")) {
+export async function resetShortcutsToDefault() {
+  if (await askConfirm("Reset all shortcuts to defaults?", { okText: "Reset" })) {
     shortcuts = Object.assign({}, defaultShortcuts);
     try {
       localStorage.removeItem('tylo_shortcuts');
@@ -2270,6 +2271,29 @@ function recurrenceLabel(e) {
   return base;
 }
 
+// Google Calendar-style right-click menu on events. Delegated on the tab so it
+// survives every re-render; set up once from renderPlanner().
+export function initPlannerContextMenu() {
+  var tab = document.getElementById('tab-planner');
+  if (!tab || tab.dataset.ctxInitialized) return;
+  tab.dataset.ctxInitialized = 'true';
+  tab.addEventListener('contextmenu', function (ev) {
+    var el = ev.target.closest && ev.target.closest('.event[data-id], .month-event[data-id]');
+    if (!el) return;
+    var id = el.getAttribute('data-id');
+    var e = S.events.find(function (x) { return x.id === id; });
+    if (!e) return;
+    var occ = el.getAttribute('data-occ') || e.date;
+    closeEventPopover();
+    showContextMenu(ev, [
+      { label: 'Edit', icon: '✏️', onClick: function () { editEvent(id, occ); } },
+      { label: 'Duplicate', icon: '📋', onClick: function () { duplicateEvent(id); } },
+      { sep: true },
+      { label: 'Delete', icon: '✕', danger: true, onClick: function () { deleteEventById(id, occ); } }
+    ]);
+  });
+}
+
 export function showEventPopover(id, anchorEl) {
   if (isResizing || justTouchDragged) return;
   var e = S.events.find(function (x) { return x.id === id; });
@@ -2368,7 +2392,7 @@ export async function deleteEventById(id, occDate) {
     await applyRecurringDelete(scope, e, occDate || e.date);
     return;
   }
-  if (!confirm('Delete this event?')) return;
+  if (!await askConfirm('Delete this event?', { title: 'Delete event', okText: 'Delete', danger: true })) return;
   try {
     await api('DELETE', '/api/events/' + id);
     if (plannerRefresh) await plannerRefresh();

@@ -1,7 +1,7 @@
 // TyloPlanner — dashboard module.
 
 import { S, habitSet, SET, PRESETS, safeRender } from './state.js';
-import { todayStr, fmtShort, esc, daysUntil, api, z, MONTHS, mdToHtml } from './utils.js';
+import { todayStr, fmtShort, esc, daysUntil, api, z, MONTHS, mdToHtml, askConfirm, askPrompt, showContextMenu } from './utils.js';
 import { examBadge } from './exams.js';
 import { streak } from './habits.js';
 import { weekTotals } from './workouts.js';
@@ -367,7 +367,7 @@ function renderShortcutsWidget(id) {
       try { domain = new URL(s.url).hostname; } catch(e){}
       var icon = s.icon || ("https://www.google.com/s2/favicons?domain=" + domain + "&sz=64");
       
-      html += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn" style="width:70px; height:70px; gap:4px; margin:0;">' +
+      html += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn" oncontextmenu="shortcutContextMenu(event, \'' + s.id + '\')" style="width:70px; height:70px; gap:4px; margin:0;">' +
               '<img src="' + esc(icon) + '" alt="" style="width:28px; height:28px;">' +
               '<div class="name" style="font-size:10px;">' + esc(s.name) + '</div>' +
               '</a>';
@@ -875,8 +875,43 @@ window.closeWidgetSettingsModal = function() {
   if (el) el.remove();
 };
 
-window.deleteWidgetInstance = function(id) {
-  if (confirm("Are you sure you want to remove this widget?")) {
+window.shortcutContextMenu = function(ev, id) {
+  var s = (S.shortcuts || []).find(function(x) { return x.id === id; });
+  if (!s) return;
+  showContextMenu(ev, [
+    { label: "Open", icon: "🔗", onClick: function() { window.open(s.url, "_blank"); } },
+    { sep: true },
+    { label: "Remove", icon: "✕", danger: true, onClick: async function() {
+      if (!await askConfirm("Remove the “" + (s.name || s.url) + "” shortcut?", { title: "Remove shortcut", okText: "Remove", danger: true })) return;
+      await api("DELETE", "/api/shortcuts/" + id);
+      if (window.refreshApp) await window.refreshApp();
+    } }
+  ]);
+};
+
+// Right-click a widget card → settings/remove (delegated; skips text inputs
+// and links so their native menus / own handlers still work).
+export function initDashboardContextMenu() {
+  var tab = document.getElementById("tab-dashboard");
+  if (!tab || tab.dataset.ctxInitialized) return;
+  tab.dataset.ctxInitialized = "true";
+  tab.addEventListener("contextmenu", function(ev) {
+    var t = ev.target;
+    if (t.closest && (t.closest("a, input, textarea, select") || t.isContentEditable)) return;
+    var card = t.closest && t.closest(".grid-stack-item-content.card[data-id], .card[data-id]");
+    if (!card) return;
+    var id = card.getAttribute("data-id");
+    if (!currentLayout.some(function(x) { return x.id === id; })) return;
+    showContextMenu(ev, [
+      { label: "Widget settings…", icon: "⚙️", onClick: function() { window.openWidgetSettings(ev, id); } },
+      { sep: true },
+      { label: "Remove widget", icon: "✕", danger: true, onClick: function() { window.deleteWidgetInstance(id); } }
+    ]);
+  });
+}
+
+window.deleteWidgetInstance = async function(id) {
+  if (await askConfirm("Are you sure you want to remove this widget?", { title: "Remove widget", okText: "Remove", danger: true })) {
     currentLayout = currentLayout.filter(x => x.id !== id);
     delete widgetsData[id];
     saveWidgetsData();
@@ -1183,6 +1218,7 @@ window.dragWidgetEnd = function(e) {
 
 export function renderDashboard(force) {
   safeRender("dashboard", () => {
+    initDashboardContextMenu();
     var now = new Date(), hr = now.getHours();
     var g = hr < 6 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
     var greetEl = document.getElementById("greeting");
@@ -1283,7 +1319,7 @@ export function renderDashboard(force) {
         try { domain = new URL(s.url).hostname; } catch(e){}
         var icon = s.icon || ("https://www.google.com/s2/favicons?domain=" + domain + "&sz=64");
         
-        shortcutHtml += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn">' +
+        shortcutHtml += '<a href="' + esc(s.url) + '" target="_blank" class="shortcut-btn" oncontextmenu="shortcutContextMenu(event, \'' + s.id + '\')">' +
                 '<img src="' + esc(icon) + '" alt="">' +
                 '<div class="name">' + esc(s.name) + '</div>' +
                 '</a>';
@@ -1308,10 +1344,11 @@ export function renderDashboard(force) {
 }
 
 export async function addShortcut(refresh) {
-  var url = prompt("Enter website URL (e.g. https://github.com):");
+  var url = await askPrompt("Website URL", "", { okText: "Next", placeholder: "e.g. https://github.com" });
   if (!url) return;
   if (!url.startsWith('http')) url = 'https://' + url;
-  var name = prompt("Enter shortcut name:");
+  var name = await askPrompt("Shortcut name", "", { okText: "Add", placeholder: "Leave empty to use the domain" });
+  if (name === null) return;
   if (!name) {
     try {
       name = new URL(url).hostname.replace(/^www\./, '');
