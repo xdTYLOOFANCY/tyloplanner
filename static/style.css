@@ -764,14 +764,20 @@ table.habits th:first-child,table.habits td:first-child{text-align:left}
 /* grades table */
 table.grades{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed}
 table.grades th,table.grades td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--border)}
-table.grades input{width:70px;padding:5px 7px}
-/* percentage widths keep columns proportional at any screen size */
-table.grades th:nth-child(1),table.grades td:nth-child(1){width:52%}
+table.grades input{width:100%;max-width:72px;box-sizing:border-box;padding:5px 7px}
+/* percentage widths keep columns proportional at any screen size
+   (8 cols: name, date, badge, year, ects, tags, grade, delete) */
+table.grades th:nth-child(1),table.grades td:nth-child(1){width:33%}
 table.grades th:nth-child(2),table.grades td:nth-child(2){width:13%}
 table.grades th:nth-child(3),table.grades td:nth-child(3){width:7%;text-align:center}
 table.grades th:nth-child(4),table.grades td:nth-child(4){width:8%}
-table.grades th:nth-child(5),table.grades td:nth-child(5){width:9%}
-table.grades th:nth-child(6),table.grades td:nth-child(6){width:4%}
+table.grades th:nth-child(5),table.grades td:nth-child(5){width:7%}
+table.grades th:nth-child(6),table.grades td:nth-child(6){width:17%}
+table.grades th:nth-child(7),table.grades td:nth-child(7){width:10%}
+table.grades th:nth-child(8),table.grades td:nth-child(8){width:5%}
+/* fixed layout caps the table at container width, so give it a floor on
+   phones and let the overflow-x wrapper scroll */
+@media(max-width:640px){table.grades{min-width:640px}}
 .exam-name-cell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* exam analytics card */
@@ -829,10 +835,31 @@ table.grades th:nth-child(6),table.grades td:nth-child(6){width:4%}
 .exam-name-cell:hover,.exam-date-cell:hover,.exam-ects-cell:hover{color:var(--accent)}
 table.grades .exam-del{opacity:0;transition:opacity .15s}
 table.grades tr:hover .exam-del{opacity:1}
-.grade-input{width:72px;padding:4px 6px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px}
+.grade-input{width:100%;max-width:72px;box-sizing:border-box;padding:4px 6px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px}
 .grade-input:focus{border-color:var(--accent);outline:none}
 .grade-badge-preview{display:none}
 .inline-input{background:var(--card);border:1px solid var(--accent);border-radius:5px;color:var(--text);padding:3px 7px;font-size:13px;outline:none}
+.exam-year-cell{white-space:nowrap;cursor:text}
+.exam-year-cell:hover{color:var(--accent)}
+.exam-tags-cell{cursor:pointer;max-width:180px}
+.exam-tags-cell:hover{color:var(--accent)}
+
+/* exam trackers + tags */
+.exam-toolbar{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.exam-pill-row{display:flex;flex-wrap:wrap;gap:6px}
+.exam-pill-row:empty{display:none}
+.exam-pill{padding:5px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;cursor:pointer}
+.exam-pill:hover{border-color:var(--accent)}
+.exam-pill.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.exam-pill.add{color:var(--muted);padding:5px 10px}
+.exam-tag{padding:2px 10px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer}
+.exam-tag:hover{border-color:var(--accent);color:var(--text)}
+.exam-tag.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.exam-tag.mini{display:inline-block;margin-right:4px;cursor:inherit}
+.tagpick-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.tagpick-row{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.tagpick-del{margin-left:auto;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px}
+.tagpick-del:hover{color:#ff5c5c;background:var(--card)}
 
 /* notes */
 .noteslayout{display:grid;grid-template-columns:260px 1fr;gap:16px}
@@ -842,6 +869,10 @@ table.grades tr:hover .exam-del{opacity:1}
 @media(max-width:760px){.noteslayout{grid-template-columns:1fr}}
 .notelist .list-item{cursor:pointer}
 .notelist .list-item.sel{outline:1px solid var(--accent)}
+.notelist .note-tree-folder{gap:4px;margin-bottom:2px;background:transparent}
+.notelist .note-tree-folder:hover{background:var(--panel2)}
+.tree-chevron{background:none;border:0;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:11px;width:18px;flex:none;line-height:1}
+.tree-chevron:hover{color:var(--text)}
 .note-split-pane {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1412,8 +1443,7 @@ dialog.modal::backdrop {
 
   main {
     padding: 14px 12px;
-    /* Clearance for the floating action button (no bottom nav anymore) */
-    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
 
   h2.pagetitle {
@@ -2983,106 +3013,7 @@ body.dark .drop-overlay {
   min-width: 150px;
 }
 
-/* Floating Action Button (FAB) Styles */
-.fab-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 90;
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: flex-end;
-  gap: 12px;
-}
 
-@media (max-width: 640px) {
-  .fab-container {
-    bottom: calc(20px + env(safe-area-inset-bottom));
-  }
-}
-
-/* Hide FAB on desktop version to prevent affecting desktop layout */
-@media (min-width: 641px) {
-  .fab-container {
-    display: none !important;
-  }
-}
-
-.fab-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.fab-btn:hover {
-  transform: scale(1.08);
-  background: color-mix(in srgb, var(--accent) 85%, #fff);
-}
-
-.fab-btn:active {
-  transform: scale(0.95);
-}
-
-.fab-icon {
-  font-size: 24px;
-  font-weight: bold;
-  line-height: 1;
-  transition: transform 0.2s ease;
-}
-
-/* FAB Menu / Speed Dial */
-.fab-menu {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  opacity: 0;
-  transform: translateY(10px) scale(0.9);
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.fab-menu.open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
-.fab-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 8px 14px;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  transition: transform 0.15s ease, background-color 0.15s;
-  white-space: nowrap;
-}
-
-.fab-menu-item:hover {
-  background: var(--panel2);
-  transform: scale(1.05);
-}
-
-.fab-menu-item .item-icon {
-  font-size: 16px;
-}
 
 /* Swipe gestures background reveal */
 .swipe-bg {
@@ -3352,8 +3283,7 @@ body.dark .drop-overlay {
   #noteEditor .note-split-pane { grid-template-columns: 1fr !important; }
   #noteEditor .note-toolbar .note-control-grid { display: none; } /* hide split toggle */
 
-  /* Hide the floating + button while a note is open (it overlapped the text) */
-  body.note-open #globalFab { display: none !important; }
+
 
   /* Subtasks container: less indent */
   .subtasks-container {
@@ -4416,3 +4346,6 @@ main { view-transition-name: main-content; }
   /* No hover on touch: keep controls visible */
   .file-card .file-card-check{opacity:1}
 }
+
+/* Export/import archive category checkboxes (Settings → Data) */
+#archiveCats label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}

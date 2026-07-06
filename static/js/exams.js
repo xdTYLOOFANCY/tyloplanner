@@ -1,7 +1,203 @@
 // TyloPlanner — exams & grades module.
 
 import { S, SET, safeRender } from './state.js';
-import { esc, api, daysUntil, todayStr } from './utils.js';
+import { esc, api, daysUntil, todayStr, askConfirm, askPrompt, showContextMenu } from './utils.js';
+
+// ---- trackers (studies/programmes; stored as JSON in setting exam_trackers) ----
+
+function trackers() {
+  var t = [];
+  try { t = JSON.parse(SET.exam_trackers || '[]') || []; } catch (e) {}
+  if (!t.length) {
+    // ponytail: implicit default tracker until the user creates one; inherits legacy ects_goal
+    t = [{ id: 'main', name: 'Main', goal: parseFloat(SET.ects_goal) || 0 }];
+  }
+  return t;
+}
+
+function selTrackerId() {
+  var t = trackers();
+  var sel = localStorage.getItem('examTrackerSel');
+  for (var i = 0; i < t.length; i++) if (t[i].id === sel) return sel;
+  return t[0].id;
+}
+
+// Exams with a null/unknown tracker_id belong to the first tracker.
+function trackerOf(e, list) {
+  for (var i = 0; i < list.length; i++) if (list[i].id === e.tracker_id) return e.tracker_id;
+  return list[0].id;
+}
+
+async function saveTrackers(t, refresh) {
+  await api('POST', '/api/settings', { exam_trackers: JSON.stringify(t) });
+  if (refresh) await refresh();
+}
+
+export async function addTracker(refresh) {
+  var name = await askPrompt('New tracker (e.g. Minor, Master)', '', { okText: 'Add' });
+  if (!name || !name.trim()) return;
+  var t = trackers();
+  var id = Math.random().toString(36).slice(2, 10);
+  t.push({ id: id, name: name.trim(), goal: 0 });
+  localStorage.setItem('examTrackerSel', id);
+  await saveTrackers(t, refresh);
+}
+
+export function selectTracker(id, refresh) {
+  localStorage.setItem('examTrackerSel', id);
+  renderExams(refresh);
+}
+
+export function trackerMenu(ev, id, refresh) {
+  var t = trackers();
+  var tr = t.filter(function(x) { return x.id === id; })[0];
+  if (!tr) return;
+  showContextMenu(ev, [
+    { label: 'Rename', icon: '✏️', onClick: async function() {
+        var name = await askPrompt('Rename tracker', tr.name, { okText: 'Save' });
+        if (!name || !name.trim()) return;
+        tr.name = name.trim();
+        await saveTrackers(t, refresh);
+      } },
+    { label: 'Delete', icon: '🗑', danger: true, onClick: async function() {
+        if (t.length < 2) { alert('You need at least one tracker.'); return; }
+        var ok = await askConfirm('Delete "' + tr.name + '"? Its exams move to the first tracker.', { danger: true, okText: 'Delete' });
+        if (!ok) return;
+        var rest = t.filter(function(x) { return x.id !== id; });
+        // ponytail: one PUT per exam; fine at personal-app scale
+        var moves = S.exams.filter(function(e) { return trackerOf(e, t) === id; });
+        for (var i = 0; i < moves.length; i++) {
+          await api('PUT', '/api/exams/' + moves[i].id, { tracker_id: rest[0].id });
+        }
+        if (localStorage.getItem('examTrackerSel') === id) localStorage.setItem('examTrackerSel', rest[0].id);
+        await saveTrackers(rest, refresh);
+      } },
+  ]);
+}
+
+// ---- custom tags (global list in setting exam_tags; per-exam CSV in exams.tags) ----
+
+function allTags() {
+  try { return JSON.parse(SET.exam_tags || '[]') || []; } catch (e) { return []; }
+}
+
+function examTagList(e) {
+  return e.tags ? e.tags.split(',').filter(Boolean) : [];
+}
+
+var tagFilter = null; // active tag filter, not persisted
+
+export function toggleTagFilter(tag, refresh) {
+  tagFilter = tagFilter === tag ? null : tag;
+  renderExams(refresh);
+}
+
+export function tagMenu(ev, tag, refresh) {
+  showContextMenu(ev, [
+    { label: 'Rename', icon: '✏️', onClick: async function() {
+        var name = await askPrompt('Rename tag', tag, { okText: 'Save' });
+        if (!name || !name.trim() || name === tag) return;
+        name = name.trim().replace(/,/g, '');
+        var tags = allTags().map(function(x) { return x === tag ? name : x; });
+        for (var i = 0; i < S.exams.length; i++) {
+          var e = S.exams[i], list = examTagList(e);
+          var idx = list.indexOf(tag);
+          if (idx !== -1) { list[idx] = name; await api('PUT', '/api/exams/' + e.id, { tags: list.join(',') }); }
+        }
+        if (tagFilter === tag) tagFilter = name;
+        await api('POST', '/api/settings', { exam_tags: JSON.stringify(tags) });
+        await refresh();
+      } },
+    { label: 'Delete', icon: '🗑', danger: true, onClick: function() { deleteTag(tag, refresh); } },
+  ]);
+}
+
+// Delete a tag globally: from the tag list and from every exam that has it.
+async function deleteTag(tag, refresh) {
+  var ok = await askConfirm('Delete tag "' + tag + '"? It is removed from all exams.', { danger: true, okText: 'Delete' });
+  if (!ok) return false;
+  for (var i = 0; i < S.exams.length; i++) {
+    var e = S.exams[i], list = examTagList(e);
+    if (list.indexOf(tag) !== -1) {
+      await api('PUT', '/api/exams/' + e.id, { tags: list.filter(function(x) { return x !== tag; }).join(',') || null });
+    }
+  }
+  if (tagFilter === tag) tagFilter = null;
+  await api('POST', '/api/settings', { exam_tags: JSON.stringify(allTags().filter(function(x) { return x !== tag; })) });
+  await refresh();
+  return true;
+}
+
+// Checkbox dialog to assign tags to one exam (and create new tags inline).
+export function editExamTags(id, refresh) {
+  var e = S.exams.filter(function(x) { return x.id === id; })[0];
+  if (!e) return;
+  var current = examTagList(e);
+  var tags = allTags();
+  var dlg = document.createElement('dialog');
+  dlg.className = 'modal';
+  var boxes = tags.map(function(t) {
+    return '<label class="tagpick-row"><input type="checkbox" value="' + esc(t) + '"' +
+      (current.indexOf(t) !== -1 ? ' checked' : '') + '> ' + esc(t) +
+      '<button type="button" class="tagpick-del" data-del="' + esc(t) + '" title="Delete tag everywhere">✕</button></label>';
+  }).join('');
+  dlg.innerHTML = '<div class="modal-content" style="max-width:340px;width:90%">' +
+    '<h3 style="margin:0 0 12px;font-size:16px;font-weight:700">Tags — ' + esc(e.name) + '</h3>' +
+    '<div class="tagpick-list">' + (boxes || '<span class="muted" style="font-size:13px">No tags yet — create one below.</span>') + '</div>' +
+    '<input data-newtag placeholder="New tag (e.g. exam, practical, essay)" style="width:100%;box-sizing:border-box;margin:10px 0 16px;padding:8px">' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="btn ghost" data-act="cancel">Cancel</button>' +
+      '<button class="btn" data-act="ok">Save</button>' +
+    '</div></div>';
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  function close() { try { dlg.close(); } catch (err) {} dlg.remove(); }
+  async function save() {
+    var picked = Array.prototype.map.call(dlg.querySelectorAll('input[type=checkbox]:checked'), function(c) { return c.value; });
+    var nt = dlg.querySelector('[data-newtag]').value.trim().replace(/,/g, '');
+    if (nt) {
+      if (tags.indexOf(nt) === -1) await api('POST', '/api/settings', { exam_tags: JSON.stringify(tags.concat([nt])) });
+      if (picked.indexOf(nt) === -1) picked.push(nt);
+    }
+    close();
+    await api('PUT', '/api/exams/' + id, { tags: picked.join(',') || null });
+    await refresh();
+  }
+  dlg.addEventListener('click', function(ev) {
+    var del = ev.target.getAttribute && ev.target.getAttribute('data-del');
+    if (del) {
+      // close first — the dialog's tag list is stale once the tag is gone
+      ev.preventDefault();
+      close();
+      deleteTag(del, refresh);
+      return;
+    }
+    var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
+    if (act === 'ok') save();
+    else if (act === 'cancel' || ev.target === dlg) close();
+  });
+  dlg.querySelector('[data-newtag]').addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); save(); }
+  });
+}
+
+// ---- academic year (stored as start year, e.g. "2025" = 2025-2026) ----
+
+function guessAY(dateStr) {
+  var yr = parseInt(dateStr.slice(0, 4)), mo = parseInt(dateStr.slice(5, 7));
+  return String(mo >= 9 ? yr : yr - 1);
+}
+
+function examAY(e) {
+  if (e.academic_year) return String(e.academic_year);
+  return e.date ? guessAY(e.date) : '';
+}
+
+function ayLabel(ay) {
+  var y = parseInt(ay);
+  if (isNaN(y)) return '';
+  return "'" + String(y % 100).padStart(2, '0') + '-' + String((y + 1) % 100).padStart(2, '0');
+}
 
 // ---- grade helpers ----
 
@@ -63,7 +259,7 @@ export async function addExam(refresh) {
   var d    = document.getElementById('examDate').value;
   var ects = parseFloat(document.getElementById('examEcts').value) || null;
   if (!n || !d) { alert('Name and date required.'); return; }
-  await api('POST', '/api/exams', { name: n, date: d, ects: ects });
+  await api('POST', '/api/exams', { name: n, date: d, ects: ects, tracker_id: selTrackerId(), academic_year: guessAY(d) });
   document.getElementById('examName').value = '';
   document.getElementById('examDate').value = '';
   document.getElementById('examEcts').value = '';
@@ -90,17 +286,21 @@ export async function setGrade(id, val, refresh) {
 function startInlineEdit(el, id, field, currentVal, refresh) {
   if (el.querySelector('input')) return;
   var input = document.createElement('input');
-  input.type = field === 'date' ? 'date' : (field === 'ects' ? 'number' : 'text');
+  input.type = field === 'date' ? 'date' : (field === 'ects' || field === 'academic_year' ? 'number' : 'text');
   input.className = 'inline-input';
   input.value = currentVal != null ? currentVal : '';
   if (field === 'ects') { input.step = '0.5'; input.min = '0'; input.style.width = '58px'; }
+  else if (field === 'academic_year') { input.step = '1'; input.min = '2000'; input.placeholder = 'start yr'; input.style.width = '72px'; }
   else if (field === 'date') input.style.width = '130px';
   else input.style.width = '180px';
 
+  var cancelled = false;
   async function save() {
+    if (cancelled) return;
     var val = input.value;
     var payload = {};
     if (field === 'ects') payload.ects = val === '' ? null : parseFloat(val);
+    else if (field === 'academic_year') payload.academic_year = val === '' ? null : String(parseInt(val));
     else payload[field] = val;
     await api('PUT', '/api/exams/' + id, payload);
     await refresh();
@@ -108,7 +308,13 @@ function startInlineEdit(el, id, field, currentVal, refresh) {
   input.addEventListener('blur', save);
   input.addEventListener('keydown', function(ev) {
     if (ev.key === 'Enter') input.blur();
-    if (ev.key === 'Escape') refresh();
+    if (ev.key === 'Escape') {
+      // the focus guard skips re-render while the input has focus, so
+      // restore the cell directly and make sure blur doesn't commit
+      cancelled = true;
+      input.blur();
+      refresh();
+    }
   });
   el.innerHTML = '';
   el.appendChild(input);
@@ -116,10 +322,11 @@ function startInlineEdit(el, id, field, currentVal, refresh) {
   if (input.select) input.select();
 }
 
-// ---- ECTS goal ----
+// ---- ECTS goal (per tracker) ----
 export async function saveEctsGoal(val, refresh) {
-  await api('POST', '/api/settings', { ects_goal: val === '' ? '' : String(parseFloat(val) || '') });
-  if (refresh) await refresh();
+  var t = trackers(), id = selTrackerId();
+  t.forEach(function(x) { if (x.id === id) x.goal = parseFloat(val) || 0; });
+  await saveTrackers(t, refresh);
 }
 
 // ---- analytics helpers ----
@@ -216,11 +423,8 @@ function upcomingHtml(exams, today) {
 function byYearHtml(exams) {
   var byYear = {};
   exams.forEach(function(e) {
-    if (!e.date) return;
-    var yr = parseInt(e.date.slice(0, 4));
-    var mo = parseInt(e.date.slice(5, 7));
-    var ay = mo >= 9 ? yr : yr - 1;
-    var key = ay;
+    var key = examAY(e);
+    if (!key) return;
     if (!byYear[key]) byYear[key] = { earned: 0, total: 0 };
     byYear[key].total += (e.ects || 0);
     var v = gradeVal(e);
@@ -241,7 +445,7 @@ function byYearHtml(exams) {
   var maxTotal = Math.max.apply(null, keys.map(function(k) { return byYear[k].total; })) || 1;
   return keys.map(function(k) {
     var y = byYear[k];
-    var label = "'" + String(parseInt(k) % 100).padStart(2,'0') + '-' + String((parseInt(k)+1) % 100).padStart(2,'0');
+    var label = ayLabel(k);
     var tPct = Math.round(y.total / maxTotal * 100);
     var ePct = y.total > 0 ? Math.round(y.earned / maxTotal * 100) : 0;
     return '<div class="year-bar-row">' +
@@ -294,19 +498,51 @@ function renderAnalytics(exams, ectsGoal) {
 
 // ---- main render ----
 export function renderExams(refresh) {
-  // Don't blow away a grade/date/name input the user is actively editing in the table
+  // Don't blow away an input the user is actively editing: grade/date/name in
+  // the table or the ECTS goal field in analytics. The add form is excluded on
+  // purpose — Enter-to-add must still show the new row.
   var examTable = document.getElementById('examTable');
+  var analytics = document.getElementById('examAnalytics');
   var active = document.activeElement;
   if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT') &&
-      examTable && examTable.contains(active)) {
+      ((examTable && examTable.contains(active)) || (analytics && analytics.contains(active)))) {
     return;
   }
 
   safeRender('exams', function() {
-    var goal = SET && SET.ects_goal ? SET.ects_goal : '';
+    var tlist = trackers();
+    var tid = selTrackerId();
+    var tracker = tlist.filter(function(x) { return x.id === tid; })[0] || tlist[0];
     var today = todayStr();
 
-    var list = S.exams.slice().sort(function(a, b) {
+    // tracker pills
+    var trackersEl = document.getElementById('examTrackers');
+    if (trackersEl) {
+      trackersEl.innerHTML = tlist.map(function(t) {
+        return '<button class="exam-pill' + (t.id === tid ? ' active' : '') + '" ' +
+          'onclick="examSelectTracker(\'' + esc(t.id) + '\')" ' +
+          'oncontextmenu="examTrackerMenu(event,\'' + esc(t.id) + '\')">' + esc(t.name) + '</button>';
+      }).join('') + '<button class="exam-pill add" onclick="examAddTracker()" title="Add tracker">＋</button>';
+    }
+
+    var mine = S.exams.filter(function(e) { return trackerOf(e, tlist) === tid; });
+
+    // tag filter bar
+    var tagBarEl = document.getElementById('examTagBar');
+    if (tagBarEl) {
+      var tags = allTags();
+      tagBarEl.innerHTML = tags.length
+        ? tags.map(function(t) {
+            return '<button class="exam-tag' + (tagFilter === t ? ' active' : '') + '" ' +
+              'onclick="examToggleTagFilter(\'' + esc(t.replace(/'/g, "\\'")) + '\')" ' +
+              'oncontextmenu="examTagMenu(event,\'' + esc(t.replace(/'/g, "\\'")) + '\')">' + esc(t) + '</button>';
+          }).join('')
+        : '';
+    }
+
+    var list = mine.slice();
+    if (tagFilter) list = list.filter(function(e) { return examTagList(e).indexOf(tagFilter) !== -1; });
+    list.sort(function(a, b) {
       var af = a.date >= today, bf = b.date >= today;
       if (af && bf) return a.date.localeCompare(b.date);   // future: soonest first
       if (!af && !bf) return b.date.localeCompare(a.date); // past: newest first
@@ -314,9 +550,9 @@ export function renderExams(refresh) {
     });
 
     var analyticsEl = document.getElementById('examAnalytics');
-    if (analyticsEl) analyticsEl.innerHTML = S.exams.length ? renderAnalytics(S.exams, goal) : '';
+    if (analyticsEl) analyticsEl.innerHTML = mine.length ? renderAnalytics(mine, tracker.goal) : '';
 
-    var html = '<tr><th>Name</th><th>Date</th><th></th><th>ECTS</th><th>Grade</th><th></th></tr>';
+    var html = '<tr><th>Name</th><th>Date</th><th></th><th>Year</th><th>ECTS</th><th>Tags</th><th>Grade</th><th></th></tr>';
     list.forEach(function(e) {
       var d = daysUntil(e.date);
       var v = gradeVal(e);
@@ -327,11 +563,16 @@ export function renderExams(refresh) {
             : (cls ? '<span class="badge ' + cls + '">' + esc(v) + '</span>' : esc(v)))
         : '';
       var id = esc(e.id);
+      var ay = examAY(e);
+      var chips = examTagList(e).map(function(t) { return '<span class="exam-tag mini">' + esc(t) + '</span>'; }).join('');
       html += '<tr class="exam-tr">' +
         '<td class="exam-name-cell" onclick="examInlineEdit(this,\'' + id + '\',\'name\',\'' + esc((e.name || '').replace(/'/g,"\\'")) + '\')">' + esc(e.name) + '</td>' +
         '<td class="muted exam-date-cell" onclick="examInlineEdit(this,\'' + id + '\',\'date\',\'' + esc(e.date) + '\')">' + esc(e.date) + '</td>' +
         '<td>' + examBadge(d) + '</td>' +
+        '<td class="exam-year-cell' + (e.academic_year ? '' : ' muted') + '" title="Academic year (click to override)" ' +
+          'onclick="examInlineEdit(this,\'' + id + '\',\'academic_year\',\'' + esc(ay) + '\')">' + ayLabel(ay) + '</td>' +
         '<td class="exam-ects-cell" onclick="examInlineEdit(this,\'' + id + '\',\'ects\',' + (e.ects != null ? e.ects : 'null') + ')">' + (e.ects || '<span class="muted">—</span>') + '</td>' +
+        '<td class="exam-tags-cell" onclick="examEditTags(\'' + id + '\')" title="Edit tags">' + (chips || '<span class="muted">＋</span>') + '</td>' +
         '<td class="exam-grade-cell">' +
           '<input type="text" class="grade-input" value="' + esc(v || '') + '" placeholder="—" ' +
           'onchange="setGradeText(\'' + id + '\',this.value)">' +
@@ -340,7 +581,7 @@ export function renderExams(refresh) {
         '<td><button class="btn danger small exam-del" onclick="delRow(\'exams\',\'' + id + '\')">✕</button></td>' +
         '</tr>';
     });
-    if (!list.length) html += '<tr><td colspan="6" class="muted">No exams yet.</td></tr>';
+    if (!list.length) html += '<tr><td colspan="8" class="muted">' + (tagFilter ? 'No exams with this tag.' : 'No exams yet.') + '</td></tr>';
 
     document.getElementById('examTable').innerHTML = html;
   });

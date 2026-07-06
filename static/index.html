@@ -265,6 +265,10 @@
   </section>
 
   <section id="tab-exams">
+    <div class="exam-toolbar">
+      <div id="examTrackers" class="exam-pill-row"></div>
+      <div id="examTagBar" class="exam-pill-row"></div>
+    </div>
     <div class="card exam-analytics-card" id="examAnalytics"></div>
     <div class="card">
       <div class="formrow">
@@ -586,6 +590,29 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
         <button class="btn ghost small" onclick="exportData()">⬇️ Backup (download)</button>
         <button class="btn ghost small" onclick="document.getElementById('importFile').click()">⬆️ Restore (upload)</button>
+      </div>
+      <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Export / Import archive (.zip)</h4>
+      <p style="font-size:14px;margin-bottom:8px">Export the selected categories (including uploaded files) as a portable .zip, or import one — <b>merge</b> adds what's missing, <b>replace</b> restores the selected categories to the archive.</p>
+      <div id="archiveCats" style="display:flex;gap:6px 14px;flex-wrap:wrap;margin-bottom:10px;font-size:14px">
+        <label><input type="checkbox" value="events" checked> Calendar</label>
+        <label><input type="checkbox" value="tasks" checked> Tasks</label>
+        <label><input type="checkbox" value="notes" checked> Notes</label>
+        <label><input type="checkbox" value="exams" checked> Exams</label>
+        <label><input type="checkbox" value="habits" checked> Habits</label>
+        <label><input type="checkbox" value="workouts" checked> Workouts</label>
+        <label><input type="checkbox" value="study_sessions" checked> Study timer</label>
+        <label><input type="checkbox" value="shortcuts" checked> Shortcuts</label>
+        <label><input type="checkbox" value="files" checked> Files</label>
+        <label><input type="checkbox" value="settings" checked> Settings</label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+        <button class="btn ghost small" onclick="exportArchive()">⬇️ Export .zip</button>
+        <select id="archiveMode" class="small" style="width:auto">
+          <option value="merge">Merge (add missing)</option>
+          <option value="replace">Replace (full restore)</option>
+        </select>
+        <button class="btn ghost small" onclick="document.getElementById('importArchiveFile').click()">⬆️ Import .zip</button>
+        <input type="file" id="importArchiveFile" accept=".zip" style="display:none" onchange="importArchive(event)">
       </div>
       <div id="backupStatus" style="margin-top:4px"></div>
       <h4 style="margin:20px 0 8px;font-size:13px;color:var(--muted)">Available backups</h4>
@@ -967,13 +994,7 @@
   <span style="flex: 1; min-width: 200px;"></span>
   <button class="customization-toggle-btn" id="customizeBtn" onclick="toggleEditMode()" style="margin: 0;">⚙️ Customize</button>
 </footer>
-<!-- Global Floating Action Button (FAB) -->
-<div id="globalFab" class="fab-container" style="display: none;">
-  <div class="fab-menu" id="fabMenu"></div>
-  <button class="fab-btn" id="fabBtn" onclick="handleFabClick(event)">
-    <span class="fab-icon" id="fabIcon">+</span>
-  </button>
-</div>
+
   <dialog id="plannerCalendarsModal" class="modal">
     <div class="modal-content" style="max-width: 400px; width: 90%;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">

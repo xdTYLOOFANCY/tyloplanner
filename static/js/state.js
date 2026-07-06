@@ -60,7 +60,9 @@ async function checkVersion() {
   if (document.querySelector(".ctx-menu")) return;
   try {
     const res = await api("GET", "/api/state-version");
-    if (res && res.version !== undefined && res.version !== currentVersion) {
+    // String-compare: a server/client int-vs-string mismatch here caused a
+    // full re-render every poll (analytics charts, files selection bar, …).
+    if (res && res.version !== undefined && String(res.version) !== String(currentVersion)) {
       if (currentVersion !== null) {
         if (window.refreshApp) {
           await window.refreshApp();

@@ -63,7 +63,7 @@ export function renderSettings(refresh) {
   if (tabToggleEl) tabToggleEl.checked = persistTab;
   var statusBox = document.getElementById("backupStatus");
   if (statusBox && SET) {
-    statusBox.innerHTML = '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot is written to <b>data/backups/</b> every night (newest 14 kept).' +
+    statusBox.innerHTML = '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot (contains all data except uploaded files and app settings) is written to <b>data/backups/</b> every night (newest 14 kept). Use this for fast data recovery. For a complete backup including files, use the .zip export instead.' +
       (SET.last_backup ? ' Last backup: <b>' + esc(SET.last_backup) + '</b>.' : ' No backup made yet.') + '</p>' +
       '<button class="btn small" onclick="backupNow()">Backup now</button>';
   }

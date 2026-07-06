@@ -366,7 +366,13 @@ def get_state():
 
 @bp.get("/api/state-version")
 def get_state_version():
-    return jsonify({"version": kv_get("state_version", "0")})
+    # Must be an int: /api/state serves version as int and the frontend
+    # compares with strict !== — a string here forces a refetch every poll.
+    try:
+        version = int(kv_get("state_version", "0"))
+    except (TypeError, ValueError):
+        version = 0
+    return jsonify({"version": version})
 
 
 

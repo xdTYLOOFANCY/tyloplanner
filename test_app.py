@@ -49,6 +49,9 @@ def reset_db():
     with helpers.db() as con:
         for t in list(helpers.TABLES) + ["habit_log", "push_subscriptions"]:
             con.execute("DELETE FROM %s" % t)
+    # The tests predate the first-run setup wizard; without this the auth
+    # guard 403s every /api/ request with "setup required".
+    helpers.kv_set("auth_setup_complete", "true")
 
 
 class CrudTests(unittest.TestCase):
@@ -319,6 +322,33 @@ class CrudTests(unittest.TestCase):
         self.assertEqual(note["folder_id"], fid_a)
 
     # ---- deadlines & events sync ----
+    def test_exam_tracker_tags_year_roundtrip(self):
+        r = self.c.post("/api/exams", json={
+            "name": "Resit", "date": "2026-08-15", "ects": 5,
+            "academic_year": "2025", "tags": "exam,resit", "tracker_id": "trk1",
+        })
+        self.assertEqual(r.status_code, 200)
+        row = self._rows("exams")[0]
+        self.assertEqual(row["academic_year"], "2025")
+        self.assertEqual(row["tags"], "exam,resit")
+        self.assertEqual(row["tracker_id"], "trk1")
+        # update + clear
+        self.c.put("/api/exams/%s" % row["id"], json={"academic_year": None, "tags": None, "tracker_id": "trk2"})
+        row = self._rows("exams")[0]
+        self.assertIsNone(row["academic_year"])
+        self.assertIsNone(row["tags"])
+        self.assertEqual(row["tracker_id"], "trk2")
+
+    def test_exam_tracker_settings_persist(self):
+        r = self.c.post("/api/settings", json={
+            "exam_trackers": '[{"id":"a","name":"Main","goal":60}]',
+            "exam_tags": '["exam","essay"]',
+        })
+        self.assertEqual(r.status_code, 200)
+        s = self.c.get("/api/settings").get_json()
+        self.assertEqual(s["exam_trackers"], '[{"id":"a","name":"Main","goal":60}]')
+        self.assertEqual(s["exam_tags"], '["exam","essay"]')
+
     def test_sync_exam_to_event(self):
         # 1. Create an exam
         r = self.c.post("/api/exams", json={"name": "Math Exam", "date": "2026-06-20", "ects": 5.0})
@@ -448,6 +478,9 @@ class GuardAuthEnabledTests(unittest.TestCase):
         helpers.kv_del("password_hash")
         helpers.kv_del("totp_secret")
         helpers.kv_del("totp_pending")
+        # This class relies on the seamless .env migration inside
+        # is_auth_setup_complete() to seed password_hash from AUTH_PASSWORD.
+        helpers.kv_del("auth_setup_complete")
         self._orig_enabled = helpers.AUTH_ENABLED
         self._orig_pw = helpers.AUTH_PASSWORD
         self._orig_user = helpers.AUTH_USERNAME
@@ -884,6 +917,92 @@ class BackupTests(unittest.TestCase):
 
         r4 = self.c.post("/api/backups/backup-2026-06-12-json/restore")
         self.assertEqual(r4.status_code, 400)
+
+
+class ExportArchiveTests(unittest.TestCase):
+    """Universal export/import archive (.zip)."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def _export(self, categories=None):
+        url = "/api/export/archive"
+        if categories:
+            url += "?categories=" + categories
+        r = self.c.get(url)
+        self.assertEqual(r.status_code, 200)
+        return r.data
+
+    def _import(self, blob, mode, categories=None):
+        import io as _io
+        url = "/api/import/archive?mode=" + mode
+        if categories:
+            url += "&categories=" + categories
+        return self.c.post(url, data={"file": (_io.BytesIO(blob), "export.zip")},
+                           content_type="multipart/form-data")
+
+    def test_export_zip_contains_selected_categories(self):
+        import io as _io, zipfile, json as _json
+        self.c.post("/api/tasks", json={"name": "t1"})
+        self.c.post("/api/notes", json={"title": "n1", "body": "b"})
+        blob = self._export("tasks")
+        with zipfile.ZipFile(_io.BytesIO(blob)) as zf:
+            data = _json.loads(zf.read("data.json"))
+        self.assertEqual(data["app"], "tyloplanner")
+        self.assertEqual(len(data["tables"]["tasks"]), 1)
+        self.assertNotIn("notes", data["tables"])
+
+    def test_import_replace_restores(self):
+        self.c.post("/api/tasks", json={"name": "keep me"})
+        blob = self._export()
+        tid = self.c.get("/api/state").get_json()["tasks"][0]["id"]
+        self.c.delete("/api/tasks/%s" % tid)
+        self.c.post("/api/tasks", json={"name": "new one"})
+        r = self._import(blob, "replace", "tasks")
+        self.assertEqual(r.status_code, 200)
+        tasks = self.c.get("/api/state").get_json()["tasks"]
+        self.assertEqual([t["name"] for t in tasks], ["keep me"])
+
+    def test_import_merge_keeps_existing(self):
+        self.c.post("/api/tasks", json={"name": "old"})
+        blob = self._export()
+        self.c.post("/api/tasks", json={"name": "extra"})
+        r = self._import(blob, "merge", "tasks")
+        self.assertEqual(r.status_code, 200)
+        names = sorted(t["name"] for t in self.c.get("/api/state").get_json()["tasks"])
+        self.assertEqual(names, ["extra", "old"])
+
+    def test_import_settings_merge_vs_replace(self):
+        helpers.kv_set("set_accent_color", "#111111")
+        blob = self._export("settings")
+        helpers.kv_set("set_accent_color", "#222222")
+        self._import(blob, "merge", "settings")
+        self.assertEqual(helpers.setting("accent_color"), "#222222")
+        self._import(blob, "replace", "settings")
+        self.assertEqual(helpers.setting("accent_color"), "#111111")
+
+    def test_import_files_blob_roundtrip(self):
+        import io as _io
+        r = self.c.post("/api/files/upload", data={"file": (_io.BytesIO(b"hello"), "a.txt")},
+                        content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 200)
+        fid = self.c.get("/api/state").get_json()["files"][0]["id"]
+        blob = self._export("files")
+        self.c.delete("/api/files/%s" % fid)
+        self.assertFalse(os.path.exists(os.path.join(helpers.UPLOAD_DIR, fid)))
+        r = self._import(blob, "merge", "files")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(self.c.get("/api/state").get_json()["files"]), 1)
+        with open(os.path.join(helpers.UPLOAD_DIR, fid), "rb") as f:
+            self.assertEqual(f.read(), b"hello")
+
+    def test_import_rejects_garbage(self):
+        r = self._import(b"not a zip", "merge")
+        self.assertEqual(r.status_code, 400)
+        r2 = self.c.post("/api/import/archive?mode=weird")
+        self.assertEqual(r2.status_code, 400)
 
 
 class FolderAndPreviewTests(unittest.TestCase):
@@ -1490,7 +1609,7 @@ class DatabaseMigrationTests(unittest.TestCase):
         with helpers.db() as con:
             row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row["value"], "18")
+            self.assertEqual(row["value"], "19")
 
             notes_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
             self.assertIsNotNone(notes_fts)
@@ -1739,6 +1858,15 @@ class CompressionTests(unittest.TestCase):
         r = self.c.get("/api/state-version", headers={"Accept-Encoding": "gzip"})
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(r.headers.get("Content-Encoding"))
+
+    def test_state_version_types_match(self):
+        # /api/state-version and /api/state must serve version as the same
+        # type (int): a string here made the frontend's strict !== compare
+        # fail every poll, re-rendering the whole UI every 5 seconds.
+        v1 = self.c.get("/api/state-version").get_json()["version"]
+        v2 = self.c.get("/api/state").get_json()["version"]
+        self.assertIsInstance(v1, int)
+        self.assertEqual(v1, v2)
 
 
 class ErrorHandlingTests(unittest.TestCase):
@@ -2328,7 +2456,7 @@ class CliAdminTests(unittest.TestCase):
         # Verify the schema version was tracked in the kv table (the app's
         # source of truth is kv['db_version'], not PRAGMA user_version).
         row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
-        self.assertEqual(row["value"], "18")
+        self.assertEqual(row["value"], "19")
 
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()

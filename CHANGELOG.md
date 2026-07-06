@@ -2,6 +2,66 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.17.0 — 2026-07-06
+
+- **New: multiple grade trackers.** Exams & Grades can now track separate
+  studies (e.g. bachelor + minor, or two programmes) side by side. Pills at
+  the top of the tab switch between trackers; each tracker has its own exam
+  list, analytics, and ECTS goal. Right-click a pill to rename or delete a
+  tracker (its exams move to the first tracker). Existing exams and your
+  current ECTS goal live in the default "Main" tracker.
+- **New: custom tags on exams.** Create your own tags (e.g. exam, practical,
+  essay — none included by default) and assign any number of them per row via
+  the new Tags column. Tags are shared across trackers; click a tag in the
+  bar above the table to filter, right-click it to rename or delete, or
+  delete it via the ✕ next to it in the tag dialog.
+- **New: explicit academic year per exam.** Each exam has a Year column,
+  auto-guessed from its date (September cutoff) but overridable per exam —
+  so August resits no longer land in the wrong academic year in the
+  "By academic year" analytics.
+
+## 1.16.0 — 2026-07-06
+
+- **New: Obsidian-style folder tree in Notes.** The sidebar now shows your
+  whole folder structure at once as a collapsible tree — folders expand in
+  place (chevron or second click) with their subfolders and notes nested
+  under them, instead of the old click-in/click-out drill-down. Expansion
+  state is remembered. Dragging a folder onto another folder now nests it
+  inside (dropping on the Root breadcrumb moves it back to the top level);
+  this replaces the old drag-to-reorder of sibling folders. Folder actions
+  (rename, icon, compile, delete, new note inside) live in the right-click
+  menu.
+
+## 1.15.0 — 2026-07-06
+
+- **New: Universal export/import archive.** Settings → Data can now export any
+  selection of categories (calendar, tasks, notes, exams, habits, workouts,
+  study timer, shortcuts, files — including the uploaded file contents — and
+  settings) as a portable `.zip`. Importing an archive offers two modes:
+  **merge** (adds items and settings missing locally, keeps everything you
+  already have) or **replace** (restores the selected categories exactly to
+  the archive). Ideal for full/partial backups and moving to a new server.
+
+## 1.14.1 — 2026-07-06
+
+- **Fixed: UI re-rendered every 5 seconds.** `/api/state-version` returned the
+  version as a string while `/api/state` returned an int, so the live-sync
+  poll's strict comparison saw a "change" on every check and re-rendered the
+  active tab — visible as Analytics charts rebuilding and the Files selection
+  bar jittering/resetting every few seconds. The endpoint now returns an int
+  and the frontend compares version values type-safely. The UI now only
+  re-renders when data actually changed.
+- **Fixed: "Select All" during a file search could select invisible files.**
+  It used a different filter than the visible list (ignoring subfolder scoping
+  and full-text search results), so bulk delete/move could hit files you
+  couldn't see. Both now share the same filter.
+- **Fixed: file selection bar overflowed on mobile.** Long folder names made
+  the "Move to…" dropdown stretch the bar past the screen edge; it now wraps
+  and caps the dropdown width.
+- **Test suite repaired.** All 120 tests pass again (64 were failing with
+  "setup required" since the first-run setup wizard was added), plus a new
+  regression test pinning the state-version type contract.
+
 ## 1.14.0 — 2026-07-05
 
 - **Right-click context menus.** Files and folders in the Files tab now have a

@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.14.0"
+VERSION = "1.17.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -38,7 +38,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # whitelisted writable columns per table (id is managed by the server)
 TABLES = {
     "events":   ["date", "start", "end", "title", "type", "source", "description", "location", "recurrence", "recurrence_until", "reminder_offset", "end_date", "recurrence_interval", "recurrence_days", "recurrence_count", "excluded_dates", "color"],
-    "exams":    ["name", "date", "grade", "grade_text", "grading_type", "ects"],
+    "exams":    ["name", "date", "grade", "grade_text", "grading_type", "ects", "academic_year", "tags", "tracker_id"],
     "habits":   ["name", "created"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
     "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id"],
@@ -674,6 +674,8 @@ SETTING_DEFAULTS = {
     "calendar_hidden_types": "[]",
     "calendar_colors": "{}",
     "ects_goal": "",
+    "exam_trackers": "[]",
+    "exam_tags": "[]",
 }
 
 

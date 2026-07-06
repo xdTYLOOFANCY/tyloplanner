@@ -7,7 +7,7 @@ import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
 import { todayStr, esc, delRow as _delRow, navigateWithTransition } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings, applyNavLayoutFromSettings } from './js/theme.js';
-import { exportData, importData } from './js/backup.js';
+import { exportData, importData, exportArchive, importArchive } from './js/backup.js';
 import { 
   renderDashboard, 
   addShortcut as _addShortcut,
@@ -22,7 +22,7 @@ import {
 } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
 import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
-import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal } from './js/exams.js';
+import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
 import {
@@ -39,6 +39,7 @@ import {
   openNoteHistory, previewRevision, restoreSelectedRevision, closeNoteHistory,
   handleNoteSearchKeydown, handleNoteBodySearchKeydown, notesGoBack, toggleNoteSearchBar,
   navigateToNoteFolder, createNoteFolderPrompt, renameNoteFolderPrompt, changeNoteFolderIconPrompt, deleteNoteFolderConfirm,
+  toggleNoteFolderExpand, noteTreeFolderClick,
   noteContextMenu, noteFolderContextMenu,
   onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
   onNoteFolderDragStart, onNoteFolderDragEnd,
@@ -116,6 +117,12 @@ window.setGrade = function(id, val) { _setGrade(id, val, R); };
 window.setGradeText = function(id, val) { _setGradeText(id, val, R); };
 window.examInlineEdit = function(el, id, field, currentVal) { examInlineEditFn(el, id, field, currentVal, R); };
 window.saveEctsGoal = function(val) { _saveEctsGoal(val, R); };
+window.examAddTracker = function() { _examAddTracker(R); };
+window.examSelectTracker = function(id) { _examSelectTracker(id, R); };
+window.examTrackerMenu = function(ev, id) { _examTrackerMenu(ev, id, R); };
+window.examEditTags = function(id) { _examEditTags(id, R); };
+window.examToggleTagFilter = function(tag) { _examToggleTagFilter(tag, R); };
+window.examTagMenu = function(ev, tag) { _examTagMenu(ev, tag, R); };
 window.addHabit = function() { _addHabit(R); };
 window.delHabit = function(id) { _delHabit(id, R); };
 window.toggleHabit = function(id, iso) { _toggleHabit(id, iso); };
@@ -144,6 +151,8 @@ window.newNote = function() {
 };
 window.deleteNote = function() { _deleteNote(R); };
 window.navigateToNoteFolder = navigateToNoteFolder;
+window.toggleNoteFolderExpand = toggleNoteFolderExpand;
+window.noteTreeFolderClick = noteTreeFolderClick;
 window.createNoteFolderPrompt = function() { createNoteFolderPrompt(R); };
 window.renameNoteFolderPrompt = function(id, oldName) { renameNoteFolderPrompt(id, oldName, R); };
 window.changeNoteFolderIconPrompt = function(id, oldIcon) { changeNoteFolderIconPrompt(id, oldIcon, R); };
@@ -185,6 +194,8 @@ window.downloadSelectedFiles = downloadSelectedFiles;
 window.clearFileSelection = clearFileSelection;
 window.refreshApp = R;
 window.importData = function(ev) { importData(ev, R); };
+window.exportArchive = exportArchive;
+window.importArchive = function(ev) { importArchive(ev, R); };
 window.saveNotifySettings = function() { _saveNotifySettings(R); };
 window.enableWebPush = function() { enableWebPush(R); };
 window.disableWebPush = function() { disableWebPush(R); };
@@ -333,8 +344,10 @@ tabsNav.addEventListener("click", function(e) {
   } else {
     localStorage.removeItem("active_tab");
   }
-  if (typeof window.updateFAB === "function") {
-    window.updateFAB(newTab);
+  // Show/hide the customize button depending on tab
+  var customizeBtn = document.getElementById("customizeBtn");
+  if (customizeBtn) {
+    customizeBtn.style.display = (newTab === "dashboard") ? "" : "none";
   }
   if (newTab === "planner" && window.innerWidth <= 640) {
     var pvSel = document.getElementById("plannerView");
@@ -344,111 +357,6 @@ tabsNav.addEventListener("click", function(e) {
     }
   }
 });
-
-// ---------- Floating Action Button (FAB) ----------
-let currentActiveTab = "dashboard";
-
-window.updateFAB = function(tab) {
-  currentActiveTab = tab;
-  
-  const customizeBtn = document.getElementById("customizeBtn");
-  if (customizeBtn) {
-    customizeBtn.style.display = (tab === "dashboard") ? "" : "none";
-  }
-  const fabContainer = document.getElementById("globalFab");
-  const fabBtn = document.getElementById("fabBtn");
-  const fabIcon = document.getElementById("fabIcon");
-  const fabMenu = document.getElementById("fabMenu");
-  
-  if (!fabContainer || !fabBtn || !fabIcon || !fabMenu) return;
-
-  // Close menu if open
-  fabMenu.classList.remove("open");
-  fabBtn.style.transform = "";
-
-  // Set FAB display and icon depending on tab
-  if (tab === "dashboard") {
-    fabContainer.style.display = "flex";
-    fabIcon.textContent = "+";
-  } else if (tab === "planner") {
-    fabContainer.style.display = "flex";
-    fabIcon.textContent = "📅";
-  } else if (tab === "tasks") {
-    fabContainer.style.display = "flex";
-    fabIcon.textContent = "☑️";
-  } else if (tab === "notes") {
-    fabContainer.style.display = "flex";
-    fabIcon.textContent = "📝";
-  } else if (tab === "files") {
-    fabContainer.style.display = "flex";
-    fabIcon.textContent = "📁";
-  } else {
-    fabContainer.style.display = "none";
-  }
-};
-
-window.handleFabClick = function(event) {
-  event.stopPropagation();
-  const fabMenu = document.getElementById("fabMenu");
-  const fabBtn = document.getElementById("fabBtn");
-
-  if (currentActiveTab === "planner") {
-    if (typeof window.openAdd === "function") window.openAdd();
-  } else if (currentActiveTab === "tasks") {
-    if (typeof window.openTaskModal === "function") window.openTaskModal();
-  } else if (currentActiveTab === "notes") {
-    if (typeof window.newNote === "function") window.newNote();
-  } else if (currentActiveTab === "files" || currentActiveTab === "dashboard") {
-    // Toggle speed dial menu
-    const isOpen = fabMenu.classList.toggle("open");
-    if (isOpen) {
-      fabBtn.style.transform = "rotate(45deg)";
-      renderFabMenu();
-    } else {
-      fabBtn.style.transform = "";
-    }
-  }
-};
-
-// Close FAB menu when clicking outside
-document.addEventListener("click", () => {
-  const fabMenu = document.getElementById("fabMenu");
-  const fabBtn = document.getElementById("fabBtn");
-  if (fabMenu && fabMenu.classList.contains("open")) {
-    fabMenu.classList.remove("open");
-    if (fabBtn) fabBtn.style.transform = "";
-  }
-});
-
-function renderFabMenu() {
-  const fabMenu = document.getElementById("fabMenu");
-  if (!fabMenu) return;
-
-  let html = "";
-  if (currentActiveTab === "files") {
-    html = `
-      <div class="fab-menu-item" onclick="document.getElementById('fileInput').click();">
-        <span class="item-icon">📤</span> Upload File
-      </div>
-      <div class="fab-menu-item" onclick="document.getElementById('cameraInput').click();">
-        <span class="item-icon">📸</span> Take Photo
-      </div>
-    `;
-  } else if (currentActiveTab === "dashboard") {
-    html = `
-      <div class="fab-menu-item" onclick="if(typeof window.openAdd === 'function') window.openAdd();">
-        <span class="item-icon">📅</span> Add Event
-      </div>
-      <div class="fab-menu-item" onclick="if(typeof window.openTaskModal === 'function') window.openTaskModal();">
-        <span class="item-icon">☑️</span> Add Task
-      </div>
-      <div class="fab-menu-item" onclick="if(typeof window.newNote === 'function') window.newNote();">
-        <span class="item-icon">📝</span> New Note
-      </div>
-    `;
-  }
-  fabMenu.innerHTML = html;
-}
 
 // ---------- boot ----------
 // Wire up <dialog> modals: open/close via window CustomEvents, plus backdrop-click-to-close.
@@ -493,10 +401,13 @@ if (savedTab) {
     var sect = document.getElementById("tab-" + savedTab);
     if (sect) sect.classList.add("active");
   }
-  window.updateFAB(savedTab);
+  // Show/hide the customize button depending on restored tab
+  var custBtn = document.getElementById("customizeBtn");
+  if (custBtn) {
+    custBtn.style.display = (savedTab === "dashboard") ? "" : "none";
+  }
 } else {
-  var activeBtn = document.querySelector("#tabs button.active");
-  window.updateFAB(activeBtn ? activeBtn.dataset.tab : "dashboard");
+  // Default tab is dashboard — customize button is already visible
 }
 
 if (window.innerWidth <= 640) {

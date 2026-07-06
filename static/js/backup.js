@@ -25,6 +25,44 @@ export function importData(ev, refresh) {
   r.readAsText(f); ev.target.value = "";
 }
 
+// ---------------- universal export/import archive ----------------
+
+function archiveCategories() {
+  var cats = [];
+  document.querySelectorAll('#archiveCats input[type="checkbox"]:checked').forEach(function(cb) {
+    cats.push(cb.value);
+  });
+  return cats;
+}
+
+export function exportArchive() {
+  var cats = archiveCategories();
+  if (!cats.length) { alert("Select at least one category to export."); return; }
+  window.location.href = "/api/export/archive?categories=" + encodeURIComponent(cats.join(","));
+}
+
+export function importArchive(ev, refresh) {
+  var f = ev.target.files[0]; ev.target.value = "";
+  if (!f) return;
+  var cats = archiveCategories();
+  if (!cats.length) { alert("Select at least one category to import."); return; }
+  var mode = document.getElementById("archiveMode").value;
+  var msg = mode === "replace"
+    ? "REPLACE the selected categories (" + cats.join(", ") + ") with the archive contents? Current data in those categories will be deleted."
+    : "Merge the archive into the selected categories (" + cats.join(", ") + ")? Existing items are kept.";
+  if (!confirm(msg)) return;
+  var fd = new FormData(); fd.append("file", f);
+  fetch("/api/import/archive?mode=" + mode + "&categories=" + encodeURIComponent(cats.join(",")),
+        { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" }, body: fd })
+    .then(function(r) { return r.json(); })
+    .then(async function(j) {
+      if (j.error) { alert("Import failed: " + j.error); return; }
+      toast("Imported " + j.imported + " items (" + j.mode + ")");
+      if (refresh) await refresh();
+    })
+    .catch(function(e) { alert("Import failed: " + e.message); });
+}
+
 export async function renderBackupList(containerId, refresh) {
   var container = document.getElementById(containerId);
   if (!container) return;

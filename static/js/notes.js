@@ -11,6 +11,39 @@ var draggedNoteFolderId = null;
 var lastNoteSearchQuery = "";
 var noteSearchResults = null;
 var noteSearchTimeout = null;
+// Folder-tree expansion state lives outside the render (and in localStorage)
+// so the live-sync re-render can't collapse the tree mid-use.
+var expandedNoteFolders = new Set(JSON.parse(localStorage.getItem("note_folders_expanded") || "[]"));
+
+function saveExpandedNoteFolders() {
+  localStorage.setItem("note_folders_expanded", JSON.stringify(Array.from(expandedNoteFolders)));
+}
+
+function expandNoteFolderAncestors(folderId) {
+  getNoteBreadcrumbs(folderId).forEach(function(f) { expandedNoteFolders.add(f.id); });
+  saveExpandedNoteFolders();
+}
+
+export function toggleNoteFolderExpand(id, ev) {
+  if (ev) ev.stopPropagation();
+  if (expandedNoteFolders.has(id)) expandedNoteFolders.delete(id);
+  else expandedNoteFolders.add(id);
+  saveExpandedNoteFolders();
+  renderNoteList();
+}
+
+// Click on a folder row: select it (new notes/folders land inside it);
+// a second click on the already-selected folder toggles expansion.
+export function noteTreeFolderClick(id) {
+  if (activeNoteFolderId === id) {
+    toggleNoteFolderExpand(id);
+    return;
+  }
+  activeNoteFolderId = id;
+  expandedNoteFolders.add(id);
+  saveExpandedNoteFolders();
+  renderNoteList();
+}
 
 export function getNoteBreadcrumbs(folderId) {
   var path = [];
@@ -671,6 +704,9 @@ export function selectNote(id) {
   }
   currentNote = id;
   localStorage.setItem("active_note_id", id);
+  // Make the selected note visible in the tree (e.g. opened via a cross-link).
+  var selN = S.notes.find(function(x) { return x.id === id; });
+  if (selN && selN.folder_id) expandNoteFolderAncestors(selN.folder_id);
   renderNotes();
   // On mobile: activate editor-panel mode so the editor fills the screen
   var layout = document.querySelector(".noteslayout");
@@ -1045,7 +1081,13 @@ function renderNoteList() {
   var searchEl = document.getElementById("noteSearch");
   var q = (searchEl ? searchEl.value : "").trim().toLowerCase();
   
-  // Render Folder Header
+  // Drop selection if the folder disappeared (deleted elsewhere).
+  if (activeNoteFolderId && !(S.note_folders || []).some(function(f) { return f.id === activeNoteFolderId; })) {
+    activeNoteFolderId = null;
+  }
+
+  // Header: breadcrumbs of the selected folder. "Root" doubles as a drop
+  // target for moving notes/folders back to the top level.
   var header = document.getElementById("noteFolderHeader");
   if (header) {
     var breadcrumbsHtml = '<div class="breadcrumbs" style="font-size:13px; margin-bottom:8px;">';
@@ -1058,54 +1100,28 @@ function renderNoteList() {
       breadcrumbsHtml += '<span class="breadcrumb-item' + (isLast ? ' active' : '') + '" onclick="' + (isLast ? '' : 'navigateToNoteFolder(\'' + f.id + '\')') + '" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' + folderIcon + esc(f.name) + '</span>';
     });
     breadcrumbsHtml += '</div>';
-    
-    if (activeNoteFolderId) {
-      var currentFolder = (S.note_folders || []).find(function(f) { return f.id === activeNoteFolderId; });
-      if (currentFolder) {
-        var icon = currentFolder.icon || "📁";
-        breadcrumbsHtml += '<div style="display:flex;gap:4px;margin-bottom:8px;">';
-        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="renameNoteFolderPrompt(\'' + currentFolder.id + '\', \'' + esc(currentFolder.name).replace(/'/g, "\\'") + '\')">✏️ Rename</button>';
-        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="changeNoteFolderIconPrompt(\'' + currentFolder.id + '\', \'' + esc(icon).replace(/'/g, "\\'") + '\')">🏷️ Icon</button>';
-        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="downloadNoteFolder(\'' + currentFolder.id + '\')" title="Compile folder into a digital notebook">📓 Compiled HTML</button>';
-        breadcrumbsHtml += '<button class="btn danger small" style="padding:2px 6px;font-size:11px;" onclick="deleteNoteFolderConfirm(\'' + currentFolder.id + '\')">✕ Delete</button>';
-        breadcrumbsHtml += '<div style="flex:1"></div>';
-        breadcrumbsHtml += '<button class="btn small ghost" style="padding:2px 6px;font-size:11px;" onclick="navigateToNoteFolder(' + (currentFolder.parent_id ? '\'' + currentFolder.parent_id + '\'' : 'null') + ')" title="Go Back">⬅️</button>';
-        breadcrumbsHtml += '</div>';
-      } else {
-        activeNoteFolderId = null;
-      }
-    }
     header.innerHTML = breadcrumbsHtml;
   }
-  
-  // Render Folders
-  var folders = (S.note_folders || []).slice();
+
+  // Folder tree (search falls back to a flat filtered list).
+  var fHtml = "";
   if (q) {
-    folders = folders.filter(function(f) {
+    var folders = (S.note_folders || []).filter(function(f) {
       var match = (f.name || "").toLowerCase().indexOf(q) !== -1;
       if (!match) return false;
       if (!activeNoteFolderId) return true;
       return f.id === activeNoteFolderId || isNoteDescendant(f.id, activeNoteFolderId);
     });
+    folders.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+    folders.forEach(function(f) { fHtml += noteFolderRowHtml(f, 0); });
   } else {
-    folders = folders.filter(function(f) { return f.parent_id === activeNoteFolderId; });
+    fHtml = noteTreeHtml(null, 0);
   }
-  
-  folders.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
-  
-  var fHtml = "";
-  folders.forEach(function(f) {
-    var icon = f.icon || "📁";
-    fHtml += '<div class="list-item" style="padding:6px 10px; cursor:pointer;" oncontextmenu="noteFolderContextMenu(event, \'' + f.id + '\')" draggable="true" ondragstart="onNoteFolderDragStart(event, \'' + f.id + '\')" ondragend="onNoteFolderDragEnd(event)" onclick="navigateToNoteFolder(\'' + f.id + '\')" ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' +
-      '<span class="task-drag-handle" style="cursor:grab; color:var(--muted); margin-right:6px;">☰</span>' +
-      '<span style="margin-right:8px;">' + esc(icon) + '</span>' +
-      '<span style="font-weight:600;">' + esc(f.name) + '</span>' +
-      '</div>';
-  });
   var folderListEl = document.getElementById("noteFolderList");
   if (folderListEl) folderListEl.innerHTML = fHtml;
 
-  // Render Notes
+  // Notes below the tree: root-level notes (folder notes render inside the
+  // tree), or the flat result list while searching.
   var list = S.notes.slice();
   if (q) {
     if (noteSearchResults !== null) {
@@ -1131,33 +1147,73 @@ function renderNoteList() {
       });
     }
   } else {
-    list = list.filter(function(n) { return n.folder_id === activeNoteFolderId; });
-    list.sort(function(a, b) {
-      if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
-      return (b.updated || 0) - (a.updated || 0);
-    });
+    list = list.filter(function(n) { return !n.folder_id; });
+    list.sort(sortNotesDefault);
   }
-  
+
   var html = "";
-  list.forEach(function(n) {
-    var title = n.title ? highlightText(n.title, q) : '<span class="muted">Untitled</span>';
-    var snippet = "";
-    if (q && (n.body || "").toLowerCase().indexOf(q) !== -1) {
-      var lc = (n.body || "").toLowerCase(), midx = lc.indexOf(q);
-      var start = Math.max(0, midx - 35), end = Math.min((n.body || "").length, midx + q.length + 50);
-      snippet = '<div class="muted" style="line-height:1.4;margin:2px 0">' + (start > 0 ? "\u2026" : "") +
-        highlightText((n.body || "").slice(start, end), q) + (end < (n.body || "").length ? "\u2026" : "") + '</div>';
-    }
-    var pinned = n.is_pinned ? 'note-pinned' : '';
-    html += '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '" data-id="' + n.id + '" oncontextmenu="noteContextMenu(event, \'' + n.id + '\')" onclick="selectNote(\'' + n.id + '\')" draggable="true" ondragstart="onNoteDragStart(event, \'' + n.id + '\')" ondragend="onNoteDragEnd(event)">' +
-      '<button class="btn-pin" onclick="toggleNotePin(\'' + n.id + '\',event)" title="' + (n.is_pinned ? 'Unpin' : 'Pin') + '">\u2605</button>' +
-      '<div class="grow"><div>' + title + '</div>' + snippet +
-      '<div class="muted">' + new Date(n.updated || 0).toLocaleDateString() + '</div></div></div>';
-  });
+  list.forEach(function(n) { html += noteRowHtml(n, q, 0); });
   var noteListEl = document.getElementById("noteList");
   if (noteListEl) {
     noteListEl.innerHTML = html || (q && !fHtml ? '<div class="muted">No notes match.</div>' : (!fHtml ? '<div class="muted">No notes yet.</div>' : ''));
   }
+}
+
+function sortNotesDefault(a, b) {
+  if ((b.is_pinned || 0) !== (a.is_pinned || 0)) return (b.is_pinned || 0) - (a.is_pinned || 0);
+  return (b.updated || 0) - (a.updated || 0);
+}
+
+function noteRowHtml(n, q, depth) {
+  var title = n.title ? highlightText(n.title, q) : '<span class="muted">Untitled</span>';
+  var snippet = "";
+  if (q && (n.body || "").toLowerCase().indexOf(q) !== -1) {
+    var lc = (n.body || "").toLowerCase(), midx = lc.indexOf(q);
+    var start = Math.max(0, midx - 35), end = Math.min((n.body || "").length, midx + q.length + 50);
+    snippet = '<div class="muted" style="line-height:1.4;margin:2px 0">' + (start > 0 ? "\u2026" : "") +
+      highlightText((n.body || "").slice(start, end), q) + (end < (n.body || "").length ? "\u2026" : "") + '</div>';
+  }
+  var pinned = n.is_pinned ? 'note-pinned' : '';
+  var indent = depth ? ' style="margin-left:' + (depth * 14) + 'px"' : '';
+  return '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '"' + indent + ' data-id="' + n.id + '" oncontextmenu="noteContextMenu(event, \'' + n.id + '\')" onclick="selectNote(\'' + n.id + '\')" draggable="true" ondragstart="onNoteDragStart(event, \'' + n.id + '\')" ondragend="onNoteDragEnd(event)">' +
+    '<button class="btn-pin" onclick="toggleNotePin(\'' + n.id + '\',event)" title="' + (n.is_pinned ? 'Unpin' : 'Pin') + '">\u2605</button>' +
+    '<div class="grow"><div>' + title + '</div>' + snippet +
+    '<div class="muted">' + new Date(n.updated || 0).toLocaleDateString() + '</div></div></div>';
+}
+
+function noteFolderRowHtml(f, depth) {
+  var open = expandedNoteFolders.has(f.id);
+  var icon = f.icon || "\ud83d\udcc1";
+  var count = (S.notes || []).reduce(function(acc, n) { return acc + (n.folder_id === f.id ? 1 : 0); }, 0);
+  return '<div class="list-item note-tree-folder' + (f.id === activeNoteFolderId ? ' sel' : '') + '" style="padding:4px 8px;margin-left:' + (depth * 14) + 'px;cursor:pointer;" ' +
+    'oncontextmenu="noteFolderContextMenu(event, \'' + f.id + '\')" draggable="true" ' +
+    'ondragstart="onNoteFolderDragStart(event, \'' + f.id + '\')" ondragend="onNoteFolderDragEnd(event)" ' +
+    'onclick="noteTreeFolderClick(\'' + f.id + '\')" ' +
+    'ondragover="onNoteFolderDragOver(event)" ondragleave="onNoteFolderDragLeave(event)" ondrop="onNoteFolderDrop(event, \'' + f.id + '\')">' +
+    '<button class="tree-chevron" onclick="toggleNoteFolderExpand(\'' + f.id + '\', event)" aria-label="' + (open ? 'Collapse' : 'Expand') + ' folder">' + (open ? '\u25be' : '\u25b8') + '</button>' +
+    '<span>' + esc(icon) + '</span>' +
+    '<span class="grow" style="font-weight:600;">' + esc(f.name) + '</span>' +
+    (count ? '<span class="muted" style="font-size:11px;">' + count + '</span>' : '') +
+    '</div>';
+}
+
+// Recursive Obsidian-style tree: folders (sorted by order_index), and inside
+// each expanded folder its subfolders followed by its notes.
+function noteTreeHtml(parentId, depth) {
+  if (depth > 10) return "";
+  var html = "";
+  var folders = (S.note_folders || []).filter(function(f) { return (f.parent_id || null) === parentId; });
+  folders.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+  folders.forEach(function(f) {
+    html += noteFolderRowHtml(f, depth);
+    if (expandedNoteFolders.has(f.id)) {
+      html += noteTreeHtml(f.id, depth + 1);
+      var notes = (S.notes || []).filter(function(n) { return n.folder_id === f.id; });
+      notes.sort(sortNotesDefault);
+      notes.forEach(function(n) { html += noteRowHtml(n, "", depth + 1); });
+    }
+  });
+  return html;
 }
 
 export function renderNotes() {
@@ -1259,6 +1315,7 @@ export function notesGoBack() {
 
 export function navigateToNoteFolder(id) {
   activeNoteFolderId = id;
+  if (id) expandNoteFolderAncestors(id);
   renderNotes();
 }
 
@@ -1345,9 +1402,10 @@ export function noteFolderContextMenu(ev, id) {
   var folder = (S.note_folders || []).find(function(x) { return x.id === id; });
   if (!folder) return;
   showContextMenu(ev, [
-    { label: "Open", icon: "📂", onClick: function() { navigateToNoteFolder(id); } },
+    { label: "New note inside", icon: "📝", onClick: function() { navigateToNoteFolder(id); newNote(window.refreshApp); } },
     { label: "Rename", icon: "✏️", onClick: function() { renameNoteFolderPrompt(id, folder.name || ""); } },
     { label: "Change icon", icon: "🏷️", onClick: function() { changeNoteFolderIconPrompt(id, folder.icon || "📁"); } },
+    { label: "Compiled HTML", icon: "📓", onClick: function() { downloadNoteFolder(id); } },
     { sep: true },
     { label: "Delete", icon: "✕", danger: true, onClick: function() { deleteNoteFolderConfirm(id); } }
   ]);
@@ -1424,24 +1482,15 @@ export function onNoteFolderDragEnd(e) {
   });
 }
 
+// Drop folder-on-folder nests the dragged folder inside the target
+// (Obsidian semantics); dropping on the Root breadcrumb moves it to the top
+// level. Never into the folder's own subtree.
 async function reorderNoteFolders(dragId, dropId, refresh) {
-  var folders = (S.note_folders || []).filter(function(f) { return f.parent_id === activeNoteFolderId; });
-  folders.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
-  
-  var dragIndex = folders.findIndex(function(f) { return f.id === dragId; });
-  var dropIndex = folders.findIndex(function(f) { return f.id === dropId; });
-  if (dragIndex === -1 || dropIndex === -1 || dragIndex === dropIndex) return;
-  
-  var [dragged] = folders.splice(dragIndex, 1);
-  folders.splice(dropIndex, 0, dragged);
-  
-  var promises = [];
-  for (var i = 0; i < folders.length; i++) {
-    folders[i].order_index = i;
-    promises.push(api("PUT", "/api/note_folders/" + folders[i].id, { order_index: i }));
-  }
-  await Promise.all(promises);
-  
+  var draggedFolder = (S.note_folders || []).find(function(f) { return f.id === dragId; });
+  if (!draggedFolder || (draggedFolder.parent_id || null) === (dropId || null)) return;
+  if (dropId && isNoteDescendant(dropId, dragId)) return;
+  await api("PUT", "/api/note_folders/" + dragId, { parent_id: dropId || null });
+  if (dropId) { expandedNoteFolders.add(dropId); saveExpandedNoteFolders(); }
   if (refresh) await refresh();
 }
 

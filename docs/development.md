@@ -71,6 +71,16 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `DELETE /api/<table>/<id>` | Delete a row. |
 | `POST /api/habits/<id>/toggle` | Toggle a habit for `{date}`. |
 | `GET/POST /api/settings` | Read / write user settings (ntfy, sync, …). |
+
+Exams carry three optional organisation columns (migration 019):
+`tracker_id` (which study/tracker the exam belongs to), `tags`
+(comma-separated custom tag names), and `academic_year` (start year of the
+academic year as a string, e.g. `"2025"` = 2025–2026; when null the frontend
+guesses it from the date with a September cutoff). The tracker list
+(`[{id, name, goal}]`, goal = target ECTS) lives in the `exam_trackers`
+setting and the global tag list in `exam_tags`, both JSON strings — there
+are no dedicated endpoints; the generic CRUD + settings API cover it.
+
 | `POST /api/notify/test` | Send a test notification (via ntfy and Web Push). |
 | `GET /api/push/public-key` | Get the VAPID public key for Web Push. |
 | `POST /api/push/subscribe` | Register browser subscription for Web Push. |
@@ -78,6 +88,8 @@ All endpoints return JSON and require a session cookie when auth is enabled
 | `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore (JSON payload). |
 | `GET /api/backups` | List all available automatic nightly backups. |
 | `POST /api/backups/<filename>/restore` | Restore database data from an automatic nightly backup. |
+| `GET /api/export/archive?categories=a,b` | Download a `.zip` export of the selected categories (`events,tasks,notes,exams,habits,workouts,study_sessions,shortcuts,files,settings`; omit for all). Contains `data.json` plus `uploads/<id>` blobs when `files` is included. |
+| `POST /api/import/archive?mode=merge\|replace&categories=a,b` | Import an export archive (multipart `file`). `merge` adds missing rows/settings/blobs (existing ids kept); `replace` deletes the selected categories first and restores them from the archive. |
 | `POST /api/files/upload` | Upload a file (multipart `file` field). Supports optional `folder_id` form field. Returns `{id, filename, size}`. |
 | `GET /api/files/<id>/download` | Download a file as an attachment. |
 | `GET /api/files/<id>/view` | View/stream a file inline with correct mimetype (for media previews). |

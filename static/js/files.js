@@ -159,6 +159,28 @@ function isDescendant(folderId, targetId) {
   return false;
 }
 
+// The files currently visible in the list, honoring search (local or FTS)
+// and folder scoping. Shared by renderFiles and toggleSelectAllFiles so
+// "Select All" can never select files that aren't shown.
+function getVisibleFiles(q) {
+  var list = (S.files || []).slice();
+  if (q) {
+    if (fileSearchResults !== null) {
+      return list.filter(function(f) {
+        if (fileSearchResults.indexOf(f.id) === -1) return false;
+        if (!activeFolderId) return true;
+        return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
+      });
+    }
+    return list.filter(function(f) {
+      if ((f.filename || "").toLowerCase().indexOf(q) === -1) return false;
+      if (!activeFolderId) return true;
+      return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
+    });
+  }
+  return list.filter(function(f) { return f.folder_id === activeFolderId; });
+}
+
 export function renderFiles() {
   safeRender("files", () => {
     var q = (document.getElementById("fileSearch") || { value: "" }).value.trim().toLowerCase();
@@ -237,28 +259,7 @@ export function renderFiles() {
   }
 
   // 3. Render Files
-  var list = (S.files || []).slice();
-  if (q) {
-    if (fileSearchResults !== null) {
-      list = list.filter(function(f) {
-        var inFts = fileSearchResults.indexOf(f.id) !== -1;
-        if (!inFts) return false;
-        if (!activeFolderId) return true;
-        return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
-      });
-    } else {
-      list = list.filter(function(f) {
-        var nameMatch = (f.filename || "").toLowerCase().indexOf(q) !== -1;
-        if (!nameMatch) return false;
-        if (!activeFolderId) return true;
-        return f.folder_id === activeFolderId || isDescendant(f.folder_id, activeFolderId);
-      });
-    }
-  } else {
-    list = list.filter(function(f) {
-      return f.folder_id === activeFolderId;
-    });
-  }
+  var list = getVisibleFiles(q);
 
   // Render Selection Bar if multiple selected
   var selectionBar = document.getElementById("fileSelectionBar");
@@ -281,8 +282,8 @@ export function renderFiles() {
 
       selectionBar.innerHTML = '<div class="selection-bar">' +
         '<div>' + selectedFileIds.length + ' file' + (selectedFileIds.length > 1 ? 's' : '') + ' selected</div>' +
-        '<div style="display:flex; gap:8px; align-items:center;">' +
-          '<select onchange="moveSelectedFilesToFolder(this.value); this.value=\'\';" style="padding:4px 8px; font-size:12px;">' + selectOptionsHtml + '</select>' +
+        '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
+          '<select onchange="moveSelectedFilesToFolder(this.value); this.value=\'\';" style="padding:4px 8px; font-size:12px; max-width:140px;">' + selectOptionsHtml + '</select>' +
           '<button class="btn small" onclick="downloadSelectedFiles()">⬇️ Download</button>' +
           '<button class="btn danger small" onclick="deleteSelectedFiles()">✕ Delete</button>' +
           '<button class="btn ghost small" onclick="clearFileSelection()">Cancel</button>' +
@@ -782,17 +783,9 @@ export async function onFolderDrop(e, targetFolderId) {
 // MULTI-SELECT ACTIONS
 export function toggleSelectAllFiles(checked) {
   var q = (document.getElementById("fileSearch") || { value: "" }).value.trim().toLowerCase();
-  var list = (S.files || []).slice();
-  if (q) {
-    list = list.filter(function(f) {
-      return (f.filename || "").toLowerCase().indexOf(q) !== -1;
-    });
-  } else {
-    list = list.filter(function(f) {
-      return f.folder_id === activeFolderId;
-    });
-  }
-  
+  var list = getVisibleFiles(q);
+
+
   if (checked) {
     list.forEach(function(f) {
       if (selectedFileIds.indexOf(f.id) === -1) {
