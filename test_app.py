@@ -454,6 +454,64 @@ class CrudTests(unittest.TestCase):
         sessions = self._rows("study_sessions")
         self.assertEqual(len(sessions), 0)
 
+    # ---- music / playlists ----
+    def _insert_file(self, fid, name="song.mp3", mime="audio/mpeg"):
+        with helpers.db(write=True) as con:
+            con.execute(
+                "INSERT INTO files(id, filename, size, mimetype, uploaded) VALUES(?,?,?,?,?)",
+                (fid, name, 1000, mime, 1))
+
+    def test_playlist_add_reorder_and_cascade_delete(self):
+        pid = self.c.post("/api/playlists", json={"name": "Chill"}).get_json()["id"]
+        self._insert_file("f1")
+        self._insert_file("f2", name="other.flac", mime="audio/flac")
+
+        # bulk-add: unknown file ids are skipped, positions are sequential
+        r = self.c.post("/api/playlists/%s/add-tracks" % pid,
+                        json={"file_ids": ["f1", "f2", "missing"]})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.get_json()["added"]), 2)
+        tracks = sorted(self._rows("playlist_tracks"), key=lambda t: t["position"])
+        self.assertEqual([t["file_id"] for t in tracks], ["f1", "f2"])
+        self.assertEqual([t["position"] for t in tracks], [0, 1])
+
+        # reorder rewrites positions in the given order
+        r = self.c.post("/api/playlists/%s/reorder" % pid,
+                        json={"tracks": [tracks[1]["id"], tracks[0]["id"]]})
+        self.assertEqual(r.status_code, 200)
+        tracks = sorted(self._rows("playlist_tracks"), key=lambda t: t["position"])
+        self.assertEqual([t["file_id"] for t in tracks], ["f2", "f1"])
+
+        # deleting the playlist cascades its tracks
+        self.c.delete("/api/playlists/%s" % pid)
+        self.assertEqual(self._rows("playlists"), [])
+        self.assertEqual(self._rows("playlist_tracks"), [])
+
+    def test_playlist_add_tracks_unknown_playlist_404(self):
+        r = self.c.post("/api/playlists/nope/add-tracks", json={"file_ids": ["x"]})
+        self.assertEqual(r.status_code, 404)
+
+    def test_music_scan_survives_missing_disk_file(self):
+        # DB row exists but there is no file on disk — scan must not error.
+        self._insert_file("ghost")
+        r = self.c.post("/api/music/scan", json={})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["scanned"], 1)
+
+    def test_album_art_placeholder_and_404(self):
+        self.assertEqual(self.c.get("/api/files/nope/art").status_code, 404)
+        # Row exists, disk file missing → 404 too
+        self._insert_file("ghost2")
+        self.assertEqual(self.c.get("/api/files/ghost2/art").status_code, 404)
+        # Real (non-audio-parseable) file on disk → SVG placeholder
+        os.makedirs(helpers.UPLOAD_DIR, exist_ok=True)
+        with open(os.path.join(helpers.UPLOAD_DIR, "real1"), "wb") as f:
+            f.write(b"not really audio")
+        self._insert_file("real1")
+        r = self.c.get("/api/files/real1/art")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.mimetype, "image/svg+xml")
+
 
 class GuardAuthDisabledTests(unittest.TestCase):
     """With AUTH_PASSWORD unset, everything is reachable without a session."""
@@ -975,6 +1033,7 @@ class ExportArchiveTests(unittest.TestCase):
         self.assertEqual(names, ["extra", "old"])
 
     def test_import_settings_merge_vs_replace(self):
+        self.addCleanup(helpers.kv_del, "set_accent_color")
         helpers.kv_set("set_accent_color", "#111111")
         blob = self._export("settings")
         helpers.kv_set("set_accent_color", "#222222")
@@ -1318,6 +1377,21 @@ class AdvancedTaskManagementTests(unittest.TestCase):
         self.assertEqual(sub["name"], "Part 1")
         self.assertEqual(sub["parent_id"], tid)
 
+    def test_task_recurrence_column(self):
+        # recurrence is whitelisted and persists through the generic CRUD API
+        r = self.c.post("/api/tasks", json={"name": "Laundry", "recurrence": "weekly"})
+        self.assertEqual(r.status_code, 200)
+        tid = r.get_json()["id"]
+
+        t = next(x for x in self.c.get("/api/state").get_json()["tasks"] if x["id"] == tid)
+        self.assertEqual(t["recurrence"], "weekly")
+
+        # the frontend clears it by PUTting null
+        r_update = self.c.put("/api/tasks/%s" % tid, json={"recurrence": None})
+        self.assertEqual(r_update.status_code, 200)
+        t = next(x for x in self.c.get("/api/state").get_json()["tasks"] if x["id"] == tid)
+        self.assertIsNone(t["recurrence"])
+
 
 class VersionCheckTests(unittest.TestCase):
     def setUp(self):
@@ -1604,12 +1678,18 @@ class Fts5SearchTests(unittest.TestCase):
             self.assertIsNone(row_del)
 
 
+def latest_migration_version():
+    """Highest NNN in migrations/ — what db_version should be after startup."""
+    names = os.listdir(os.path.join(os.path.dirname(__file__), "migrations"))
+    return str(max(int(n.split("_")[0]) for n in names if n.endswith(".sql")))
+
+
 class DatabaseMigrationTests(unittest.TestCase):
     def test_migrations_applied_successfully(self):
         with helpers.db() as con:
             row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row["value"], "19")
+            self.assertEqual(row["value"], latest_migration_version())
 
             notes_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
             self.assertIsNotNone(notes_fts)
@@ -2456,7 +2536,7 @@ class CliAdminTests(unittest.TestCase):
         # Verify the schema version was tracked in the kv table (the app's
         # source of truth is kv['db_version'], not PRAGMA user_version).
         row = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
-        self.assertEqual(row["value"], "19")
+        self.assertEqual(row["value"], latest_migration_version())
 
         # Check password hash exists and matches
         row = con.execute("SELECT value FROM kv WHERE key='password_hash'").fetchone()

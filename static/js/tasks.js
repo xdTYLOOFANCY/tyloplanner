@@ -52,8 +52,54 @@ export async function addSubtask(parentId, refresh) {
   await refresh();
 }
 
+// Next due date strictly after today for a recurring task, stepping from the
+// current due date (or today if none). Keeps any time-of-day suffix.
+export function nextDue(current, recurrence) {
+  var time = current && current.length > 10 ? current.slice(10) : "";
+  var base = current ? current.slice(0, 10) : todayStr();
+  var d = new Date(base + "T00:00:00");
+  if (isNaN(d)) d = new Date(todayStr() + "T00:00:00");
+  var today = new Date(todayStr() + "T00:00:00");
+  var anchorDay = d.getDate();
+  var i = 0;
+  do {
+    if (recurrence === "weekly") d.setDate(d.getDate() + 7);
+    else if (recurrence === "biweekly") d.setDate(d.getDate() + 14);
+    else if (recurrence === "monthly") {
+      // ponytail: day-of-month clamps to shorter months; anchorDay keeps
+      // "the 31st" from drifting to the 30th permanently
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      var dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(anchorDay, dim));
+    } else d.setDate(d.getDate() + 1); // daily (and any unknown value)
+  } while (d <= today && ++i < 1000);
+  var iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return { due: iso, due_date: time ? iso + time : iso };
+}
+
 export async function toggleTask(id, done, refresh) {
   var t = S.tasks.find(function(x) { return x.id === id; });
+
+  // Completing a recurring task reschedules it instead of finishing it:
+  // due date advances to the next occurrence and its subtask checklist resets.
+  if (done && t && t.recurrence && !t.parent_id) {
+    var next = nextDue(t.due_date || t.due, t.recurrence);
+    var updates = [api("PUT", "/api/tasks/" + id, {
+      done: 0, completed_at: null,
+      due: next.due,
+      due_date: t.due_date ? next.due_date : null
+    })];
+    S.tasks.forEach(function(s) {
+      if (s.parent_id === id && s.done) {
+        updates.push(api("PUT", "/api/tasks/" + s.id, { done: 0, completed_at: null }));
+      }
+    });
+    await Promise.all(updates);
+    await refresh();
+    return;
+  }
+
   if (t) {
     t.done = done ? 1 : 0;
     t.completed_at = done ? todayStr() : null;
@@ -224,6 +270,7 @@ export function openTaskModal(id) {
   document.getElementById("editTaskName").value = t ? (t.name || "") : "";
   document.getElementById("editTaskCategory").value = t ? (t.category || "") : "";
   document.getElementById("editTaskDue").value = t ? (t.due_date || "") : "";
+  document.getElementById("editTaskRecurrence").value = t ? (t.recurrence || "") : "";
 
   var titleEl = document.getElementById("taskModalTitle");
   if (titleEl) titleEl.textContent = t ? "Edit Task" : "Add Task";
@@ -237,7 +284,8 @@ export async function saveTaskModal(refresh) {
   var category = document.getElementById("editTaskCategory").value || null;
   var due_date = document.getElementById("editTaskDue").value || null;
   var due = due_date ? due_date.substring(0, 10) : null;
-  
+  var recurrence = document.getElementById("editTaskRecurrence").value || null;
+
   if (!name) return;
 
   if (id) {
@@ -245,7 +293,8 @@ export async function saveTaskModal(refresh) {
       name: name,
       category: category,
       due_date: due_date,
-      due: due
+      due: due,
+      recurrence: recurrence
     });
   } else {
     // Create mode (opened from the quick-create FAB with no task id).
@@ -262,7 +311,8 @@ export async function saveTaskModal(refresh) {
       due: due,
       due_date: due_date,
       category: category,
-      order_index: maxOrder + 1
+      order_index: maxOrder + 1,
+      recurrence: recurrence
     });
   }
 
@@ -480,6 +530,15 @@ export function renderTasks() {
           dueBadge.style.marginRight = "8px";
           dueBadge.textContent = badgeText;
           badgeContainer.appendChild(dueBadge);
+        }
+
+        if (t.recurrence) {
+          var recBadge = document.createElement("span");
+          recBadge.className = "badge gray";
+          recBadge.style.marginRight = "8px";
+          recBadge.title = "Completing reschedules to the next occurrence";
+          recBadge.textContent = "↻ " + t.recurrence;
+          badgeContainer.appendChild(recBadge);
         }
       }
 

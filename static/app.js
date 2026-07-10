@@ -22,7 +22,7 @@ import {
 } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
 import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
-import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu } from './js/exams.js';
+import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, saveGradeTarget as _saveGradeTarget, whatIfDialog as _examWhatIf, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu } from './js/exams.js';
 import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
 import {
@@ -69,7 +69,9 @@ import {
   revokeSession as _revokeSession
 } from './js/settings.js';
 import './js/study_timer.js';
+import { renderMusic } from './js/music.js'; // binds its own window.* handlers
 import { initSwipeGestures } from './js/swipe.js';
+import { initPalette, openPalette } from './js/palette.js';
 
 function getActiveTab() {
   const activeBtn = document.querySelector("#tabs button.active");
@@ -86,6 +88,7 @@ function renderTab(tab) {
   else if (tab === "tasks") renderTasks();
   else if (tab === "notes") renderNotes();
   else if (tab === "files") renderFiles();
+  else if (tab === "music") renderMusic();
   else if (tab === "settings") renderSettings(R);
   
   if (tabNeedsRender[tab] !== undefined) {
@@ -117,6 +120,8 @@ window.setGrade = function(id, val) { _setGrade(id, val, R); };
 window.setGradeText = function(id, val) { _setGradeText(id, val, R); };
 window.examInlineEdit = function(el, id, field, currentVal) { examInlineEditFn(el, id, field, currentVal, R); };
 window.saveEctsGoal = function(val) { _saveEctsGoal(val, R); };
+window.saveGradeTarget = function(val) { _saveGradeTarget(val, R); };
+window.examWhatIf = function() { _examWhatIf(); };
 window.examAddTracker = function() { _examAddTracker(R); };
 window.examSelectTracker = function(id) { _examSelectTracker(id, R); };
 window.examTrackerMenu = function(ev, id) { _examTrackerMenu(ev, id, R); };
@@ -311,7 +316,7 @@ window.toggleWidgetPresence = toggleWidgetPresence;
 window.showDashboardEventDetails = showDashboardEventDetails;
 
 // ---------- tabs ----------
-const TABS = ["dashboard", "analytics", "planner", "exams", "habits", "workouts", "tasks", "notes", "files", "settings"];
+const TABS = ["dashboard", "analytics", "planner", "exams", "habits", "workouts", "tasks", "notes", "files", "music", "settings"];
 
 var tabsNav = document.getElementById("tabs");
 tabsNav.addEventListener("click", function(e) {
@@ -419,6 +424,8 @@ if (window.innerWidth <= 640) {
 }
 
 initSwipeGestures();
+initPalette();
+window.openCommandPalette = openPalette;
 
 function showPwaUpdateBanner(worker) {
   var banner = document.getElementById("update-banner");

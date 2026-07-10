@@ -2,6 +2,49 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.20.0 — 2026-07-10
+
+- **New: Music tab — a built-in media player for your uploaded audio.** Upload
+  MP3 / FLAC / WAV / OGG / M4A files in Files and they appear in the new
+  Music tab (Workspace group). Click a track to play it in a persistent
+  player bar that stays put while you work in other tabs, with
+  shuffle, repeat (off/all/one), seek, and volume — volume and modes are
+  remembered across sessions. Track titles, artists, albums, durations, and
+  embedded album art are read automatically from the files' tags (new
+  `mutagen` dependency).
+- **Playlists & queue.** Create playlists, add tracks via a track's
+  right-click menu, drag to reorder, and play everything with one click. The
+  Queue sub-tab shows what's coming up — jump, remove, reorder, or clear it.
+- **Lock-screen controls.** Play/pause, previous/next, and seeking work from
+  the lock screen and notification center on phones (Media Session API),
+  with the track's album art shown.
+- **Offline listening.** Right-click a track → "Download for offline" keeps a
+  copy on the device so it plays without a connection; the Library shows how
+  much storage downloads use, and downloads can be removed the same way.
+
+- **New: command palette.** Press **Ctrl/Cmd+K** anywhere (or the new Search
+  button in the sidebar / top bar) to search notes, open to-dos, events,
+  exams, files, and web shortcuts in one place, plus "Go to …" actions for
+  every tab. Arrow keys + Enter to open; selecting a note opens it, a task
+  opens its edit dialog, an event jumps the planner to its date, a file opens
+  its preview.
+- **New: recurring to-dos.** The task edit dialog gained a Repeat option
+  (daily, weekly, every 2 weeks, monthly). Completing a recurring to-do
+  doesn't finish it — it reschedules to the next occurrence after today and
+  unchecks its subtask checklist. Recurring tasks show a ↻ badge; this works
+  from the To-do tab and the dashboard widget alike.
+
+## 1.18.0 — 2026-07-07
+
+- **New: grade goal calculator.** Each tracker in Exams & Grades can now hold
+  a target average. The analytics card shows the ECTS-weighted average you'd
+  need on your remaining (ungraded) exams to end at that target — green when
+  any pass already secures it, red when it's mathematically out of reach. A
+  new **What if…** dialog lets you type hypothetical grades for upcoming
+  exams and watch the projected average and required remainder update live —
+  nothing in it is saved. Only numeric 1–10 grades count toward the math,
+  matching the existing weighted average.
+
 ## 1.17.0 — 2026-07-06
 
 - **New: multiple grade trackers.** Exams & Grades can now track separate

@@ -61,7 +61,8 @@ add an endpoint or table, add a case here.
 
 All endpoints return JSON and require a session cookie when auth is enabled
 (401 otherwise). CRUD is generic over the tables
-`events, exams, habits, workouts, tasks, notes, study_sessions`:
+`events, exams, habits, workouts, tasks, notes, study_sessions, playlists,
+playlist_tracks`:
 
 | Method & path | Purpose |
 |---|---|
@@ -97,6 +98,10 @@ are no dedicated endpoints; the generic CRUD + settings API cover it.
 | `DELETE /api/folders/<id>` | Delete a folder recursively (relocating child files and folders to the parent directory). |
 | `POST /api/files/move` | Batch move multiple files to a folder. Payload: `{file_ids: [...], folder_id: ...}`. |
 | `POST /api/files/cleanup` | Run manual storage reconciliation and cleanup of orphaned files. |
+| `GET /api/files/<id>/art` | Embedded album art of an audio file (ID3 APIC / FLAC picture / MP4 covr / Vorbis picture); an SVG placeholder when none. |
+| `POST /api/music/scan` | Extract audio metadata (duration, title, artist, album — via mutagen) into the `files` table for audio files that lack it; `{"force": true}` rescans all. Runs automatically on audio upload and lazily from the Music tab. |
+| `POST /api/playlists/<id>/add-tracks` | Append tracks to a playlist. Payload: `{file_ids: [...]}`; unknown file ids are skipped. |
+| `POST /api/playlists/<id>/reorder` | Rewrite track order. Payload: `{tracks: [playlist_track_id, ...]}` in the new order. |
 | `POST /api/ics/import` · `POST /api/ics/sync-now` · `DELETE /api/ics` | Calendar import, forced auto-sync, remove imported events. |
 | `GET /calendar.ics?key=…` | iCal feed (secret key instead of cookies). |
 | `POST /api/2fa/setup` · `GET /api/2fa/qr` · `POST /api/2fa/enable` · `POST /api/2fa/disable` | TOTP lifecycle. |

@@ -20,7 +20,6 @@ export function renderSettings(refresh) {
   safeRender("settings", () => {
     document.getElementById("icsUrl").textContent = S.feed_url;
   document.getElementById("icsDownload").href = S.feed_url;
-  document.body.classList.toggle("auth-enabled", !!S.auth.enabled);
   var box = document.getElementById("stravaBox"), html = "";
   var host = (S.app_url || location.origin).replace(/^https?:\/\//, "").replace(/:\d+$/, "").replace(/\/.*$/, "");
   if (!S.strava.configured || stravaEditing) {

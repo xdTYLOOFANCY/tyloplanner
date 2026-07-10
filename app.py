@@ -220,6 +220,7 @@ def create_app():
     from blueprints.calendar import bp as calendar_bp
     from blueprints.strava import bp as strava_bp
     from blueprints.notifications import bp as notifications_bp
+    from blueprints.music import bp as music_bp
 
     application.register_blueprint(auth_bp)
     application.register_blueprint(api_bp)
@@ -229,6 +230,7 @@ def create_app():
     application.register_blueprint(calendar_bp)
     application.register_blueprint(strava_bp)
     application.register_blueprint(notifications_bp)
+    application.register_blueprint(music_bp)
 
     @application.after_request
     def add_security_headers(response):

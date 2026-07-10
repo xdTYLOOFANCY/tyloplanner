@@ -26,10 +26,14 @@ def upload_file():
     f.save(disk_path)
     size = os.path.getsize(disk_path)
     ts = int(time.time() * 1000)
+    mimetype = f.mimetype or "application/octet-stream"
     with db(write=True) as con:
         con.execute(
             "INSERT INTO files(id, filename, size, mimetype, uploaded, folder_id) VALUES(?,?,?,?,?,?)",
-            (fid, original_name, size, f.mimetype or "application/octet-stream", ts, folder_id))
+            (fid, original_name, size, mimetype, ts, folder_id))
+    if mimetype.startswith("audio/"):
+        from blueprints.music import update_file_audio_meta
+        update_file_audio_meta(fid)
     return jsonify({"id": fid, "filename": original_name, "size": size})
 
 

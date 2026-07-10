@@ -243,6 +243,10 @@ export async function refresh(renderAll) {
     S.habit_log.forEach(function(l) { habitSet[l.habit_id + "|" + l.date] = true; });
   }
 
+  if (S && S.auth) {
+    document.body.classList.toggle("auth-enabled", !!S.auth.enabled);
+  }
+
   renderAll();
 }
 
@@ -256,6 +260,7 @@ export const tabNeedsRender = {
   tasks: true,
   notes: true,
   files: true,
+  music: true,
   settings: true
 };
 

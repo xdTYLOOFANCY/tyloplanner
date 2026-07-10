@@ -14,6 +14,7 @@ const ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/logo.svg", "/mani
                 "/js/analytics.js", "/js/dashboard.js", "/js/backup.js", "/js/chart.umd.js",
                 "/js/files.js", "/js/settings.js", "/js/marked.min.js",
                 "/js/offline.js", "/js/sidebar.js", "/js/login.js", "/js/study_timer.js",
+                "/js/music.js", "/js/palette.js",
                 "/js/swipe.js", "/js/quill.js", "/js/quill.snow.css",
                 "/js/gridstack.all.js", "/js/gridstack.min.css",
                 "/fonts/inter-400.woff2", "/fonts/inter-500.woff2",

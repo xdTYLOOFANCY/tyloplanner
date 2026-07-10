@@ -119,6 +119,11 @@ _FIELD_RULES = {
     # ---- FK / ID references (validated only for length) ----
     "folder_id":        ("str", _MAX_SHORT),
     "parent_id":        ("str", _MAX_SHORT),
+    # ---- playlists ----
+    "playlist_id":      ("str", _MAX_SHORT),
+    "file_id":          ("str", _MAX_SHORT),
+    "position":         ("int", 0, 10_000_000),
+    "added":            ("int", 0, 9_999_999_999_999),
 }
 
 

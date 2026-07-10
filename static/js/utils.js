@@ -182,6 +182,11 @@ function optimisticUpdate(method, path, body, id, S, SET) {
 
   if (!table || !S || !S[table]) return;
 
+  // Custom action endpoints (/api/<table>/<id>/<action>, e.g. playlist
+  // add-tracks/reorder) have no generic row mapping — pushing their body into
+  // S[table] would create a ghost row. Habit toggle is the one exception.
+  if (subRoute && subRoute !== "toggle") return;
+
   if (method === "POST") {
     if (subRoute === "toggle") {
       var date = body && body.date;

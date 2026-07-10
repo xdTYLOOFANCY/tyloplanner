@@ -329,6 +329,120 @@ export async function saveEctsGoal(val, refresh) {
   await saveTrackers(t, refresh);
 }
 
+// ---- grade goal (target average per tracker) ----
+
+// Pure math. Dutch-numeric rows only (same classification calcStats uses);
+// "remaining" = ungraded rows with ECTS. Solves
+// target = (Σ grade·w + needed·Wr) / (Wd + Wr) for needed.
+export function neededAvg(target, exams) {
+  var gw = 0, wd = 0, wr = 0;
+  exams.forEach(function(e) {
+    var v = gradeVal(e);
+    if (v == null) { if (e.ects > 0) wr += e.ects; return; }
+    var n = parseNumeric(v);
+    if (n != null && n <= 10 && !String(v).includes('%')) {
+      var w = e.ects || 1;
+      gw += n * w; wd += w;
+    }
+  });
+  var needed = (target > 0 && wr > 0) ? (target * (wd + wr) - gw) / wr : null;
+  var state = needed == null ? null : (needed > 10 ? 'unreachable' : (needed <= 5.5 ? 'safe' : 'open'));
+  return { avg: wd > 0 ? gw / wd : null, needed: needed, gradedEcts: wd, remainingEcts: wr, state: state };
+}
+
+export async function saveGradeTarget(val, refresh) {
+  var t = trackers(), id = selTrackerId();
+  t.forEach(function(x) { if (x.id === id) x.target = parseFloat(val) || 0; });
+  await saveTrackers(t, refresh);
+}
+
+// Round UP to 1 decimal ("need ≥ x" must actually reach the target), floor 1.0;
+// pre-round to 3 decimals so fp noise doesn't bump an exact 7.5 to 7.6.
+function ceil1(n) {
+  return Math.max(1, Math.ceil(Math.round(n * 1000) / 100) / 10).toFixed(1);
+}
+
+function needText(r) {
+  var col = r.state === 'unreachable' ? 'var(--red)' : (r.state === 'safe' ? 'var(--green)' : 'var(--orange)');
+  var t = 'Need ≥ <b style="color:' + col + '">' + ceil1(r.needed) + '</b> on remaining ' + r.remainingEcts + ' EC';
+  if (r.state === 'unreachable') t += ' <span style="color:var(--red)">— not reachable</span>';
+  else if (r.state === 'safe') t += ' <span style="color:var(--green)">— any pass secures it</span>';
+  return t;
+}
+
+function gradeGoalHtml(exams, tracker) {
+  var target = parseFloat(tracker.target) || 0;
+  var r = neededAvg(target, exams);
+  var out = 'Target avg <input type="number" class="inline-input" id="gradeTargetInput" value="' +
+    (target || '') + '" min="1" max="10" step="0.1" placeholder="e.g. 7.5" style="width:58px" ' +
+    'onchange="saveGradeTarget(this.value)">';
+  if (target > 0) {
+    out += r.remainingEcts > 0
+      ? ' &nbsp;·&nbsp; ' + needText(r)
+      : ' <span class="muted">— add upcoming exams with ECTS to plan</span>';
+  }
+  if (r.remainingEcts > 0) out += ' <button class="btn ghost small" style="margin-left:6px" onclick="examWhatIf()">What if…</button>';
+  return out;
+}
+
+// Sandbox dialog: hypothetical grades on ungraded exams, nothing persisted.
+export function whatIfDialog() {
+  var tlist = trackers(), tid = selTrackerId();
+  var tracker = tlist.filter(function(x) { return x.id === tid; })[0] || tlist[0];
+  var mine = S.exams.filter(function(e) { return trackerOf(e, tlist) === tid; });
+  var remaining = mine.filter(function(e) { return gradeVal(e) == null && e.ects > 0; })
+    .sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+  if (!remaining.length) return;
+  var target = parseFloat(tracker.target) || 0;
+
+  var dlg = document.createElement('dialog');
+  dlg.className = 'modal';
+  var rows = remaining.map(function(e) {
+    return '<label class="tagpick-row" style="gap:8px">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.name) + '</span>' +
+      '<span class="muted" style="font-size:12px;flex-shrink:0">' + esc(e.date || '') + ' · ' + e.ects + ' EC</span>' +
+      '<input type="number" min="1" max="10" step="0.1" placeholder="—" data-whatif="' + esc(e.id) + '" ' +
+        'style="width:64px;padding:4px 6px;flex-shrink:0">' +
+      '</label>';
+  }).join('');
+  dlg.innerHTML = '<div class="modal-content" style="max-width:420px;width:92%">' +
+    '<h3 style="margin:0 0 4px;font-size:16px;font-weight:700">What if… — ' + esc(tracker.name) + '</h3>' +
+    '<div class="muted" style="font-size:12px;margin-bottom:10px">Type hypothetical grades — nothing is saved.</div>' +
+    '<div class="tagpick-list">' + rows + '</div>' +
+    '<div data-whatif-out style="margin:12px 0 16px;font-size:13px"></div>' +
+    '<div style="display:flex;justify-content:flex-end"><button class="btn" data-act="close">Close</button></div>' +
+    '</div>';
+  document.body.appendChild(dlg);
+
+  function recompute() {
+    var hyp = {};
+    Array.prototype.forEach.call(dlg.querySelectorAll('[data-whatif]'), function(i) {
+      var n = parseFloat(i.value);
+      if (!isNaN(n)) hyp[i.getAttribute('data-whatif')] = Math.min(10, Math.max(1, n));
+    });
+    var sim = mine.map(function(e) {
+      return hyp[e.id] != null ? Object.assign({}, e, { grade_text: String(hyp[e.id]), grade: hyp[e.id] }) : e;
+    });
+    var r = neededAvg(target, sim);
+    var avgR = r.avg != null ? Math.round(r.avg * 100) / 100 : null;
+    var out = 'Projected average: <b>' + (avgR != null ? avgR : '—') + '</b>';
+    if (target > 0) {
+      if (r.needed != null) out += ' &nbsp;·&nbsp; ' + needText(r);
+      else if (avgR != null) out += avgR >= target
+        ? ' <span style="color:var(--green)">— target reached ✓</span>'
+        : ' <span style="color:var(--red)">— below target</span>';
+    }
+    dlg.querySelector('[data-whatif-out]').innerHTML = out;
+  }
+  dlg.addEventListener('input', recompute);
+  dlg.addEventListener('click', function(ev) {
+    var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
+    if (act === 'close' || ev.target === dlg) { try { dlg.close(); } catch (e) {} dlg.remove(); }
+  });
+  recompute();
+  dlg.showModal();
+}
+
 // ---- analytics helpers ----
 function calcStats(exams) {
   var ectsEarned = 0, passed = 0, failed = 0, dutchSum = 0, dutchW = 0, dutchCount = 0;
@@ -460,8 +574,8 @@ function byYearHtml(exams) {
 }
 
 // ---- analytics card ----
-function renderAnalytics(exams, ectsGoal) {
-  var goal = parseFloat(ectsGoal) || 0;
+function renderAnalytics(exams, tracker) {
+  var goal = parseFloat(tracker.goal) || 0;
   var st = calcStats(exams);
   var today = todayStr();
   var goalInput = '<input type="number" class="inline-input" id="ectsGoalInput" value="' +
@@ -478,6 +592,8 @@ function renderAnalytics(exams, ectsGoal) {
       donutSvg(st.ectsEarned, goal) +
       '<div class="da-right">' +
         '<div class="da-top">' + topStats + '</div>' +
+        '<div class="da-section"><div class="da-section-label">Grade goal</div>' +
+          '<div style="font-size:13px">' + gradeGoalHtml(exams, tracker) + '</div></div>' +
         '<div class="da-section"><div class="da-section-label">Grade distribution</div>' + distBar(st.dist) + '</div>' +
         '<div class="da-bottom-grid">' +
           '<div><div class="da-section-label">Upcoming</div>' + upcomingHtml(exams, today) + '</div>' +
@@ -493,7 +609,8 @@ function renderAnalytics(exams, ectsGoal) {
   if (st.passed > 0) parts.push('<span style="color:var(--green)">' + st.passed + ' passed</span>');
   if (st.failed > 0) parts.push('<span style="color:#ff5c5c">' + st.failed + ' failed</span>');
   return '<div class="exam-analytics-row">' + parts.join(' &nbsp;·&nbsp; ') +
-    ' &nbsp;·&nbsp; ECTS goal: ' + goalInput + '</div>';
+    ' &nbsp;·&nbsp; ECTS goal: ' + goalInput +
+    ' &nbsp;·&nbsp; ' + gradeGoalHtml(exams, tracker) + '</div>';
 }
 
 // ---- main render ----
@@ -550,7 +667,7 @@ export function renderExams(refresh) {
     });
 
     var analyticsEl = document.getElementById('examAnalytics');
-    if (analyticsEl) analyticsEl.innerHTML = mine.length ? renderAnalytics(mine, tracker.goal) : '';
+    if (analyticsEl) analyticsEl.innerHTML = mine.length ? renderAnalytics(mine, tracker) : '';
 
     var html = '<tr><th>Name</th><th>Date</th><th></th><th>Year</th><th>ECTS</th><th>Tags</th><th>Grade</th><th></th></tr>';
     list.forEach(function(e) {

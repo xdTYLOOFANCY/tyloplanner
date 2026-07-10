@@ -6,3 +6,4 @@ qrcode>=7.4
 pillow>=10.0
 pywebpush>=2.3.0
 py-vapid>=1.9.4
+mutagen>=1.47
