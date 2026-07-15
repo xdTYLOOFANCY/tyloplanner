@@ -4,7 +4,7 @@
 "use strict";
 
 import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
-import { todayStr, esc, fmtShort, delRow as _delRow, navigateWithTransition } from './js/utils.js';
+import { todayStr, esc, fmtShort, delRow as _delRow } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings, applyNavLayoutFromSettings } from './js/theme.js';
 import { exportData, importData, exportArchive, importArchive } from './js/backup.js';
@@ -343,22 +343,21 @@ tabsNav.addEventListener("click", function(e) {
   const newTab = b.dataset.tab;
   
   if (oldTab === newTab) return;
-  
-  const oldIdx = TABS.indexOf(oldTab);
-  const newIdx = TABS.indexOf(newTab);
-  const direction = newIdx > oldIdx ? "forward" : "backward";
 
-  navigateWithTransition(function() {
+  // Directionless crossfade scoped to <main> (see style.css)
+  var switchTab = function() {
     tabsNav.querySelectorAll("button").forEach(function(x) { x.classList.remove("active"); });
     b.classList.add("active");
     document.querySelectorAll("main section").forEach(function(s) { s.classList.remove("active"); });
     document.getElementById("tab-" + newTab).classList.add("active");
-    
+
     // Render the target tab if it has stale state
     if (tabNeedsRender[newTab]) {
       renderTab(newTab);
     }
-  }, direction);
+  };
+  if (document.startViewTransition) document.startViewTransition(switchTab);
+  else switchTab();
 
   if (!SET || SET.persist_active_tab !== "0") {
     localStorage.setItem("active_tab", newTab);

@@ -1,17 +1,15 @@
 """
 Strava blueprint — OAuth flow, API key config, activity sync, disconnect.
 """
-import os
 import time
-from datetime import datetime
 from urllib.parse import urlencode
 
 import requests
-from flask import Blueprint, request, jsonify, redirect, current_app
+from flask import Blueprint, request, jsonify, redirect
 
 import helpers
 from helpers import (
-    db, uid, kv_get, kv_set, kv_del, APP_URL, local_now, db_retry, http_get, http_post,
+    db, uid, kv_get, kv_set, kv_del, APP_URL, local_now, http_get, http_post,
 )
 
 bp = Blueprint("strava", __name__)
@@ -113,7 +111,6 @@ def strava_callback():
     return redirect("/?strava=connected")
 
 
-@db_retry()
 def do_strava_sync():
     token = strava_access_token()
     if not token:
@@ -157,22 +154,10 @@ def strava_sync():
     token = strava_access_token()
     if not token:
         return jsonify({"error": "not connected to Strava"}), 400
-    
-    from scheduler import enqueue_task, execute_queued_task
-    import json
-    
-    task_id = enqueue_task("strava_sync")
-    if (current_app.testing and request.args.get("async") != "true") or request.args.get("sync") == "true":
-        execute_queued_task(task_id)
-        with db() as con:
-            row = con.execute("SELECT result, status, error_message FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-        if row and row["status"] == "completed" and row["result"]:
-            return jsonify(json.loads(row["result"]))
-        else:
-            err = (row["error_message"] if row else None) or "Sync failed"
-            return jsonify({"error": err}), 500
-            
-    return jsonify({"status": "queued", "task_id": task_id})
+    try:
+        return jsonify(do_strava_sync())
+    except Exception as e:
+        return jsonify({"error": str(e) or "Sync failed"}), 500
 
 
 @bp.post("/api/strava/disconnect")

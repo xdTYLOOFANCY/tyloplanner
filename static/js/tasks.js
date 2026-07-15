@@ -68,7 +68,7 @@ export async function addSubtask(parentId, refresh) {
 
 // Next due date strictly after today for a recurring task, stepping from the
 // current due date (or today if none). Keeps any time-of-day suffix.
-export function nextDue(current, recurrence) {
+function nextDue(current, recurrence) {
   var time = current && current.length > 10 ? current.slice(10) : "";
   var base = current ? current.slice(0, 10) : todayStr();
   var d = new Date(base + "T00:00:00");

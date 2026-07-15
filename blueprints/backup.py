@@ -7,9 +7,8 @@ import io
 import json
 import re
 import zipfile
-from datetime import datetime
 
-from flask import Blueprint, request, jsonify, current_app, send_file
+from flask import Blueprint, request, jsonify, send_file
 
 from helpers import (db, uid, q, TABLES, do_backup, BACKUP_DIR, local_now,
                      UPLOAD_DIR, VERSION, kv_set)
@@ -59,21 +58,11 @@ def do_restore_data(data):
 
 @bp.post("/api/backup/now")
 def backup_now():
-    from scheduler import enqueue_task, execute_queued_task
-    task_id = enqueue_task("backup", {"date": local_now().strftime("%Y-%m-%d")})
-    
-    if (current_app.testing and request.args.get("async") != "true") or request.args.get("sync") == "true":
-        execute_queued_task(task_id)
-        with db() as con:
-            row = con.execute("SELECT result, status, error_message FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-        if row and row["status"] == "completed" and row["result"]:
-            res = json.loads(row["result"])
-            return jsonify({"ok": True, "file": res["file"], "task_id": task_id})
-        else:
-            err = (row["error_message"] if row else None) or "Backup failed"
-            return jsonify({"error": err}), 500
-            
-    return jsonify({"status": "queued", "task_id": task_id})
+    try:
+        path = do_backup(local_now().strftime("%Y-%m-%d"))
+    except Exception as e:
+        return jsonify({"error": str(e) or "Backup failed"}), 500
+    return jsonify({"ok": True, "file": os.path.basename(path)})
 
 
 @bp.post("/api/restore")

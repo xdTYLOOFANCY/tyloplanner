@@ -4,7 +4,7 @@ import { S, SET, safeRender } from './state.js';
 import { toISO, todayStr, esc, api, guardFocus } from './utils.js';
 import { weekDates } from './utils.js';
 
-export var WTYPES = { run: "🏃 Run", bike: "🚴 Bike", swim: "🏊 Swim", gym: "🏋\uFE0F Gym" };
+var WTYPES = { run: "🏃 Run", bike: "🚴 Bike", swim: "🏊 Swim", gym: "🏋\uFE0F Gym" };
 
 export async function addWorkout(refresh) {
   var dur = parseFloat(document.getElementById("wDur").value) || 0;
@@ -25,7 +25,7 @@ function fmtMinSec(min) {
   return m + ":" + (s < 10 ? "0" : "") + s;
 }
 
-export function paceStr(w) {
+function paceStr(w) {
   if (!w.dur || !w.dist) return "";
   if (w.type === "run") return fmtMinSec(w.dur / w.dist) + " /km";
   if (w.type === "bike") return (Math.round(w.dist / (w.dur / 60) * 10) / 10) + " km/h";

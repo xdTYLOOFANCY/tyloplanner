@@ -1109,6 +1109,9 @@ mark.cur{background:#f5a623;color:#1c2230}
 .note-search-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:6px;cursor:pointer;font-size:12px;font-family:inherit}
 .note-search-btn:hover{color:var(--text);border-color:var(--accent)}
 #noteBodySearchCount{min-width:54px;text-align:right}
+/* In-note find highlights (CSS Custom Highlight API) — see notes.js paintNoteHighlights */
+::highlight(note-find){background:rgba(255,213,79,.4)}
+::highlight(note-find-current){background:#ff9800;color:#111}
 
 /* =====================================================================
    Google-Docs-style notes editor

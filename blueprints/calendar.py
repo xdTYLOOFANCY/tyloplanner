@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 import zoneinfo
 
 import requests
-from flask import Blueprint, request, jsonify, Response, current_app
+from flask import Blueprint, request, jsonify, Response
 
-from helpers import db, uid, setting, kv_set, app_tz, local_now, db_retry, http_get
+from helpers import db, uid, setting, kv_set, app_tz, local_now, http_get
 
 bp = Blueprint("calendar", __name__)
 
@@ -125,7 +125,6 @@ def parse_ics(text):
     return events
 
 
-@db_retry()
 def import_ics_text(text, source_id="ics"):
     evs = parse_ics(text)
     added = 0
@@ -309,26 +308,13 @@ def ics_import():
 def ics_sync_now():
     if not setting("cal_sync_urls").strip():
         return jsonify({"error": "no calendar URLs configured (and saved)"}), 400
-        
-    from scheduler import enqueue_task, execute_queued_task
-    import json
-    
-    task_id = enqueue_task("calendar_sync")
-    if (current_app.testing and request.args.get("async") != "true") or request.args.get("sync") == "true":
-        execute_queued_task(task_id)
-        with db() as con:
-            row = con.execute("SELECT result, status, error_message FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-        if row and row["status"] == "completed" and row["result"]:
-            return jsonify(json.loads(row["result"]))
-        else:
-            err = (row["error_message"] if row else None) or "Calendar sync failed"
-            return jsonify({"error": err}), 500
-            
-    return jsonify({"status": "queued", "task_id": task_id})
+    try:
+        return jsonify({"added": cal_auto_sync()})
+    except Exception as e:
+        return jsonify({"error": str(e) or "Calendar sync failed"}), 500
 
 
 @bp.delete("/api/ics")
-@db_retry()
 def ics_clear():
     with db(write=True) as con:
         cur = con.execute("DELETE FROM events WHERE source='ics' OR source LIKE 'ics_%'")

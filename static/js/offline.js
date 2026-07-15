@@ -3,7 +3,7 @@
 
 let dbPromise = null;
 
-export function initDB() {
+function initDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise(function(resolve, reject) {
     var req = indexedDB.open("tyloplanner_offline", 1);
@@ -48,7 +48,7 @@ export async function setCache(key, val) {
   });
 }
 
-export async function getQueue() {
+async function getQueue() {
   var db = await initDB();
   return new Promise(function(resolve, reject) {
     var tx = db.transaction("api_queue", "readonly");
@@ -74,7 +74,7 @@ export async function addToQueue(item) {
   });
 }
 
-export async function removeFromQueue(id) {
+async function removeFromQueue(id) {
   var db = await initDB();
   return new Promise(function(resolve, reject) {
     var tx = db.transaction("api_queue", "readwrite");

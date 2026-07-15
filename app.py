@@ -17,11 +17,10 @@ from helpers import (
     DB_PATH, PORT, APP_URL,
     TABLES, db, kv_get, kv_set, close_db, run_migrations,
 )
-from scheduler import scheduler_loop, recover_interrupted_tasks
+from scheduler import scheduler_loop
 
 # ---------------- database init ----------------
 run_migrations()
-recover_interrupted_tasks()
 
 _WELCOME_NOTE_TITLE = "How to use Notes"
 _WELCOME_NOTE_BODY = """\
@@ -93,87 +92,6 @@ with db() as con:
         )
         con.execute("INSERT INTO kv(key,value) VALUES('seed_default_shortcut','1')")
 
-# ---------------- logging middleware ----------------
-class LoggingMiddleware:
-    """
-    WSGI middleware to log all incoming HTTP requests to stdout in the standard
-    Apache Combined Log format:
-    %h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-Agent}i"
-    """
-    def __init__(self, app, flask_app=None):
-        self.app = app
-        self.flask_app = flask_app
-
-    def __call__(self, environ, start_response):
-        # Bypass logging if running in a test suite
-        import os
-        if (self.flask_app and self.flask_app.testing) or os.environ.get("TESTING") == "True":
-            return self.app(environ, start_response)
-
-        status_code = '-'
-        response_length = 0
-
-        def custom_start_response(status, response_headers, exc_info=None):
-            nonlocal status_code, response_length
-            status_code = status.split()[0]
-            for name, val in response_headers:
-                if name.lower() == 'content-length':
-                    try:
-                        response_length = int(val)
-                    except ValueError:
-                        pass
-            return start_response(status, response_headers, exc_info)
-
-        try:
-            response_iterable = self.app(environ, custom_start_response)
-        except Exception:
-            # If an unhandled exception bubbles up, log it as a 500 error
-            status_code = '500'
-            self._log(environ, status_code, response_length)
-            raise
-
-        def response_wrapper(iterable):
-            bytes_sent = 0
-            try:
-                for chunk in iterable:
-                    bytes_sent += len(chunk)
-                    yield chunk
-            finally:
-                if hasattr(iterable, 'close'):
-                    iterable.close()
-                final_length = response_length if response_length > 0 else bytes_sent
-                self._log(environ, status_code, final_length)
-
-        return response_wrapper(response_iterable)
-
-    def _log(self, environ, status_code, response_length):
-        from datetime import datetime, timezone
-        
-        ip = environ.get('REMOTE_ADDR', '-')
-        user = environ.get('REMOTE_USER', '-')
-        
-        # Apache time format: [day/month/year:hour:minute:second zone]
-        now = datetime.now(timezone.utc).astimezone()
-        time_str = now.strftime('%d/%b/%Y:%H:%M:%S %z')
-        
-        method = environ.get('REQUEST_METHOD', '-')
-        path = environ.get('PATH_INFO', '')
-        query = environ.get('QUERY_STRING', '')
-        protocol = environ.get('SERVER_PROTOCOL', 'HTTP/1.1')
-        
-        if query:
-            request_line = f"{method} {path}?{query} {protocol}"
-        else:
-            request_line = f"{method} {path} {protocol}"
-            
-        bytes_sent_str = str(response_length) if response_length > 0 else '-'
-        referer = environ.get('HTTP_REFERER', '-')
-        user_agent = environ.get('HTTP_USER_AGENT', '-')
-        
-        log_entry = f'{ip} - {user} [{time_str}] "{request_line}" {status_code} {bytes_sent_str} "{referer}" "{user_agent}"'
-        print(log_entry, flush=True)
-
-
 # ---------------- app factory ----------------
 def create_app():
     application = Flask(__name__, static_folder="static", static_url_path="")
@@ -191,8 +109,25 @@ def create_app():
             r.headers["Expires"] = "0"
         return r
 
+    @application.after_request
+    def access_log(response):
+        """Apache-combined-style access log. The global errorhandler turns
+        unhandled exceptions into responses, so errors are logged here too."""
+        if application.testing or os.environ.get("TESTING") == "True":
+            return response
+        from datetime import datetime, timezone
+        time_str = datetime.now(timezone.utc).astimezone().strftime('%d/%b/%Y:%H:%M:%S %z')
+        qs = request.query_string.decode()
+        request_line = "%s %s%s %s" % (request.method, request.path,
+                                       "?" + qs if qs else "",
+                                       request.environ.get("SERVER_PROTOCOL", "HTTP/1.1"))
+        print('%s - - [%s] "%s" %s %s "%s" "%s"' % (
+            request.remote_addr or "-", time_str, request_line,
+            response.status_code, response.content_length or "-",
+            request.referrer or "-", request.user_agent.string or "-"), flush=True)
+        return response
+
     from werkzeug.middleware.proxy_fix import ProxyFix
-    application.wsgi_app = LoggingMiddleware(application.wsgi_app, flask_app=application)
     application.wsgi_app = ProxyFix(application.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # Secure session cookies
@@ -281,15 +216,7 @@ def create_app():
             return response
 
         import gzip
-        import io
-
-        gzip_buffer = io.BytesIO()
-        with gzip.GzipFile(mode='wb', fileobj=gzip_buffer, compresslevel=6) as gzip_file:
-            gzip_file.write(data)
-
-        compressed_data = gzip_buffer.getvalue()
-
-        response.set_data(compressed_data)
+        response.set_data(gzip.compress(data, compresslevel=6))
         response.headers['Content-Encoding'] = 'gzip'
 
         vary = response.headers.get("Vary")

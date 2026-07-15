@@ -84,7 +84,6 @@ export function renderSettings(refresh) {
   }
 
     renderBackupList("backupList", refresh);
-    renderTasks();
   });
 }
 
@@ -321,14 +320,10 @@ export async function saveCalSync(refresh) {
 
 export async function calSyncNow(refresh) {
   try {
-    toast("Syncing calendars (queued)...");
+    toast("Syncing calendars...");
     var j = await api("POST", "/api/ics/sync-now");
-    if (j.status === "queued") {
-      pollTask(j.task_id, "Calendar sync done", refresh);
-    } else {
-      toast("Calendar sync done \u2014 " + (j.added || 0) + " new events");
-      await refresh();
-    }
+    toast("Calendar sync done \u2014 " + (j.added || 0) + " new events");
+    await refresh();
   } catch(e) { alert(e.message); }
 }
 
@@ -340,7 +335,7 @@ export async function saveAppTimezone(refresh) {
   await refresh();
 }
 
-export function populateTimezones() {
+function populateTimezones() {
   var tzSelect = document.getElementById("appTimezone");
   if (!tzSelect || tzSelect.options.length > 1) return;
   if (Intl && Intl.supportedValuesOf) {
@@ -735,14 +730,10 @@ export async function changePassword(refresh) {
 
 export async function backupNow(refresh) {
   try {
-    toast("Creating backup (queued)...");
+    toast("Creating backup...");
     var j = await api("POST", "/api/backup/now");
-    if (j.status === "queued") {
-      pollTask(j.task_id, "Backup written", refresh);
-    } else {
-      toast("Backup written: " + j.file);
-      await refresh();
-    }
+    toast("Backup written: " + j.file);
+    await refresh();
   } catch(e) { alert(e.message); }
 }
 
@@ -788,14 +779,10 @@ export async function stravaForget(refresh) {
 
 export async function stravaSync(refresh) {
   try {
-    toast("Syncing with Strava (queued)...");
+    toast("Syncing with Strava...");
     var j = await api("POST", "/api/strava/sync");
-    if (j.status === "queued") {
-      pollTask(j.task_id, "Strava sync done", refresh);
-    } else {
-      toast("Strava sync done \u2014 " + (j.added || 0) + " new activities");
-      await refresh();
-    }
+    toast("Strava sync done \u2014 " + (j.added || 0) + " new activities");
+    await refresh();
   } catch(e) { alert(e.message); }
 }
 
@@ -807,7 +794,7 @@ export async function stravaDisconnect(refresh) {
 // expose stravaEditing for inline onclick toggle
 export { stravaEditing, tfaPending };
 
-export function getCategoryColorHex(name) {
+function getCategoryColorHex(name) {
   var hash = 0;
   for (var i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -939,121 +926,3 @@ export async function checkForUpdates(force) {
 }
 
 
-export async function renderTasks() {
-  var list = document.getElementById("bgTaskList");
-  if (!list) return;
-
-  try {
-    var tasks = await api("GET", "/api/tasks");
-    if (!tasks || tasks.length === 0) {
-      list.innerHTML = '<span class="muted">No background tasks logged.</span>';
-      return;
-    }
-
-    var html = "";
-    tasks.forEach(function(t) {
-      var statusClass = "gray";
-      if (t.status === "completed") statusClass = "green";
-      else if (t.status === "running") statusClass = "blue";
-      else if (t.status === "failed") statusClass = "red";
-      else if (t.status === "pending") statusClass = "orange";
-
-      var created = new Date(t.created_at * 1000).toLocaleString();
-      var finished = t.finished_at ? new Date(t.finished_at * 1000).toLocaleString() : "-";
-      var started = t.started_at ? new Date(t.started_at * 1000).toLocaleString() : "-";
-
-      var duration = "-";
-      if (t.started_at && t.finished_at) {
-        duration = (t.finished_at - t.started_at) + "s";
-      }
-
-      var payloadStr = "";
-      if (t.payload) {
-        try {
-          payloadStr = JSON.stringify(JSON.parse(t.payload));
-        } catch(e) {
-          payloadStr = t.payload;
-        }
-      }
-
-      var resultStr = "";
-      if (t.result) {
-        try {
-          resultStr = JSON.stringify(JSON.parse(t.result));
-        } catch(e) {
-          resultStr = t.result;
-        }
-      }
-
-      var errHtml = "";
-      if (t.error_message) {
-        var errId = "task-err-" + t.id;
-        errHtml = '<div style="margin-top:6px; font-size:11px;">' +
-          '<button class="btn ghost small" onclick="var el = document.getElementById(\'' + errId + '\'); el.style.display = el.style.display === \'none\' ? \'block\' : \'none\'">Show error log</button>' +
-          '<pre id="' + errId + '" style="display:none; margin-top:4px; padding:6px; background:var(--panel2); border:1px solid var(--border); border-radius:4px; font-family:monospace; white-space:pre-wrap; word-break:break-all; max-height:150px; overflow-y:auto; color:var(--red); text-align:left;">' + esc(t.error_message) + '</pre>' +
-          '</div>';
-      }
-
-      html += '<div class="list-item" style="display:flex; flex-direction:column; padding:10px 8px; border-bottom:1px solid var(--border); gap:4px;">' +
-        '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-        '<b>' + esc(t.task_type.toUpperCase()) + '</b>' +
-        '<span class="badge ' + statusClass + '">' + esc(t.status.toUpperCase()) + '</span>' +
-        '</div>' +
-        '<div class="muted" style="font-size:12px; display:flex; flex-wrap:wrap; gap:8px 12px;">' +
-        '<span>Created: ' + esc(created) + '</span>' +
-        '<span>Attempts: ' + t.attempts + '/' + t.max_attempts + '</span>' +
-        (duration !== "-" ? '<span>Duration: ' + esc(duration) + '</span>' : '') +
-        '</div>' +
-        (payloadStr ? '<div class="muted" style="font-size:12px;">Payload: <code>' + esc(payloadStr) + '</code></div>' : '') +
-        (resultStr ? '<div class="muted" style="font-size:12px; color:var(--green);">Result: <code>' + esc(resultStr) + '</code></div>' : '') +
-        errHtml +
-        '</div>';
-    });
-
-    list.innerHTML = html;
-  } catch (err) {
-    list.innerHTML = '<span class="muted" style="color:var(--red)">Failed to load task logs: ' + esc(err.message) + '</span>';
-  }
-}
-
-
-async function pollTask(taskId, successMessage, refresh) {
-  var count = 0;
-  var interval = setInterval(async function() {
-    try {
-      count++;
-      var t = await api("GET", "/api/tasks/" + taskId);
-      
-      // Update task list log in UI
-      renderTasks();
-      
-      if (t.status === "completed") {
-        clearInterval(interval);
-        var resultMsg = successMessage;
-        if (t.result) {
-          try {
-            var res = JSON.parse(t.result);
-            if (res.added !== undefined) {
-              resultMsg += " \u2014 " + res.added + " new items";
-            } else if (res.file !== undefined) {
-              resultMsg += ": " + res.file;
-            }
-          } catch(e) {}
-        }
-        toast(resultMsg);
-        await refresh();
-      } else if (t.status === "failed") {
-        clearInterval(interval);
-        alert("Task failed: " + (t.error_message || "Unknown error"));
-        await refresh();
-      } else if (count > 60) {
-        clearInterval(interval);
-        toast("Task is taking longer than expected. Check logs below.");
-        await refresh();
-      }
-    } catch(e) {
-      clearInterval(interval);
-      alert("Error checking task status: " + e.message);
-    }
-  }, 1000);
-}

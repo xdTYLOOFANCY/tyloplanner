@@ -11,11 +11,11 @@ import uuid
 import secrets
 import sqlite3
 import threading
-import functools
 from datetime import datetime
 from contextlib import contextmanager
 
 import requests
+from urllib3.util.retry import Retry
 
 # ---------------- config ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.26.0"
+VERSION = "1.28.1"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -58,112 +58,43 @@ TABLES = {
 db_write_lock = threading.RLock()
 
 
-def db_retry(max_retries=5, initial_delay=0.05, backoff_factor=2.0):
-    """
-    Decorator to retry database write functions if they fail with sqlite3.OperationalError (e.g. database is locked).
-    """
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            delay = initial_delay
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except sqlite3.OperationalError as e:
-                    if "locked" in str(e).lower() and attempt < max_retries:
-                        time.sleep(delay)
-                        delay *= backoff_factor
-                    else:
-                        raise
-            # Fallback (should not be reached due to raise in else)
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def http_retry(max_retries=3, initial_delay=1.0, backoff_factor=2.0, status_codes=None):
-    """
-    Decorator to retry external HTTP calls if they fail due to transient network issues,
-    rate-limiting (HTTP 429), or temporary server errors (5xx).
-    """
-    if status_codes is None:
-        status_codes = {429, 500, 502, 503, 504}
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            delay = initial_delay
-            for attempt in range(max_retries + 1):
-                try:
-                    res = func(*args, **kwargs)
-                    if isinstance(res, requests.Response):
-                        if res.status_code in status_codes:
-                            res.raise_for_status()
-                    return res
-                except requests.RequestException as e:
-                    # If it's an HTTPError, check if we should retry based on status code.
-                    # Non-transient status codes (like 400, 401, 403, 404) should not be retried.
-                    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
-                        if e.response.status_code not in status_codes:
-                            raise
-                    
-                    if attempt < max_retries:
-                        print(f"HTTP request failed: {e}. Retrying in {delay:.2f}s... (Attempt {attempt + 1}/{max_retries})")
-                        time.sleep(delay)
-                        delay *= backoff_factor
-                    else:
-                        raise
-            # Fallback (should not be reached due to raise in else/except)
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-@http_retry()
-def http_get(url, **kwargs):
-    """Wrapper around requests.get with HTTP retry logic."""
-    return requests.get(url, **kwargs)
-
-
-@http_retry()
-def http_post(url, **kwargs):
-    """Wrapper around requests.post with HTTP retry logic."""
-    return requests.post(url, **kwargs)
-
-
+# Shared HTTP session for external calls (Strava, ICS feeds). urllib3 retries
+# transient failures (connection errors, 429, 5xx) with backoff; the final
+# response is returned (raise_on_status=False) so callers keep their own
+# status-code handling. allowed_methods=None retries POSTs too, matching the
+# previous hand-rolled behavior.
+_http = requests.Session()
+_http.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(
+    total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=None, raise_on_status=False)))
+_http.mount("http://", _http.get_adapter("https://"))
+http_get = _http.get
+http_post = _http.post
 
 
 def is_write_request():
-    try:
-        from flask import has_request_context, request
-        if has_request_context():
-            return request.method not in ("GET", "HEAD", "OPTIONS")
-    except ImportError:
-        pass
+    from flask import has_request_context, request
+    if has_request_context():
+        return request.method not in ("GET", "HEAD", "OPTIONS")
     return False
 
 
-def _begin_immediate_with_retry(con):
-    """Starts a BEGIN IMMEDIATE write transaction with retry/exponential backoff."""
-    if not con.in_transaction:
-        max_retries = 5
-        delay = 0.05
-        backoff_factor = 2.0
-        for attempt in range(max_retries + 1):
-            try:
-                con.execute("BEGIN IMMEDIATE")
-                break
-            except sqlite3.OperationalError as e:
-                if "locked" in str(e).lower() and attempt < max_retries:
-                    time.sleep(delay)
-                    delay *= backoff_factor
-                else:
-                    raise
-
-
 # ---------------- database ----------------
+def _connect():
+    con = sqlite3.connect(DB_PATH, timeout=10.0)
+    con.execute("PRAGMA journal_mode=WAL;")
+    # busy_timeout makes SQLite itself block-and-retry on lock contention
+    # (including BEGIN IMMEDIATE below) — no Python-level retry needed.
+    con.execute("PRAGMA busy_timeout = 5000;")
+    con.execute("PRAGMA foreign_keys = ON;")
+    con.row_factory = sqlite3.Row
+    return con
+
+
 @contextmanager
 def db(write=None):
+    from flask import g, has_app_context
+
     if write is None:
         write = is_write_request()
 
@@ -173,40 +104,18 @@ def db(write=None):
         lock_acquired = True
 
     try:
-        has_app = False
-        try:
-            from flask import g, has_app_context
-            has_app = has_app_context()
-        except ImportError:
-            pass
-
-        if has_app:
+        if has_app_context():
             if not hasattr(g, "db_conn"):
-                con = sqlite3.connect(DB_PATH, timeout=10.0)
-                con.execute("PRAGMA journal_mode=WAL;")
-                con.execute("PRAGMA busy_timeout = 5000;")
-                con.execute("PRAGMA foreign_keys = ON;")
-                con.row_factory = sqlite3.Row
-                g.db_conn = con
-            else:
-                con = g.db_conn
-
-            if write:
-                _begin_immediate_with_retry(con)
-
-            try:
-                with con:
-                    yield con
-            except Exception:
-                raise
+                g.db_conn = _connect()
+            con = g.db_conn
+            if write and not con.in_transaction:
+                con.execute("BEGIN IMMEDIATE")
+            with con:
+                yield con
         else:
-            con = sqlite3.connect(DB_PATH, timeout=10.0)
-            con.execute("PRAGMA journal_mode=WAL;")
-            con.execute("PRAGMA busy_timeout = 5000;")
-            con.execute("PRAGMA foreign_keys = ON;")
-            con.row_factory = sqlite3.Row
-            if write:
-                _begin_immediate_with_retry(con)
+            con = _connect()
+            if write and not con.in_transaction:
+                con.execute("BEGIN IMMEDIATE")
             try:
                 with con:
                     yield con
@@ -218,73 +127,46 @@ def db(write=None):
 
 
 def close_db(e=None):
-    try:
-        from flask import g
-        con = getattr(g, "db_conn", None)
-        if con is not None:
-            try:
-                con.execute("PRAGMA optimize;")
-            except Exception:
-                pass
-            con.close()
-    except Exception:
-        pass
+    from flask import g
+    con = getattr(g, "db_conn", None)
+    if con is not None:
+        try:
+            con.execute("PRAGMA optimize;")
+        except Exception:
+            pass
+        con.close()
 
 
 def get_current_schema_version(con):
-    res = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='kv'").fetchone()
-    if not res:
+    if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kv'").fetchone():
         return 0
-    
-    try:
-        db_ver = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
-        if db_ver:
-            return int(db_ver["value"])
-    except Exception:
-        pass
-        
-    try:
-        note_cols = [r["name"] for r in con.execute("PRAGMA table_info(notes)").fetchall()]
-    except Exception:
-        note_cols = []
-        
-    try:
-        task_cols = [r["name"] for r in con.execute("PRAGMA table_info(tasks)").fetchall()]
-    except Exception:
-        task_cols = []
-        
-    try:
-        event_cols = [r["name"] for r in con.execute("PRAGMA table_info(events)").fetchall()]
-    except Exception:
-        event_cols = []
-        
-    try:
-        has_fts = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts'").fetchone()
-    except Exception:
-        has_fts = None
 
-    try:
-        has_deleted_records = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='deleted_records'").fetchone()
-    except Exception:
-        has_deleted_records = None
+    db_ver = con.execute("SELECT value FROM kv WHERE key='db_version'").fetchone()
+    if db_ver:
+        return int(db_ver["value"])
 
-    if has_deleted_records:
+    # Legacy path: DB predates the stored db_version key — infer the schema
+    # version from marker tables/columns (PRAGMA table_info and sqlite_master
+    # queries never raise for missing tables, they just return no rows).
+    def table_exists(name):
+        return con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone()
+
+    def has_col(table, col):
+        return any(r["name"] == col for r in con.execute(f"PRAGMA table_info({table})"))
+
+    if table_exists("deleted_records"):
         version = 6
-    elif has_fts:
+    elif table_exists("notes_fts"):
         version = 5
-    elif "parent_id" in task_cols:
+    elif has_col("tasks", "parent_id"):
         version = 4
-    elif "recurrence" in event_cols:
+    elif has_col("events", "recurrence"):
         version = 3
-    elif "is_pinned" in note_cols:
+    elif has_col("notes", "is_pinned"):
         version = 2
     else:
-        tables = con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        if len(tables) > 0:
-            version = 1
-        else:
-            version = 0
-            
+        version = 1 if con.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone() else 0
+
     con.execute(
         "INSERT INTO kv(key, value) VALUES('db_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -377,7 +259,6 @@ def recreate_sync_triggers(con):
     """)
 
 
-@db_retry()
 def run_migrations():
     import re
     enable_auto_vacuum(DB_PATH)
@@ -637,14 +518,12 @@ def kv_get(key, default=None):
         return row["value"] if row else default
 
 
-@db_retry()
 def kv_set(key, value):
     with db(write=True) as con:
         con.execute("INSERT INTO kv(key,value) VALUES(?,?) "
                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
 
-@db_retry()
 def kv_del(key):
     with db(write=True) as con:
         con.execute("DELETE FROM kv WHERE key=?", (key,))

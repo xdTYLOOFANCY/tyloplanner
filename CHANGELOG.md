@@ -2,6 +2,42 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.28.1 — 2026-07-15
+
+- **Fixed find-in-note (Ctrl/Cmd+F).** Typing in the "Find in note" box no
+  longer jumps the cursor into your note after the first letter — focus now
+  stays in the search box while you type, like Word or Google Docs, so you can
+  no longer accidentally type into the note. Matches are highlighted in yellow
+  with the current one in orange, and Enter / the arrows step through them
+  without leaving the box.
+
+## 1.28.0 — 2026-07-15
+
+- **QR code generator.** Open the command palette (Ctrl/Cmd+K) and pick
+  **Generate QR code** to turn any link or text into a scannable QR — download
+  it as a PNG or copy it to the clipboard. The code contains the data itself,
+  so it never expires and needs no internet to scan. The encoder loads only the
+  first time you use it, so it doesn't slow down startup.
+
+## 1.27.0 — 2026-07-15
+
+- **Simpler internals, same features** — a repo-wide de-bloat pass (~750 lines
+  removed, one dependency dropped):
+  - Manual syncs (Strava, calendar, backup) now run directly and report their
+    result immediately, instead of going through a background task queue the
+    UI had to poll. The **Background Tasks Log** card in Settings is gone with
+    it — sync/backup results show as toasts, and errors appear right away.
+  - Nightly jobs (backup, reminders, cleanups) run on a small thread pool;
+    failures are logged to the server console. A failed daily job simply runs
+    again the next day.
+  - The 2FA setup QR code is now an SVG, dropping the `pillow` image
+    dependency.
+  - External HTTP calls (Strava, calendar feeds) retry transient failures via
+    the HTTP library's built-in retry support; SQLite lock handling now relies
+    on its native `busy_timeout` instead of three extra retry layers.
+  - Access logging moved from a custom WSGI middleware to a small
+    `after_request` hook (same Apache-combined log format).
+
 ## 1.26.0 — 2026-07-15
 
 - **Markdown shortcuts in the notes editor.** Type `# ` through `###### ` at

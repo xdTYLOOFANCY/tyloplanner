@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify, current_app
 import helpers
 from helpers import (
     db, uid, q, TABLES, APP_URL,
-    kv_get, feed_key, totp_enabled, full_state_dict, db_retry,
+    kv_get, feed_key, totp_enabled, full_state_dict,
     sanitize_note_html, record_note_revision,
 )
 
@@ -302,14 +302,6 @@ def _validate_fields(table, data):
 bp = Blueprint("api", __name__)
 
 
-def _strava_client_id():
-    return helpers.STRAVA_CLIENT_ID or kv_get("strava_client_id", "")
-
-
-def _strava_client_secret():
-    return helpers.STRAVA_CLIENT_SECRET or kv_get("strava_client_secret", "")
-
-
 @bp.get("/")
 @bp.get("/index.html")
 def index():
@@ -369,8 +361,9 @@ def get_state():
 
         out["version"] = current_version
 
+    from blueprints.strava import strava_client_id, strava_client_secret
     out["strava"] = {
-        "configured": bool(_strava_client_id() and _strava_client_secret()),
+        "configured": bool(strava_client_id() and strava_client_secret()),
         "from_env": bool(helpers.STRAVA_CLIENT_ID),
         "connected": kv_get("strava_refresh") is not None,
         "last_sync": kv_get("strava_last_sync"),
@@ -397,7 +390,6 @@ def get_state_version():
 
 
 
-@db_retry()
 def sync_exam_to_event(rid):
     with db(write=True) as con:
         exam = con.execute("SELECT name, date FROM exams WHERE id=?", (rid,)).fetchone()
@@ -417,7 +409,6 @@ def sync_exam_to_event(rid):
             con.execute("DELETE FROM events WHERE id=? AND type='deadline'", (rid,))
 
 
-@db_retry()
 def sync_event_to_exam(rid):
     with db(write=True) as con:
         event = con.execute("SELECT title, \"date\", type FROM events WHERE id=?", (rid,)).fetchone()
@@ -438,7 +429,6 @@ def sync_event_to_exam(rid):
 
 
 @bp.post("/api/<table>")
-@db_retry()
 def create_row(table):
     if table not in TABLES:
         return jsonify({"error": "unknown table"}), 404
@@ -469,7 +459,6 @@ def create_row(table):
 
 
 @bp.put("/api/<table>/<rid>")
-@db_retry()
 def update_row(table, rid):
     if table not in TABLES:
         return jsonify({"error": "unknown table"}), 404
@@ -522,7 +511,6 @@ def update_row(table, rid):
 
 
 @bp.delete("/api/note_folders/<fid>")
-@db_retry()
 def delete_note_folder(fid):
     with db(write=True) as con:
         row = con.execute("SELECT parent_id FROM note_folders WHERE id=?", (fid,)).fetchone()
@@ -537,7 +525,6 @@ def delete_note_folder(fid):
 
 
 @bp.delete("/api/<table>/<rid>")
-@db_retry()
 def delete_row(table, rid):
     if table not in TABLES:
         return jsonify({"error": "unknown table"}), 404
@@ -572,7 +559,6 @@ def delete_row(table, rid):
 
 
 @bp.post("/api/habits/<hid>/toggle")
-@db_retry()
 def toggle_habit(hid):
     d = (request.get_json(force=True) or {}).get("date")
     if not d:
@@ -589,7 +575,6 @@ def toggle_habit(hid):
 
 
 @bp.delete("/api/habits/<hid>/permanent")
-@db_retry()
 def delete_habit_permanent(hid):
     with db(write=True) as con:
         con.execute("DELETE FROM habits WHERE id=?", (hid,))
@@ -598,7 +583,6 @@ def delete_habit_permanent(hid):
 
 
 @bp.post("/api/notes/move")
-@db_retry()
 def move_notes():
     data = request.get_json(force=True) or {}
     note_ids = data.get("note_ids", [])
@@ -647,7 +631,6 @@ def get_note_revision(nid, rev_id):
 
 
 @bp.post("/api/notes/<nid>/revisions/<rev_id>/restore")
-@db_retry()
 def restore_note_revision(nid, rev_id):
     """Restore a note to a revision. The current content is snapshotted first
     (forced), so a restore is itself undoable via history."""

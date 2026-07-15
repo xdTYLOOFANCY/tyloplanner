@@ -6,6 +6,7 @@ import { openNote } from './notes.js';
 import { openTaskModal } from './tasks.js';
 import { goToDate } from './planner.js';
 import { previewFile } from './files.js';
+import { openQrModal } from './qr.js';
 
 var TAB_LABELS = {
   dashboard: 'Dashboard', analytics: 'Analytics', planner: 'Planner',
@@ -27,6 +28,7 @@ function buildIndex() {
   Object.keys(TAB_LABELS).forEach(function(t) {
     items.push({ label: 'Go to ' + TAB_LABELS[t], type: 'nav', run: function() { gotoTab(t); } });
   });
+  items.push({ label: 'Generate QR code', type: 'action', run: function() { openQrModal(); } });
   (S.notes || []).forEach(function(n) {
     items.push({ label: n.title || 'Untitled note', type: 'note', run: function() { gotoTab('notes'); openNote(n.id); } });
   });
@@ -51,7 +53,7 @@ function buildIndex() {
 
 function search(q) {
   var items = buildIndex();
-  if (!q) return items.filter(function(i) { return i.type === 'nav'; });
+  if (!q) return items.filter(function(i) { return i.type === 'nav' || i.type === 'action'; });
   q = q.toLowerCase();
   var starts = [], incl = [];
   items.forEach(function(i) {

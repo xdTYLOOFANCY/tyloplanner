@@ -55,7 +55,7 @@ Apply changes with `docker compose up -d --build`.
 
 ## Server Logging
 
-Waitress runs behind a custom WSGI `LoggingMiddleware` which logs all incoming HTTP requests to `stdout` in the standard Apache Combined Log format:
+Every HTTP request is logged to `stdout` in the standard Apache Combined Log format:
 ```text
 127.0.0.1 - - [25/Jun/2026:15:05:12 +0200] "GET /api/state HTTP/1.1" 200 4567 "http://localhost:8000/" "Mozilla/5.0..."
 ```

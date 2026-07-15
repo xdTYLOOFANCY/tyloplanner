@@ -2134,229 +2134,7 @@ class DatabaseConcurrencyTests(unittest.TestCase):
                 self.assertEqual(row["name"], f"Habit {i}")
 
 
-class TaskQueueTests(unittest.TestCase):
-    def setUp(self):
-        self.app = appmod.create_app()
-        self.c = self.app.test_client()
-        reset_db()
-
-    def test_enqueue_task_and_dispatch(self):
-        import time
-        import json
-        from scheduler import enqueue_task, check_and_dispatch_tasks, execute_queued_task
-        from helpers import db
-
-        # Enqueue a database optimization task
-        task_id = enqueue_task("db_optimize")
-        
-        # Verify it is in 'pending' state
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertIsNotNone(task)
-            self.assertEqual(task["task_type"], "db_optimize")
-            self.assertEqual(task["status"], "pending")
-            self.assertEqual(task["attempts"], 0)
-
-        # Run execute_queued_task directly to simulate worker thread execution
-        execute_queued_task(task_id)
-
-        # Verify it transitions to 'completed'
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "completed")
-            self.assertEqual(task["attempts"], 1)
-            self.assertIsNotNone(task["result"])
-            res = json.loads(task["result"])
-            self.assertTrue(res["success"])
-
-    def test_task_queue_endpoints(self):
-        # Trigger calendar sync (which enqueues a calendar_sync task)
-        # We need to make sure cal_sync_urls is set to avoid 400
-        from helpers import kv_set
-        kv_set("set_cal_sync_urls", "https://example.com/calendar.ics")
-
-        # Let's hit the endpoint to trigger sync asynchronously
-        r = self.c.post("/api/ics/sync-now?async=true")
-        self.assertEqual(r.status_code, 200)
-        task_id = r.get_json()["task_id"]
-        self.assertIsNotNone(task_id)
-
-        # List tasks
-        r_list = self.c.get("/api/tasks")
-        self.assertEqual(r_list.status_code, 200)
-        tasks = r_list.get_json()
-        # Verify our task is in the list and has correct attributes
-        matching_tasks = [t for t in tasks if t["id"] == task_id]
-        self.assertEqual(len(matching_tasks), 1)
-        self.assertEqual(matching_tasks[0]["task_type"], "calendar_sync")
-        self.assertEqual(matching_tasks[0]["status"], "pending")
-
-        # Fetch single task details
-        r_detail = self.c.get(f"/api/tasks/{task_id}")
-        self.assertEqual(r_detail.status_code, 200)
-        self.assertEqual(r_detail.get_json()["id"], task_id)
-
-    def test_task_timeout_detection(self):
-        import time
-        from scheduler import enqueue_task, check_running_timeouts
-        from helpers import db
-
-        # Enqueue a task
-        task_id = enqueue_task("backup")
-        
-        # Manually force its status to 'running' and started_at to 15 minutes ago
-        now_ts = int(time.time())
-        with db(write=True) as con:
-            con.execute(
-                "UPDATE queued_tasks SET status='running', started_at=? WHERE id=?",
-                (now_ts - 900, task_id)
-            )
-
-        # Run timeout checker
-        check_running_timeouts()
-
-        # Verify it transitions to 'failed' due to timeout
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "failed")
-            self.assertEqual(task["error_message"], "Task execution timed out.")
-
-    def test_task_retry_and_exponential_backoff(self):
-        import time
-        from scheduler import enqueue_task, execute_queued_task
-        from helpers import db
-
-        # Enqueue a task with invalid type to force execution failure
-        task_id = enqueue_task("invalid_task_type")
-
-        # Execute it (first attempt)
-        execute_queued_task(task_id)
-
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "pending")  # Should be set back to pending for retry
-            self.assertEqual(task["attempts"], 1)
-            self.assertTrue(task["scheduled_at"] > int(time.time())) # Scheduled in the future
-            self.assertIn("ValueError: Unknown task type", task["error_message"])
-
-        # Execute it again (second attempt)
-        # First manually set scheduled_at in the past so it can run
-        with db(write=True) as con:
-            con.execute("UPDATE queued_tasks SET scheduled_at=? WHERE id=?", (int(time.time()) - 10, task_id))
-            
-        execute_queued_task(task_id)
-
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "pending")
-            self.assertEqual(task["attempts"], 2)
-
-        # Execute it again (third attempt, final failure)
-        with db(write=True) as con:
-            con.execute("UPDATE queued_tasks SET scheduled_at=? WHERE id=?", (int(time.time()) - 10, task_id))
-            
-        execute_queued_task(task_id)
-
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "failed") # Exceeded max_attempts
-            self.assertEqual(task["attempts"], 3)
-
-    def test_task_recovery_on_startup(self):
-        import time
-        from scheduler import enqueue_task, recover_interrupted_tasks
-        from helpers import db
-
-        # Enqueue tasks
-        task_id_1 = enqueue_task("backup")
-        task_id_2 = enqueue_task("calendar_sync")
-        
-        # Manually force status to 'running'
-        with db(write=True) as con:
-            con.execute(
-                "UPDATE queued_tasks SET status='running', started_at=? WHERE id=?",
-                (int(time.time()), task_id_1)
-            )
-            # For task 2, let's set it to running but with attempts = 2 (max_attempts = 3)
-            # So its next attempt will be 3, which is the maximum, so it should be marked failed.
-            con.execute(
-                "UPDATE queued_tasks SET status='running', started_at=?, attempts=2 WHERE id=?",
-                (int(time.time()), task_id_2)
-            )
-
-        # Run startup recovery
-        recover_interrupted_tasks()
-
-        # Verify task 1 is reset to pending with attempts=1 and started_at=None
-        with db() as con:
-            task1 = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id_1,)).fetchone()
-            self.assertIsNotNone(task1)
-            self.assertEqual(task1["status"], "pending")
-            self.assertEqual(task1["attempts"], 1)
-            self.assertIsNone(task1["started_at"])
-            self.assertEqual(task1["error_message"], "Server restarted")
-
-            # Verify task 2 is marked failed because it reached max_attempts
-            task2 = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id_2,)).fetchone()
-            self.assertIsNotNone(task2)
-            self.assertEqual(task2["status"], "failed")
-            self.assertEqual(task2["attempts"], 3)
-            self.assertEqual(task2["error_message"], "Server restarted")
-
-
 class DatabaseResiliencyTests(unittest.TestCase):
-    def test_db_retry_decorator_success_after_retries(self):
-        from helpers import db_retry
-        import sqlite3
-
-        call_count = 0
-
-        @db_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_write():
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                raise sqlite3.OperationalError("database is locked")
-            return "success"
-
-        result = dummy_write()
-        self.assertEqual(result, "success")
-        self.assertEqual(call_count, 3)
-
-    def test_db_retry_decorator_raises_other_errors(self):
-        from helpers import db_retry
-        import sqlite3
-
-        call_count = 0
-
-        @db_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_write():
-            nonlocal call_count
-            call_count += 1
-            raise sqlite3.OperationalError("near 'syntax': syntax error")
-
-        with self.assertRaises(sqlite3.OperationalError) as ctx:
-            dummy_write()
-        self.assertIn("syntax error", str(ctx.exception))
-        self.assertEqual(call_count, 1)
-
-    def test_db_retry_decorator_raises_after_exhaustion(self):
-        from helpers import db_retry
-        import sqlite3
-
-        call_count = 0
-
-        @db_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_write():
-            nonlocal call_count
-            call_count += 1
-            raise sqlite3.OperationalError("database is locked")
-
-        with self.assertRaises(sqlite3.OperationalError) as ctx:
-            dummy_write()
-        self.assertIn("locked", str(ctx.exception))
-        self.assertEqual(call_count, 4)  # 1 initial + 3 retries = 4 attempts
-
     def test_db_context_manager_begin_immediate_and_write(self):
         from helpers import db
         # Ensure we can run db(write=True) context manager successfully
@@ -2366,80 +2144,17 @@ class DatabaseResiliencyTests(unittest.TestCase):
 
 
 class HTTPResiliencyTests(unittest.TestCase):
-    def test_http_retry_success_after_connection_error(self):
-        from helpers import http_retry
-        import requests
-
-        call_count = 0
-
-        @http_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_request():
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                raise requests.exceptions.ConnectionError("Connection timed out")
-            resp = requests.Response()
-            resp.status_code = 200
-            return resp
-
-        result = dummy_request()
-        self.assertEqual(result.status_code, 200)
-        self.assertEqual(call_count, 3)
-
-    def test_http_retry_success_after_transient_status_code(self):
-        from helpers import http_retry
-        import requests
-
-        call_count = 0
-
-        @http_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_request():
-            nonlocal call_count
-            call_count += 1
-            resp = requests.Response()
-            if call_count < 3:
-                resp.status_code = 429
-            else:
-                resp.status_code = 200
-            return resp
-
-        result = dummy_request()
-        self.assertEqual(result.status_code, 200)
-        self.assertEqual(call_count, 3)
-
-    def test_http_retry_no_retry_on_non_transient_status_code(self):
-        from helpers import http_retry
-        import requests
-
-        call_count = 0
-
-        @http_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_request():
-            nonlocal call_count
-            call_count += 1
-            resp = requests.Response()
-            resp.status_code = 401
-            raise requests.exceptions.HTTPError("Unauthorized", response=resp)
-
-        with self.assertRaises(requests.exceptions.HTTPError):
-            dummy_request()
-        self.assertEqual(call_count, 1)
-
-    def test_http_retry_raises_after_exhaustion(self):
-        from helpers import http_retry
-        import requests
-
-        call_count = 0
-
-        @http_retry(max_retries=3, initial_delay=0.01, backoff_factor=1.5)
-        def dummy_request():
-            nonlocal call_count
-            call_count += 1
-            raise requests.exceptions.Timeout("Read timeout")
-
-        with self.assertRaises(requests.exceptions.Timeout):
-            dummy_request()
-        self.assertEqual(call_count, 4)  # 1 initial + 3 retries = 4 attempts
+    def test_http_session_retries_configured(self):
+        # http_get/http_post share a Session whose adapter retries transient
+        # failures (connection errors, 429, 5xx) with backoff via urllib3.
+        from helpers import _http
+        for scheme in ("http://", "https://"):
+            retries = _http.get_adapter(scheme).max_retries
+            self.assertEqual(retries.total, 3)
+            self.assertIn(429, retries.status_forcelist)
+            self.assertIn(503, retries.status_forcelist)
+            self.assertFalse(retries.raise_on_status)
+            self.assertIsNone(retries.allowed_methods)  # POSTs retry too
 
 
 class StorageCleanupTests(unittest.TestCase):
@@ -2521,9 +2236,8 @@ class StorageCleanupTests(unittest.TestCase):
 
     def test_scheduler_storage_cleanup_task(self):
         import os
-        from scheduler import enqueue_task, execute_queued_task
-        from helpers import UPLOAD_DIR, db
-        import json
+        from blueprints.files import run_storage_cleanup
+        from helpers import UPLOAD_DIR
 
         os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -2533,24 +2247,14 @@ class StorageCleanupTests(unittest.TestCase):
         with open(orphaned_disk_path, "wb") as f:
             f.write(b"orphaned")
 
-        # Enqueue storage_cleanup task
-        task_id = enqueue_task("storage_cleanup")
+        result = run_storage_cleanup()
 
-        # Execute the task
-        execute_queued_task(task_id)
-
-        # Verify status and result in DB
-        with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "completed")
-            result = json.loads(task["result"])
-            self.assertTrue(result["deleted_count"] >= 1)
-            self.assertIn(orphaned_id, result["deleted_files"])
+        self.assertTrue(result["deleted_count"] >= 1)
+        self.assertIn(orphaned_id, result["deleted_files"])
 
     def test_session_cleanup_task(self):
         import time
-        import json
-        from scheduler import enqueue_task, execute_queued_task
+        from scheduler import purge_expired_sessions
         from helpers import db
 
         now = int(time.time())
@@ -2571,20 +2275,11 @@ class StorageCleanupTests(unittest.TestCase):
                 (new_session_id, now)
             )
 
-        # Enqueue session_cleanup task
-        task_id = enqueue_task("session_cleanup")
+        deleted = purge_expired_sessions()
+        self.assertEqual(deleted, 1)
 
-        # Execute the task
-        execute_queued_task(task_id)
-
-        # Verify task status and result in DB
+        # Verify that only the old session was purged
         with db() as con:
-            task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-            self.assertEqual(task["status"], "completed")
-            result = json.loads(task["result"])
-            self.assertEqual(result["deleted_count"], 1)
-
-            # Verify that only the old session was purged
             sessions = [row["id"] for row in con.execute("SELECT id FROM user_sessions").fetchall()]
             self.assertNotIn(old_session_id, sessions)
             self.assertIn(new_session_id, sessions)
@@ -2663,126 +2358,58 @@ class CliAdminTests(unittest.TestCase):
 
 
 class AccessLoggingTests(unittest.TestCase):
-    """Tests for the custom WSGI LoggingMiddleware."""
+    """Tests for the after_request access logger."""
 
-    def test_logging_middleware_output(self):
-        from app import LoggingMiddleware
+    def _request_with_logging(self, path):
+        """Run one request with the test-suite logging bypass disabled and
+        return captured stdout."""
         import io
         import contextlib
-        from unittest.mock import MagicMock
-        
-        # Create a simple WSGI application mock
-        def mock_app(environ, start_response):
-            start_response("200 OK", [("Content-Type", "text/plain"), ("Content-Length", "12")])
-            return [b"Hello, World"]
-            
-        mock_flask = MagicMock()
-        mock_flask.testing = False
-        
-        import os
+
+        app = appmod.create_app()
+        helpers.AUTH_ENABLED = False
         orig_testing = os.environ.get("TESTING")
         os.environ["TESTING"] = "False"
-        
         try:
-            middleware = LoggingMiddleware(mock_app, flask_app=mock_flask)
-            
-            environ = {
-                "REQUEST_METHOD": "GET",
-                "PATH_INFO": "/some-test-path",
-                "QUERY_STRING": "param=123",
-                "SERVER_PROTOCOL": "HTTP/1.1",
-                "REMOTE_ADDR": "192.168.1.100",
-                "REMOTE_USER": "test_user",
-                "HTTP_REFERER": "http://referrer.com",
-                "HTTP_USER_AGENT": "TestAgent/1.0"
-            }
-            
             f = io.StringIO()
             with contextlib.redirect_stdout(f):
-                response_iterable = middleware(environ, lambda status, headers, exc_info=None: None)
-                list(response_iterable)
-                
-            output = f.getvalue()
-            # Assert combined log elements
-            self.assertIn("192.168.1.100", output)
-            self.assertIn("test_user", output)
-            self.assertIn("GET /some-test-path?param=123 HTTP/1.1", output)
-            self.assertIn("200", output)
-            self.assertIn("12", output)
-            self.assertIn("http://referrer.com", output)
-            self.assertIn("TestAgent/1.0", output)
+                app.test_client().get(path, headers={
+                    "Referer": "http://referrer.com",
+                    "User-Agent": "TestAgent/1.0",
+                })
+            return f.getvalue()
         finally:
             if orig_testing is not None:
                 os.environ["TESTING"] = orig_testing
             else:
                 os.environ.pop("TESTING", None)
 
-    def test_logging_middleware_bypasses_during_testing(self):
-        from app import LoggingMiddleware
+    def test_access_log_output(self):
+        reset_db()
+        output = self._request_with_logging("/api/state-version?param=123")
+        self.assertIn("127.0.0.1", output)
+        self.assertIn("GET /api/state-version?param=123 HTTP/1.1", output)
+        self.assertIn(" 200 ", output)
+        self.assertIn("http://referrer.com", output)
+        self.assertIn("TestAgent/1.0", output)
+
+    def test_access_log_bypassed_during_testing(self):
         import io
         import contextlib
-        from unittest.mock import MagicMock
-        
-        def mock_app(environ, start_response):
-            start_response("200 OK", [("Content-Type", "text/plain")])
-            return [b"OK"]
-            
-        mock_flask = MagicMock()
-        mock_flask.testing = True
-        
-        middleware = LoggingMiddleware(mock_app, flask_app=mock_flask)
-        environ = {
-            "REQUEST_METHOD": "GET",
-            "PATH_INFO": "/test",
-            "REMOTE_ADDR": "127.0.0.1"
-        }
-        
+
+        reset_db()
+        app = appmod.create_app()
+        helpers.AUTH_ENABLED = False
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
-            response_iterable = middleware(environ, lambda status, headers, exc_info=None: None)
-            list(response_iterable)
-            
-        output = f.getvalue()
-        self.assertEqual(output, "")
+            app.test_client().get("/api/state-version")
+        self.assertEqual(f.getvalue(), "")
 
-    def test_logging_middleware_exception_handling(self):
-        from app import LoggingMiddleware
-        import io
-        import contextlib
-        from unittest.mock import MagicMock
-        
-        def mock_app_raises(environ, start_response):
-            raise ValueError("Something went wrong")
-            
-        mock_flask = MagicMock()
-        mock_flask.testing = False
-        
-        import os
-        orig_testing = os.environ.get("TESTING")
-        os.environ["TESTING"] = "False"
-        
-        try:
-            middleware = LoggingMiddleware(mock_app_raises, flask_app=mock_flask)
-            environ = {
-                "REQUEST_METHOD": "POST",
-                "PATH_INFO": "/error-endpoint",
-                "REMOTE_ADDR": "10.0.0.1"
-            }
-            
-            f = io.StringIO()
-            with contextlib.redirect_stdout(f):
-                with self.assertRaises(ValueError):
-                    middleware(environ, lambda status, headers, exc_info=None: None)
-                    
-            output = f.getvalue()
-            self.assertIn("10.0.0.1", output)
-            self.assertIn("POST /error-endpoint HTTP/1.1", output)
-            self.assertIn("500", output)
-        finally:
-            if orig_testing is not None:
-                os.environ["TESTING"] = orig_testing
-            else:
-                os.environ.pop("TESTING", None)
+    def test_access_log_on_error_response(self):
+        reset_db()
+        output = self._request_with_logging("/api/definitely-not-a-route")
+        self.assertIn("GET /api/definitely-not-a-route HTTP/1.1", output)
+        self.assertIn(" 404 ", output)
 
 
 class RecurrenceInstanceTests(unittest.TestCase):

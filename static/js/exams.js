@@ -334,7 +334,7 @@ export async function saveEctsGoal(val, refresh) {
 // Pure math. Dutch-numeric rows only (same classification calcStats uses);
 // "remaining" = ungraded rows with ECTS. Solves
 // target = (Σ grade·w + needed·Wr) / (Wd + Wr) for needed.
-export function neededAvg(target, exams) {
+function neededAvg(target, exams) {
   var gw = 0, wd = 0, wr = 0;
   exams.forEach(function(e) {
     var v = gradeVal(e);

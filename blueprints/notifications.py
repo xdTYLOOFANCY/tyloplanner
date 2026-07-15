@@ -6,7 +6,7 @@ import json
 import time
 from flask import Blueprint, jsonify, request
 
-from helpers import setting, db, vapid_keys, send_notification, db_retry
+from helpers import setting, db, vapid_keys, send_notification
 
 bp = Blueprint("notifications", __name__)
 
@@ -18,7 +18,6 @@ def push_public_key():
 
 
 @bp.post("/api/push/subscribe")
-@db_retry()
 def push_subscribe():
     data = request.get_json(force=True, silent=True) or {}
     endpoint = data.get("endpoint")
@@ -38,7 +37,6 @@ def push_subscribe():
 
 
 @bp.post("/api/push/unsubscribe")
-@db_retry()
 def push_unsubscribe():
     data = request.get_json(force=True, silent=True) or {}
     endpoint = data.get("endpoint")

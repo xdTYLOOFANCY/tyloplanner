@@ -901,7 +901,7 @@ window.shortcutContextMenu = function(ev, id) {
 
 // Right-click a widget card → settings/remove (delegated; skips text inputs
 // and links so their native menus / own handlers still work).
-export function initDashboardContextMenu() {
+function initDashboardContextMenu() {
   var tab = document.getElementById("tab-dashboard");
   if (!tab || tab.dataset.ctxInitialized) return;
   tab.dataset.ctxInitialized = "true";

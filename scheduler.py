@@ -5,212 +5,29 @@ Runs as a daemon thread: daily agenda push, evening habit nudge,
 nightly backup, and periodic calendar auto-sync.
 """
 import time
-import json
 import traceback
 import concurrent.futures
 from datetime import datetime, timedelta
 
-from helpers import setting, kv_get, kv_set, send_notification, db, do_backup, local_now, db_retry
+from helpers import setting, kv_get, kv_set, send_notification, db, do_backup, local_now
 from blueprints.calendar import cal_auto_sync
 
-# Global ThreadPoolExecutor for background tasks
+# Shared executor so slow jobs (calendar sync, backup) never block the
+# per-minute reminder tick.
 task_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 
-@db_retry()
-def enqueue_task(task_type, payload=None, delay=0):
-    from helpers import db, uid, db_retry
-    now_ts = int(time.time())
-    scheduled_at = now_ts + delay
-    payload_str = json.dumps(payload) if payload else None
-    task_id = uid()
-    
-    with db(write=True) as con:
-        con.execute(
-            "INSERT INTO queued_tasks(id, task_type, payload, status, attempts, max_attempts, created_at, scheduled_at) "
-            "VALUES(?, ?, ?, 'pending', 0, 3, ?, ?)",
-            (task_id, task_type, payload_str, now_ts, scheduled_at)
-        )
-    return task_id
-
-
-@db_retry()
-def execute_queued_task(task_id):
-    # Fetch task details
-    with db() as con:
-        task = con.execute("SELECT * FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-    if not task:
-        return
-        
-    task_type = task["task_type"]
-    payload_str = task["payload"]
-    payload = {}
-    if payload_str:
+def submit_job(fn, *args):
+    """Run a background job on the executor, logging failures.
+    # ponytail: no queue/persistence/retries — the done_<job> kv markers dedupe,
+    # and a failed daily job simply runs again the next day."""
+    def run():
         try:
-            payload = json.loads(payload_str)
+            fn(*args)
         except Exception:
-            pass
-            
-    success = False
-    error_msg = None
-    res_obj = None
-    
-    try:
-        if task_type == "backup":
-            from helpers import do_backup, BACKUP_DIR
-            import os
-            date_str = payload.get("date") or local_now().strftime("%Y-%m-%d")
-            path = do_backup(date_str)
-            res_obj = {"file": os.path.basename(path)}
-            success = True
-        elif task_type == "calendar_sync":
-            from blueprints.calendar import cal_auto_sync
-            added = cal_auto_sync()
-            res_obj = {"added": added}
-            success = True
-        elif task_type == "strava_sync":
-            from blueprints.strava import do_strava_sync
-            res_obj = do_strava_sync()
-            success = True
-        elif task_type == "agenda_push":
-            date_str = payload.get("date") or local_now().strftime("%Y-%m-%d")
-            sent = send_agenda(date_str)
-            res_obj = {"sent": sent}
-            success = True
-        elif task_type == "habit_nudge":
-            date_str = payload.get("date") or local_now().strftime("%Y-%m-%d")
-            sent = send_habit_nudge(date_str)
-            res_obj = {"sent": sent}
-            success = True
-        elif task_type == "db_optimize":
-            optimize_database()
-            res_obj = {"success": True}
-            success = True
-        elif task_type == "storage_cleanup":
-            from blueprints.files import run_storage_cleanup
-            res_obj = run_storage_cleanup()
-            success = True
-        elif task_type == "session_cleanup":
-            deleted = purge_expired_sessions()
-            res_obj = {"deleted_count": deleted}
-            success = True
-        else:
-            raise ValueError(f"Unknown task type: {task_type}")
-    except Exception as e:
-        error_msg = traceback.format_exc()
-        print(f"Task {task_id} ({task_type}) failed: {error_msg}")
-        
-    now_ts = int(time.time())
-    with db(write=True) as con:
-        t_current = con.execute("SELECT attempts, max_attempts FROM queued_tasks WHERE id=?", (task_id,)).fetchone()
-        if t_current:
-            attempts = t_current["attempts"] + 1
-            max_attempts = t_current["max_attempts"]
-            
-            if success:
-                con.execute(
-                    "UPDATE queued_tasks SET status='completed', finished_at=?, attempts=?, result=? WHERE id=?",
-                    (now_ts, attempts, json.dumps(res_obj), task_id)
-                )
-            else:
-                if attempts < max_attempts:
-                    retry_delay = 60 * (2 ** (attempts - 1))
-                    next_run = now_ts + retry_delay
-                    con.execute(
-                        "UPDATE queued_tasks SET status='pending', scheduled_at=?, attempts=?, error_message=? WHERE id=?",
-                        (next_run, attempts, error_msg, task_id)
-                    )
-                else:
-                    con.execute(
-                        "UPDATE queued_tasks SET status='failed', finished_at=?, attempts=?, error_message=? WHERE id=?",
-                        (now_ts, attempts, error_msg, task_id)
-                    )
-
-
-@db_retry()
-def recover_interrupted_tasks():
-    """
-    On application startup, reset any tasks in the running state back to pending
-    (or mark them failed if they have exceeded max_attempts) to ensure they get re-executed.
-    """
-    now_ts = int(time.time())
-    with db(write=True) as con:
-        try:
-            # Check if queued_tasks table exists first
-            table_check = con.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='queued_tasks'"
-            ).fetchone()
-            if not table_check:
-                return
-
-            running_tasks = con.execute(
-                "SELECT id, task_type, attempts, max_attempts FROM queued_tasks WHERE status='running'"
-            ).fetchall()
-            
-            for t in running_tasks:
-                task_id = t["id"]
-                task_type = t["task_type"]
-                attempts = t["attempts"] + 1
-                max_attempts = t["max_attempts"]
-                
-                if attempts < max_attempts:
-                    print(f"Startup: Resetting running task {task_id} ({task_type}) back to pending (attempt {attempts}/{max_attempts}).")
-                    con.execute(
-                        "UPDATE queued_tasks SET status='pending', attempts=?, started_at=NULL, error_message='Server restarted' WHERE id=?",
-                        (attempts, task_id)
-                    )
-                else:
-                    print(f"Startup: Marking running task {task_id} ({task_type}) as failed due to server restart (attempts exhausted).")
-                    con.execute(
-                        "UPDATE queued_tasks SET status='failed', finished_at=?, attempts=?, error_message='Server restarted' WHERE id=?",
-                        (now_ts, attempts, task_id)
-                    )
-        except Exception as e:
-            print("Failed to recover interrupted tasks:", e)
-
-
-@db_retry()
-def check_and_dispatch_tasks():
-    now_ts = int(time.time())
-    with db(write=True) as con:
-        try:
-            rows = con.execute(
-                "SELECT * FROM queued_tasks WHERE status='pending' AND scheduled_at <= ? ORDER BY scheduled_at ASC",
-                (now_ts,)
-            ).fetchall()
-            
-            for r in rows:
-                task_id = r["id"]
-                con.execute(
-                    "UPDATE queued_tasks SET status='running', started_at=? WHERE id=?",
-                    (now_ts, task_id)
-                )
-                task_executor.submit(execute_queued_task, task_id)
-        except Exception:
-            print("check_and_dispatch_tasks error:")
+            print(f"background job {fn.__name__} failed:")
             traceback.print_exc()
-
-
-@db_retry()
-def check_running_timeouts():
-    now_ts = int(time.time())
-    timeout_threshold = 600  # 10 minutes
-    cutoff = now_ts - timeout_threshold
-    with db(write=True) as con:
-        try:
-            stuck_tasks = con.execute(
-                "SELECT id, task_type FROM queued_tasks WHERE status='running' AND started_at < ?",
-                (cutoff,)
-            ).fetchall()
-            for t in stuck_tasks:
-                print(f"Warning: Task {t['id']} ({t['task_type']}) has timed out and is marked failed.")
-                con.execute(
-                    "UPDATE queued_tasks SET status='failed', finished_at=?, error_message='Task execution timed out.' WHERE id=?",
-                    (now_ts, t["id"])
-                )
-        except Exception:
-            print("check_running_timeouts error:")
-            traceback.print_exc()
+    task_executor.submit(run)
 
 
 def send_agenda(today):
@@ -504,7 +321,6 @@ def optimize_database():
         print("Database optimization failed:", e)
 
 
-@db_retry()
 def purge_expired_sessions():
     """Purge database sessions that have been inactive (active_at) for more than 30 days."""
     cutoff = int(time.time()) - 30 * 86400
@@ -541,21 +357,22 @@ def scheduler_tick():
     check_task_reminders(now)
     if hhmm >= "03:00" and kv_get("done_db_optimize") != today:
         kv_set("done_db_optimize", today)
-        enqueue_task("db_optimize")
+        submit_job(optimize_database)
     if hhmm >= setting("notify_agenda_time") and kv_get("done_agenda") != today:
         kv_set("done_agenda", today)
-        enqueue_task("agenda_push", {"date": today})
+        submit_job(send_agenda, today)
     if hhmm >= setting("notify_habit_time") and kv_get("done_habits") != today:
         kv_set("done_habits", today)
-        enqueue_task("habit_nudge", {"date": today})
+        submit_job(send_habit_nudge, today)
     if hhmm >= "03:30" and kv_get("done_backup") != today:
         kv_set("done_backup", today)
-        enqueue_task("backup", {"date": today})
+        submit_job(do_backup, today)
     if hhmm >= "04:00" and kv_get("done_cleanup") != today:
         if now.weekday() == 6:  # Sunday
             kv_set("done_cleanup", today)
-            enqueue_task("storage_cleanup")
-            enqueue_task("session_cleanup")
+            from blueprints.files import run_storage_cleanup
+            submit_job(run_storage_cleanup)
+            submit_job(purge_expired_sessions)
     try:
         hours = float(setting("cal_sync_hours") or 6)
     except ValueError:
@@ -563,7 +380,7 @@ def scheduler_tick():
     last = float(kv_get("cal_sync_ts", "0") or 0)
     if setting("cal_sync_urls").strip() and time.time() - last > hours * 3600:
         kv_set("cal_sync_ts", time.time())
-        enqueue_task("calendar_sync")
+        submit_job(cal_auto_sync)
 
 
 def scheduler_loop():
@@ -571,9 +388,6 @@ def scheduler_loop():
     last_tick_minute = -1
     while True:
         try:
-            check_and_dispatch_tasks()
-            check_running_timeouts()
-            
             current_minute = int(time.time()) // 60
             if current_minute != last_tick_minute:
                 scheduler_tick()

@@ -294,7 +294,7 @@ export async function updateCalendarColor(typeId, color) {
   applyCalendarColors();
 }
 
-export function applyCalendarColors() {
+function applyCalendarColors() {
   var customColors = {};
   if (SET && SET.calendar_colors) {
     try { customColors = JSON.parse(SET.calendar_colors); } catch(e){}
@@ -1682,7 +1682,7 @@ export function togglePlannerTaskTray() {
   if (taskTrayOpen) renderPlannerTaskTray();
 }
 
-export function renderPlannerTaskTray() {
+function renderPlannerTaskTray() {
   var tray = document.getElementById('plannerTaskTray');
   if (!tray || !taskTrayOpen) return;
 
@@ -2005,7 +2005,7 @@ export async function resetShortcutsToDefault() {
   }
 }
 
-export function showUndoToast(message, undoCallback) {
+function showUndoToast(message, undoCallback) {
   var existing = document.getElementById('undoToast');
   if (existing) {
     existing.remove();
@@ -2121,7 +2121,7 @@ export function hideSearchSoon() {
 // duration and location out of a free-text line; the rest becomes the title.
 // Best-effort — it pre-fills the Add-Event modal so the user can confirm.
 // ---------------------------------------------------------------------------
-export function parseQuickAdd(text) {
+function parseQuickAdd(text) {
   var out = { title: '', date: '', start: '', end: '', location: '', allDay: false };
   var raw = String(text || '').trim();
   if (!raw) return out;
@@ -2384,7 +2384,7 @@ function recurrenceLabel(e) {
 
 // Google Calendar-style right-click menu on events. Delegated on the tab so it
 // survives every re-render; set up once from renderPlanner().
-export function initPlannerContextMenu() {
+function initPlannerContextMenu() {
   var tab = document.getElementById('tab-planner');
   if (!tab || tab.dataset.ctxInitialized) return;
   tab.dataset.ctxInitialized = 'true';
@@ -2951,7 +2951,7 @@ function triggerAddEventAt(iso, startMin) {
   }
 }
 
-export function updatePlannerTimeLine() {
+function updatePlannerTimeLine() {
   var today = todayStr();
   if (today !== lastRenderToday) {
     lastRenderToday = today;

@@ -45,7 +45,7 @@ export function noteTreeFolderClick(id) {
   renderNoteList();
 }
 
-export function getNoteBreadcrumbs(folderId) {
+function getNoteBreadcrumbs(folderId) {
   var path = [];
   var currentId = folderId;
   var limit = 20;
@@ -774,7 +774,7 @@ async function deleteNoteTag(tag) {
 }
 
 // Checkbox dialog to assign tags to one note (and create new tags inline).
-export function editNoteTags(id) {
+function editNoteTags(id) {
   var n = (S.notes || []).find(function(x) { return x.id === id; });
   if (!n) return;
   var current = noteTagList(n);
@@ -869,7 +869,7 @@ export async function newNote(refresh) {
 }
 
 // Duplicate a note in place (also handy as an ad-hoc template).
-export async function duplicateNote(id) {
+async function duplicateNote(id) {
   var n = (S.notes || []).find(function(x) { return x.id === id; });
   if (!n) return;
   var r = await api("POST", "/api/notes", {
@@ -965,7 +965,7 @@ export function noteChanged() {
 }
 
 // Save immediately (Cmd/Ctrl+S), flushing any pending debounced save.
-export function forceSaveNote() {
+function forceSaveNote() {
   if (!currentNote) return;
   clearTimeout(noteTimer);
   noteTimer = null;
@@ -1067,7 +1067,7 @@ export async function deleteNote(refresh) {
   return deleteNoteById(currentNote, refresh);
 }
 
-export async function deleteNoteById(id, refresh) {
+async function deleteNoteById(id, refresh) {
   if (!id) return;
   if (!await askConfirm("Delete this note?", { title: "Delete note", okText: "Delete", danger: true })) return;
   await api("DELETE", "/api/notes/" + id);
@@ -1156,6 +1156,7 @@ export function handleNoteBodySearchKeydown(e) {
   }
 }
 
+// Step to the next/previous match (Enter / ↓ / ↑). Focus stays in the find box.
 export function noteBodySearchNav(dir) {
   var n = searchMatches.length;
   if (!n) return;
@@ -1165,15 +1166,59 @@ export function noteBodySearchNav(dir) {
   focusNoteMatch();
 }
 
-// Find all matches for the current query in the Quill document. Navigation
-// selects each hit (via the native selection) and scrolls it into view — no
-// document mutation, so it never dirties the note.
+// In-note find highlights every match with the CSS Custom Highlight API
+// (::highlight(note-find) / (note-find-current) in style.css). Unlike the
+// native selection it doesn't need editor focus and doesn't mutate the DOM, so
+// the find box keeps focus (Google-Docs/Word behavior — typing and Enter stay
+// in the box, never jump into the note) and the note is never dirtied.
+var HL_SUPPORTED = typeof Highlight !== "undefined" &&
+                   typeof CSS !== "undefined" && CSS.highlights;
+
+// Quill index+length -> DOM Range (via the leaf's text node), for highlighting
+// and scroll measurement without touching the native selection.
+function quillDomRange(index, length) {
+  if (!quill) return null;
+  try {
+    var s = quill.getLeaf(index), e = quill.getLeaf(index + length);
+    if (!s || !s[0] || !s[0].domNode || !e || !e[0] || !e[0].domNode) return null;
+    var r = document.createRange();
+    r.setStart(s[0].domNode, s[1]);
+    r.setEnd(e[0].domNode, e[1]);
+    return r;
+  } catch (err) { return null; }
+}
+
+function clearNoteHighlights() {
+  if (!HL_SUPPORTED) return;
+  CSS.highlights.delete("note-find");
+  CSS.highlights.delete("note-find-current");
+}
+
+// Paint all matches, with the active one in its own highlight group.
+function paintNoteHighlights() {
+  if (!HL_SUPPORTED) return;
+  var len = (noteBodySearch.q || "").trim().length;
+  var others = [], current = null;
+  for (var i = 0; i < searchMatches.length; i++) {
+    var r = quillDomRange(searchMatches[i], len);
+    if (!r) continue;
+    if (i === noteBodySearch.idx) current = r; else others.push(r);
+  }
+  if (others.length) CSS.highlights.set("note-find", new Highlight(...others));
+  else CSS.highlights.delete("note-find");
+  if (current) CSS.highlights.set("note-find-current", new Highlight(current));
+  else CSS.highlights.delete("note-find-current");
+}
+
+// Find all matches for the current query in the Quill document, highlight them,
+// and (when jump) scroll the active one into view. No selection, no mutation.
 function runNoteBodySearch(jump) {
   var cnt = document.getElementById("noteBodySearchCount");
   searchMatches = [];
   var q = (noteBodySearch.q || "").trim();
   if (!quill || !q) {
     if (cnt) cnt.textContent = "";
+    clearNoteHighlights();
     return;
   }
   var text = quill.getText();
@@ -1187,20 +1232,23 @@ function runNoteBodySearch(jump) {
   var n = searchMatches.length;
   if (noteBodySearch.idx >= n) noteBodySearch.idx = 0;
   if (cnt) cnt.textContent = n ? (noteBodySearch.idx + 1) + "/" + n : "0 results";
-  if (jump && n) focusNoteMatch();
+  if (!n) { clearNoteHighlights(); return; }
+  if (jump) focusNoteMatch();
+  else paintNoteHighlights();
 }
 
+// Repaint (moving the current-match highlight) and scroll it into view. Focus
+// stays in the find box — the native selection is never touched.
 function focusNoteMatch() {
   var q = (noteBodySearch.q || "").trim();
   if (!quill || !searchMatches.length) return;
-  var idx = searchMatches[noteBodySearch.idx];
-  quill.setSelection(idx, q.length, "user");
+  paintNoteHighlights();
+  var range = quillDomRange(searchMatches[noteBodySearch.idx], q.length);
   // The page (.ql-editor) grows with content; the .note-canvas is the scroller,
   // so scroll the match into the canvas viewport ourselves.
-  var sel = window.getSelection();
   var canvas = document.querySelector(".note-canvas");
-  if (sel && sel.rangeCount && canvas) {
-    var rect = sel.getRangeAt(0).getBoundingClientRect();
+  if (range && canvas) {
+    var rect = range.getBoundingClientRect();
     var crect = canvas.getBoundingClientRect();
     if (rect.height && (rect.top < crect.top || rect.bottom > crect.bottom)) {
       canvas.scrollTop += (rect.top - crect.top) - canvas.clientHeight / 2;
@@ -1705,7 +1753,7 @@ export async function deleteNoteFolderConfirm(id, refresh) {
 }
 
 // Move a note via a folder picker dialog (used by the context menu).
-export async function moveNoteDialog(id) {
+async function moveNoteDialog(id) {
   var n = (S.notes || []).find(function(x) { return x.id === id; });
   if (!n) return;
   var options = [{ value: "", label: "Root" }];

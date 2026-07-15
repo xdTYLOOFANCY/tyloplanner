@@ -131,8 +131,10 @@ Example: a water-intake tracker.
 
 `scheduler_loop()` (a daemon thread in `scheduler.py`) calls `scheduler_tick()`
 every minute. Daily jobs use `done_<job>` markers in the `kv` table so they
-fire once per day even across restarts. Add your own job by appending a block to
-`scheduler_tick()` following the same pattern.
+fire once per day even across restarts, and run via `submit_job()` on a small
+thread pool so a slow job (calendar sync, backup) never delays the reminder
+checks. Add your own job by appending a block to `scheduler_tick()` following
+the same pattern.
 
 ## Conventions
 

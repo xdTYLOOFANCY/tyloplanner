@@ -621,7 +621,7 @@ export async function renameFilePrompt(id, oldName, refresh) {
 }
 
 // Move one or more files via a folder picker dialog (used by the context menu).
-export async function moveFilesDialog(ids) {
+async function moveFilesDialog(ids) {
   if (!ids.length) return;
   var f = (S.files || []).find(function(x) { return x.id === ids[0]; });
   var label = ids.length === 1 ? "“" + ((f && f.filename) || "file") + "”" : ids.length + " files";

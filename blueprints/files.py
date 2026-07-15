@@ -6,13 +6,12 @@ import time
 
 from flask import Blueprint, request, jsonify, send_file
 
-from helpers import db, uid, UPLOAD_DIR, db_retry
+from helpers import db, uid, UPLOAD_DIR
 
 bp = Blueprint("files", __name__)
 
 
 @bp.post("/api/files/upload")
-@db_retry()
 def upload_file():
     f = request.files.get("file")
     if not f:
@@ -75,7 +74,6 @@ def view_file(fid):
 
 
 @bp.delete("/api/files/<fid>")
-@db_retry()
 def delete_file(fid):
     with db(write=True) as con:
         row = con.execute("SELECT id FROM files WHERE id=?", (fid,)).fetchone()
@@ -89,7 +87,6 @@ def delete_file(fid):
 
 
 @bp.delete("/api/folders/<fid>")
-@db_retry()
 def delete_folder(fid):
     with db(write=True) as con:
         row = con.execute("SELECT parent_id FROM folders WHERE id=?", (fid,)).fetchone()
@@ -104,7 +101,6 @@ def delete_folder(fid):
 
 
 @bp.post("/api/files/move")
-@db_retry()
 def move_files():
     data = request.get_json(force=True) or {}
     file_ids = data.get("file_ids", [])
@@ -169,7 +165,6 @@ def run_storage_cleanup():
 
 
 @bp.post("/api/files/cleanup")
-@db_retry()
 def manual_cleanup():
     res = run_storage_cleanup()
     return jsonify(res)

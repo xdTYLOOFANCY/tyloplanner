@@ -118,7 +118,7 @@ export function askPrompt(message, defaultValue, opts) {
 var _ctxMenuEl = null;
 function _ctxOutside(e) { if (_ctxMenuEl && !_ctxMenuEl.contains(e.target)) closeContextMenu(); }
 function _ctxEsc(e) { if (e.key === "Escape") closeContextMenu(); }
-export function closeContextMenu() {
+function closeContextMenu() {
   if (_ctxMenuEl) { _ctxMenuEl.remove(); _ctxMenuEl = null; }
   document.removeEventListener("mousedown", _ctxOutside, true);
   document.removeEventListener("keydown", _ctxEsc, true);
@@ -375,23 +375,6 @@ export async function delRow(table, id, refresh) {
 }
 
 /**
- * Executes a callback within a view transition, if supported by the browser.
- * Otherwise, calls the callback immediately.
- * Optionally supports specifying a transition direction ('forward' or 'backward').
- * @param {Function} updateDOM - Callback that performs the DOM updates.
- * @param {string} [direction] - Optional navigation direction.
- */
-export function navigateWithTransition(updateDOM, direction) {
-  // direction is accepted for call-site compatibility but unused: the
-  // transition is a directionless crossfade scoped to <main> (see style.css).
-  if (!document.startViewTransition) {
-    updateDOM();
-    return;
-  }
-  return document.startViewTransition(updateDOM);
-}
-
-/**
  * Checks if the user is currently focused on a text input, textarea, select, or contenteditable element.
  * Useful for guarding global keyboard shortcuts.
  * @returns {boolean} True if an input element is focused.
@@ -426,7 +409,7 @@ export function guardFocus() {
 
 // ---------- Markdown ----------
 var markedConfigured = false;
-export function configureMarked() {
+function configureMarked() {
   if (markedConfigured) return;
   var parser = window.marked || (typeof marked !== 'undefined' ? marked : null);
   if (parser) {

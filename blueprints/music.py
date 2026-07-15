@@ -8,7 +8,7 @@ import base64
 
 from flask import Blueprint, request, jsonify, Response
 
-from helpers import db, uid, UPLOAD_DIR, db_retry
+from helpers import db, uid, UPLOAD_DIR
 
 bp = Blueprint("music", __name__)
 
@@ -65,7 +65,6 @@ def update_file_audio_meta(fid):
 
 
 @bp.post("/api/music/scan")
-@db_retry()
 def scan_library():
     """Extract metadata for audio files that don't have it yet.
 
@@ -139,7 +138,6 @@ def album_art(fid):
 
 
 @bp.post("/api/playlists/<pid>/reorder")
-@db_retry()
 def reorder_playlist(pid):
     """Accept {"tracks": [playlist_track_id, ...]} and rewrite positions."""
     ids = (request.get_json(force=True) or {}).get("tracks") or []
@@ -154,7 +152,6 @@ def reorder_playlist(pid):
 
 
 @bp.post("/api/playlists/<pid>/add-tracks")
-@db_retry()
 def add_tracks(pid):
     """Accept {"file_ids": [...]} and append them to the end of the playlist."""
     file_ids = (request.get_json(force=True) or {}).get("file_ids") or []
