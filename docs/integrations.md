@@ -65,7 +65,7 @@ Free push notifications to your phone, no account needed:
 
 ## Strava
 
-Sync your runs, rides and gym sessions automatically:
+Sync your runs, rides, swims and gym sessions automatically:
 
 Everything happens in the web UI — no server access needed:
 
@@ -81,7 +81,7 @@ Everything happens in the web UI — no server access needed:
 `STRAVA_CLIENT_SECRET` in `.env`; env values override keys saved in the UI.)
 
 Details: activities map to TyloPlanner types (Run/TrailRun → run,
-Ride/VirtualRide/Gravel/MTB → bike, WeightTraining/Workout/Crossfit → gym;
-other sports are skipped). Synced workouts are tagged with a `strava` badge,
+Ride/VirtualRide/Gravel/MTB → bike, Swim/OpenWaterSwim → swim,
+WeightTraining/Workout/Crossfit → gym; other sports are skipped). Synced workouts are tagged with a `strava` badge,
 deduplicated by activity ID, and re-syncable any time with the ⟳ button (up
 to your last 1000 activities). *Disconnect* removes the stored tokens.

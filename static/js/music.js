@@ -19,6 +19,7 @@ audio.preload = 'metadata';
 
 let queue = [];          // file ids
 let qIndex = -1;
+let playSource = null;   // where playback started: {type:'library'} | {type:'playlist', id}
 let repeat = 'off';      // off | all | one
 let shuffle = false;
 let unshuffled = null;   // queue order before shuffle was enabled
@@ -96,8 +97,9 @@ async function playFile(fid) {
   updateNowPlayingHighlight();
 }
 
-export function playTrack(fid, listIds) {
+export function playTrack(fid, listIds, source) {
   ensureInit();
+  playSource = source || { type: 'library' };
   queue = listIds ? listIds.slice() : visibleLibraryIds();
   if (queue.indexOf(fid) === -1) queue = [fid];
   if (shuffle) {
@@ -541,7 +543,8 @@ function musicTrackClick(fid, context, idx) {
     playFile(fid);
     renderMusic();
   } else if (context === 'playlist' && openPlaylist) {
-    playTrack(fid, playlistTracks(openPlaylist).map(function(t) { return t.file_id; }));
+    playTrack(fid, playlistTracks(openPlaylist).map(function(t) { return t.file_id; }),
+      { type: 'playlist', id: openPlaylist });
   } else {
     playTrack(fid);
   }
@@ -631,7 +634,25 @@ function musicPlayPlaylist(pid) {
   var ids = playlistTracks(pid).map(function(t) { return t.file_id; })
     .filter(function(fid) { return !!trackById(fid); });
   if (!ids.length) return;
-  playTrack(ids[0], ids);
+  playTrack(ids[0], ids, { type: 'playlist', id: pid });
+}
+
+// Click on the player bar's track info → go back to where playback started.
+function playerJumpToSource() {
+  if (qIndex < 0) return;
+  var tabsBtn = document.querySelector('#tabs button[data-tab="music"]');
+  if (tabsBtn && !tabsBtn.classList.contains('active')) tabsBtn.click();
+  if (playSource && playSource.type === 'playlist' &&
+      ((S && S.playlists) || []).some(function(p) { return p.id === playSource.id; })) {
+    openPlaylist = playSource.id;
+    switchMusicTab('playlists');
+  } else {
+    switchMusicTab('library');
+  }
+  setTimeout(function() {
+    var row = document.querySelector('#tab-music .music-track.is-current');
+    if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 450); // after the tab-switch view transition settles
 }
 
 function musicOpenPlaylist(pid) {
@@ -712,6 +733,7 @@ window.playerSetVolume = playerSetVolume;
 window.toggleShuffle = toggleShuffle;
 window.cycleRepeat = cycleRepeat;
 window.playerClose = playerClose;
+window.playerJumpToSource = playerJumpToSource;
 window.switchMusicTab = switchMusicTab;
 window.musicSearchInput = musicSearchInput;
 window.musicSetSort = musicSetSort;

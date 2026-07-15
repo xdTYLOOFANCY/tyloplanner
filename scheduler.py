@@ -187,7 +187,8 @@ def check_and_dispatch_tasks():
                 )
                 task_executor.submit(execute_queued_task, task_id)
         except Exception:
-            pass
+            print("check_and_dispatch_tasks error:")
+            traceback.print_exc()
 
 
 @db_retry()
@@ -208,7 +209,8 @@ def check_running_timeouts():
                     (now_ts, t["id"])
                 )
         except Exception:
-            pass
+            print("check_running_timeouts error:")
+            traceback.print_exc()
 
 
 def send_agenda(today):
@@ -303,28 +305,91 @@ def send_habit_nudge(today):
     return False
 
 
+def _js_day(d):
+    """JS Date.getDay() numbering: 0=Sun … 6=Sat (recurrence_days uses this)."""
+    return (d.weekday() + 1) % 7
+
+
 def get_instances(e, target_date_str):
+    """True if the event has an occurrence starting on target_date_str.
+    Mirrors the frontend expansion in planner.js getInstances(): honors
+    recurrence type (daily/weekly/monthly/yearly), interval, weekly day sets
+    (recurrence_days), end-by-date (recurrence_until), end-after-N
+    (recurrence_count), and excluded_dates."""
     if not e.get("date"):
         return False
     if target_date_str < e["date"]:
         return False
-    if e.get("recurrence_until") and target_date_str > e["recurrence_until"]:
-        return False
-        
-    rec = e.get("recurrence", "none")
+
+    rec = e.get("recurrence") or "none"
     if rec == "none":
         return e["date"] == target_date_str
-    elif rec == "daily":
-        return True
-    elif rec == "weekly":
-        dt_start = datetime.strptime(e["date"], "%Y-%m-%d")
-        dt_target = datetime.strptime(target_date_str, "%Y-%m-%d")
-        return dt_start.weekday() == dt_target.weekday()
-    elif rec == "monthly":
-        dt_start = datetime.strptime(e["date"], "%Y-%m-%d")
-        dt_target = datetime.strptime(target_date_str, "%Y-%m-%d")
-        return dt_start.day == dt_target.day
-    return False
+
+    if e.get("recurrence_until") and target_date_str > e["recurrence_until"]:
+        return False
+    excluded = {x.strip() for x in str(e.get("excluded_dates") or "").split(",") if x.strip()}
+    if target_date_str in excluded:
+        return False
+
+    try:
+        start = datetime.strptime(e["date"], "%Y-%m-%d").date()
+        target = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return False
+    try:
+        interval = max(1, int(e.get("recurrence_interval") or 1))
+    except (TypeError, ValueError):
+        interval = 1
+
+    dset = {int(x) for x in str(e.get("recurrence_days") or "").split(",")
+            if x.strip().isdigit() and 0 <= int(x) <= 6}
+    if rec == "weekly" and not dset:
+        dset = {_js_day(start)}
+
+    def matches(cur):
+        if cur < start:
+            return False
+        if rec == "daily":
+            return (cur - start).days % interval == 0
+        if rec == "weekly":
+            if _js_day(cur) not in dset:
+                return False
+            weeks = ((cur - timedelta(days=_js_day(cur)))
+                     - (start - timedelta(days=_js_day(start)))).days // 7
+            return weeks >= 0 and weeks % interval == 0
+        if rec == "monthly":
+            if cur.day != start.day:
+                return False
+            months = (cur.year - start.year) * 12 + (cur.month - start.month)
+            return months >= 0 and months % interval == 0
+        if rec == "yearly":
+            if cur.day != start.day or cur.month != start.month:
+                return False
+            return (cur.year - start.year) % interval == 0
+        return False
+
+    if not matches(target):
+        return False
+
+    # Count-limited series: the target must be within the first N occurrences.
+    # Excluded dates still consume a slot (RRULE COUNT semantics, same as the
+    # frontend's count walk).
+    raw_count = e.get("recurrence_count")
+    if raw_count not in (None, ""):
+        try:
+            count = int(raw_count)
+        except (TypeError, ValueError):
+            count = None
+        if count is not None and count >= 1:
+            ordinal = 0
+            cur = start
+            while cur <= target:
+                if matches(cur):
+                    ordinal += 1
+                    if ordinal > count:
+                        return False
+                cur += timedelta(days=1)
+    return True
 
 
 def check_event_reminders(now):
@@ -383,6 +448,51 @@ def check_event_reminders(now):
                             send_notification(title, msg, "alarm_clock")
 
 
+def check_task_reminders(now):
+    """Per-task reminders. Reuses the events reminder model: reminder_offset is
+    minutes before the task's due datetime. Only tasks that are open, carry a
+    dated (time-bearing) due_date, and have an offset set are considered."""
+    with db() as con:
+        tasks = [dict(r) for r in con.execute(
+            "SELECT * FROM tasks WHERE done = 0 AND due_date IS NOT NULL AND due_date != '' "
+            "AND reminder_offset IS NOT NULL AND reminder_offset != '' AND reminder_offset != '-1'")]
+
+    for t in tasks:
+        due_raw = (t.get("due_date") or "").strip()
+        if "T" not in due_raw:  # date-only due, no time to anchor a reminder
+            continue
+        try:
+            due_dt = datetime.strptime(due_raw[:16], "%Y-%m-%dT%H:%M")
+        except ValueError:
+            continue
+
+        offsets = []
+        for part in str(t["reminder_offset"]).split(","):
+            try:
+                val = int(part.strip())
+                if val >= 0:
+                    offsets.append(val)
+            except ValueError:
+                continue
+
+        for offset in offsets:
+            reminder_time = due_dt - timedelta(minutes=offset)
+            if now.strftime("%Y-%m-%d %H:%M") == reminder_time.strftime("%Y-%m-%d %H:%M"):
+                # Same key shape as event reminders so purge_expired_sessions'
+                # "reminder_sent:%" cleanup catches these too.
+                kv_key = f"reminder_sent:{t['id']}:{offset}:{due_dt.strftime('%Y%m%d%H%M')}"
+                if not kv_get(kv_key):
+                    kv_set(kv_key, "1")
+                    msg = f"Due at {due_dt.strftime('%H:%M')}"
+                    if offset >= 1440 and offset % 1440 == 0:
+                        msg += f" (in {offset // 1440}d)"
+                    elif offset >= 60 and offset % 60 == 0:
+                        msg += f" (in {offset // 60}h)"
+                    elif offset > 0:
+                        msg += f" (in {offset}m)"
+                    send_notification(f"Task due: {t['name']}", msg, "alarm_clock")
+
+
 def optimize_database():
     print("Running database incremental vacuum and optimize...")
     try:
@@ -401,6 +511,14 @@ def purge_expired_sessions():
     with db(write=True) as con:
         cur = con.execute("DELETE FROM user_sessions WHERE active_at < ?", (cutoff,))
         rowcount = cur.rowcount
+        # reminder_sent:<event>:<offset>:<YYYYMMDDHHMM> markers accumulate one
+        # per fired reminder — drop those older than 7 days (the key's last 12
+        # chars are its timestamp).
+        stamp_cutoff = (local_now() - timedelta(days=7)).strftime("%Y%m%d%H%M")
+        con.execute(
+            "DELETE FROM kv WHERE key LIKE 'reminder_sent:%' AND substr(key, -12) < ?",
+            (stamp_cutoff,),
+        )
     print(f"Session cleanup: Purged {rowcount} expired sessions (older than 30 days).")
     
     # Run explicit checkpoint query to truncate the WAL file
@@ -420,6 +538,7 @@ def scheduler_tick():
     hhmm = now.strftime("%H:%M")
     
     check_event_reminders(now)
+    check_task_reminders(now)
     if hhmm >= "03:00" and kv_get("done_db_optimize") != today:
         kv_set("done_db_optimize", today)
         enqueue_task("db_optimize")

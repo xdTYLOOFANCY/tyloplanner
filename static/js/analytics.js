@@ -1,7 +1,7 @@
 // TyloPlanner — analytics module.
 
 import { S, safeRender } from './state.js';
-import { z, esc, MONTHS } from './utils.js';
+import { z, esc, MONTHS, weekDates, toISO } from './utils.js';
 
 let chartInstances = {};
 let analyticsTimeRange = 12; // default: 12 months, 'all' for all time.
@@ -111,19 +111,21 @@ export function renderAnalytics() {
     months = getPastMonths(analyticsTimeRange);
   }
 
-  var sessions = {}, kmRun = {}, kmBike = {}, study = {}, habits = {}, studyActual = {};
-  months.forEach(function(m) { sessions[m.key] = 0; kmRun[m.key] = 0; kmBike[m.key] = 0; study[m.key] = 0; habits[m.key] = 0; studyActual[m.key] = 0; });
+  var sessions = {}, kmRun = {}, kmBike = {}, kmSwim = {}, study = {}, habits = {}, studyActual = {};
+  months.forEach(function(m) { sessions[m.key] = 0; kmRun[m.key] = 0; kmBike[m.key] = 0; kmSwim[m.key] = 0; study[m.key] = 0; habits[m.key] = 0; studyActual[m.key] = 0; });
 
-  var totRunKm = 0, totBikeKm = 0, totMin = 0, totSessions = 0, totStudyH = 0, totChecks = 0, totStudyActualH = 0;
+  var totRunKm = 0, totBikeKm = 0, totSwimKm = 0, totMin = 0, totSessions = 0, totStudyH = 0, totChecks = 0, totStudyActualH = 0;
   S.workouts.forEach(function(w) {
     var k = (w.date || "").slice(0, 7);
     totSessions++; totMin += w.dur || 0;
     if (w.type === "run") totRunKm += w.dist || 0;
     if (w.type === "bike") totBikeKm += w.dist || 0;
+    if (w.type === "swim") totSwimKm += w.dist || 0;
     if (k in sessions) {
       sessions[k]++;
       if (w.type === "run") kmRun[k] += w.dist || 0;
       if (w.type === "bike") kmBike[k] += w.dist || 0;
+      if (w.type === "swim") kmSwim[k] += w.dist || 0;
     }
   });
   S.events.forEach(function(e) {
@@ -167,6 +169,7 @@ export function renderAnalytics() {
     { label: "Workouts \uD83C\uDFC3", val: totSessions, icon: "\uD83C\uDFCD\uFE0F" },
     { label: "Run KM \uD83D\uDC5F", val: Math.round(totRunKm), icon: "\uD83D\uDC5F" },
     { label: "Bike KM \uD83D\uDEB4", val: Math.round(totBikeKm), icon: "\uD83D\uDEB4\u200D\u2642\uFE0F" },
+    { label: "Swim KM \uD83C\uDF0A", val: Math.round(totSwimKm * 10) / 10, icon: "\uD83C\uDFCA" },
     { label: "Training Hrs \uD83D\uDD52", val: Math.round(totMin / 60), icon: "\uD83D\uDD52" },
     { label: "Study Hrs Planned \uD83D\uDCDA", val: Math.round(totStudyH), icon: "\uD83D\uDCDA" },
     { label: "Study Hrs Actual \u2705", val: Math.round(totStudyActualH), icon: "\u2611\uFE0F" },
@@ -249,6 +252,17 @@ export function renderAnalytics() {
       pointRadius: 0,
       pointHoverRadius: 6,
       borderWidth: 2
+    },
+    {
+      label: 'Swim (km)',
+      data: months.map(m => kmSwim[m.key]),
+      borderColor: colorGreen,
+      backgroundColor: getBarGradient(lineCtxDist, colorGreen + '44', colorGreen + '00'),
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      borderWidth: 2
     }
   ], noGridOptions);
 
@@ -284,6 +298,42 @@ export function renderAnalytics() {
       borderWidth: 2
     }
   ], noGridOptions);
+
+  // --- Training load: stacked hours per discipline, last 12 weeks ---
+  var weekKeys = [], weekLabels = [];
+  for (var off = -11; off <= 0; off++) {
+    var mon = weekDates(off)[0];
+    weekKeys.push(toISO(mon));
+    weekLabels.push(mon.getDate() + " " + MONTHS[mon.getMonth()]);
+  }
+  var load = { run: {}, bike: {}, swim: {}, gym: {} };
+  weekKeys.forEach(function(k) { load.run[k] = 0; load.bike[k] = 0; load.swim[k] = 0; load.gym[k] = 0; });
+  S.workouts.forEach(function(w) {
+    if (!w.date || !load[w.type]) return;
+    var d = new Date(w.date + "T00:00:00");
+    var mon2 = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+    var k = toISO(mon2);
+    if (k in load[w.type]) load[w.type][k] += (w.dur || 0) / 60;
+  });
+  var loadOptions = {
+    scales: {
+      x: { grid: { display: false }, ticks: { color: style.getPropertyValue('--text').trim() } },
+      y: { grid: { display: false }, ticks: { color: style.getPropertyValue('--text').trim() }, beginAtZero: true }
+    }
+  };
+  var loadColors = { run: colorCyan, bike: colorAccent2, swim: colorGreen, gym: colorOrange };
+  createChart('chartTrainingLoad', 'line', weekLabels, ['run', 'bike', 'swim', 'gym'].map(function(ty) {
+    return {
+      label: ty.charAt(0).toUpperCase() + ty.slice(1),
+      data: weekKeys.map(function(k) { return Math.round(load[ty][k] * 10) / 10; }),
+      borderColor: loadColors[ty],
+      backgroundColor: loadColors[ty],
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 6,
+      borderWidth: 2
+    };
+  }), loadOptions);
 
   // --- Populate Tables ---
   var gh = "";

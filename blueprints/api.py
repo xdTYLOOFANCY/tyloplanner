@@ -81,9 +81,17 @@ _FIELD_RULES = {
     # ---- exams ----
     "ects":             ("float", 0, 999),
     "grade":            ("float", 0, 10),
+    "grade_text":       ("str", _MAX_SHORT),
+    "grading_type":     ("enum", frozenset(("dutch", "percentage", "letter", "pass_fail"))),
+    "academic_year":    ("str", 16),
+    "tags":             ("str", _MAX_STR),
+    "tracker_id":       ("str", _MAX_SHORT),
     # ---- tasks ----
     "done":             ("bool",),
+    "priority":         ("enum", frozenset(("high", "med", "low"))),
     "order_index":      ("int", 0, 10_000_000),
+    "frequency":        ("int", 1, 9),
+    "archived":         ("bool",),
     # ---- workouts ----
     "dur":              ("float", 0, 1_000_000),
     "dist":             ("float", 0, 1_000_000),
@@ -124,7 +132,15 @@ _FIELD_RULES = {
     "file_id":          ("str", _MAX_SHORT),
     "position":         ("int", 0, 10_000_000),
     "added":            ("int", 0, 9_999_999_999_999),
+    # ---- FK: recurring-task events point back at their task ----
+    "task_id":          ("str", _MAX_SHORT),
 }
+
+# Every whitelisted writable column must have a validation rule — a column
+# missing from _FIELD_RULES is accepted as-is, which is exactly the silent
+# gap this assertion turns into a loud import-time failure.
+_missing_rules = {c for cols in TABLES.values() for c in cols} - set(_FIELD_RULES)
+assert not _missing_rules, f"TABLES columns without a _FIELD_RULES entry: {sorted(_missing_rules)}"
 
 
 def _coerce_bool(val):
@@ -476,7 +492,10 @@ def update_row(table, rid):
         current = None
         if table in ("notes", "tasks"):
             current = con.execute(f"SELECT * FROM {table} WHERE id=?", (rid,)).fetchone()
-            if last_updated is not None and current and current["updated"] is not None:
+            # tasks rows have no `updated` column — guard the key lookup or a
+            # task PUT carrying last_updated 500s instead of updating.
+            if (last_updated is not None and current
+                    and "updated" in current.keys() and current["updated"] is not None):
                 try:
                     if int(current["updated"]) > int(last_updated):
                         return jsonify({"error": "conflict", "current_data": dict(current)}), 409
@@ -532,10 +551,16 @@ def delete_row(table, rid):
         from blueprints.files import delete_file
         return delete_file(rid)
 
+    if table == "habits":
+        with db(write=True) as con:
+            con.execute("UPDATE habits SET archived=1 WHERE id=?", (rid,))
+        return jsonify({"ok": True})
+
     with db(write=True) as con:
         con.execute("DELETE FROM %s WHERE id=?" % table, (rid,))
-        if table == "habits":
-            con.execute("DELETE FROM habit_log WHERE habit_id=?", (rid,))
+        if table == "tasks":
+            # Drop any planner time-blocks that were scheduled from this task.
+            con.execute("DELETE FROM events WHERE task_id=?", (rid,))
             
     if table == "exams":
         sync_exam_to_event(rid)
@@ -553,6 +578,8 @@ def toggle_habit(hid):
     if not d:
         return jsonify({"error": "date required"}), 400
     with db(write=True) as con:
+        if not con.execute("SELECT 1 FROM habits WHERE id=?", (hid,)).fetchone():
+            return jsonify({"error": "habit not found"}), 404
         row = con.execute('SELECT 1 FROM habit_log WHERE habit_id=? AND "date"=?', (hid, d)).fetchone()
         if row:
             con.execute('DELETE FROM habit_log WHERE habit_id=? AND "date"=?', (hid, d))
@@ -561,16 +588,28 @@ def toggle_habit(hid):
         return jsonify({"on": True})
 
 
+@bp.delete("/api/habits/<hid>/permanent")
+@db_retry()
+def delete_habit_permanent(hid):
+    with db(write=True) as con:
+        con.execute("DELETE FROM habits WHERE id=?", (hid,))
+        con.execute("DELETE FROM habit_log WHERE habit_id=?", (hid,))
+    return jsonify({"ok": True})
+
+
 @bp.post("/api/notes/move")
 @db_retry()
 def move_notes():
     data = request.get_json(force=True) or {}
     note_ids = data.get("note_ids", [])
+    if (not isinstance(note_ids, list) or not note_ids or len(note_ids) > 500
+            or not all(isinstance(i, str) for i in note_ids)):
+        return jsonify({"error": "note_ids must be a non-empty list of ids (max 500)"}), 400
     folder_id = data.get("folder_id")
     if folder_id == "":
         folder_id = None
-    if not note_ids:
-        return jsonify({"error": "no note ids provided"}), 400
+    if folder_id is not None and not isinstance(folder_id, str):
+        return jsonify({"error": "folder_id must be a string or null"}), 400
     
     with db(write=True) as con:
         placeholders = ",".join("?" for _ in note_ids)

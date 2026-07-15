@@ -405,6 +405,25 @@ export function isInputFocused() {
   return false;
 }
 
+/**
+ * Live-sync focus guard. Returns true when an editable element (input,
+ * textarea, select, contenteditable) inside any of the given containers is
+ * focused — the caller should then skip its re-render so the poll-driven
+ * renderAll() doesn't clobber what the user is typing.
+ * Accepts element ids or elements; missing containers are ignored.
+ */
+export function guardFocus() {
+  var active = document.activeElement;
+  if (!active) return false;
+  var tag = active.tagName;
+  if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT" && !active.isContentEditable) return false;
+  for (var i = 0; i < arguments.length; i++) {
+    var el = typeof arguments[i] === "string" ? document.getElementById(arguments[i]) : arguments[i];
+    if (el && el.contains(active)) return true;
+  }
+  return false;
+}
+
 // ---------- Markdown ----------
 var markedConfigured = false;
 export function configureMarked() {

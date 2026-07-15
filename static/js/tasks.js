@@ -4,9 +4,21 @@ import { S, SET, safeRender } from './state.js';
 import { todayStr, esc, api, debounce } from './utils.js';
 import { getTaskCategories } from './settings.js';
 
+// Priority sort weight + badge styling. Lower rank sorts first.
+var PRIORITY_META = {
+  high: { rank: 0, label: "High", badge: "red" },
+  med:  { rank: 1, label: "Med",  badge: "orange" },
+  low:  { rank: 2, label: "Low",  badge: "blue" }
+};
+export function priorityRank(p) {
+  return PRIORITY_META[p] ? PRIORITY_META[p].rank : 3;
+}
+
 export async function addTask(refresh) {
   var n = document.getElementById("taskName").value.trim(); if (!n) return;
   var cat = document.getElementById("taskCategory").value || null;
+  var prioEl = document.getElementById("taskPriority");
+  var prio = prioEl ? (prioEl.value || null) : null;
   var d = document.getElementById("taskDue").value;
   var dueStr = d ? d.substring(0, 10) : null;
   
@@ -25,13 +37,15 @@ export async function addTask(refresh) {
     due: dueStr,
     due_date: d || null,
     category: cat,
+    priority: prio,
     order_index: orderIndex
   });
-  
+
   document.getElementById("taskName").value = "";
   document.getElementById("taskDue").value = "";
   var catSelect = document.getElementById("taskCategory");
   if (catSelect) catSelect.value = "";
+  if (prioEl) prioEl.value = "";
   await refresh();
 }
 
@@ -269,8 +283,12 @@ export function openTaskModal(id) {
   document.getElementById("editTaskId").value = t ? t.id : "";
   document.getElementById("editTaskName").value = t ? (t.name || "") : "";
   document.getElementById("editTaskCategory").value = t ? (t.category || "") : "";
+  document.getElementById("editTaskPriority").value = t ? (t.priority || "") : "";
   document.getElementById("editTaskDue").value = t ? (t.due_date || "") : "";
   document.getElementById("editTaskRecurrence").value = t ? (t.recurrence || "") : "";
+  // reminder_offset stores minutes-before as a string; -1/empty == none.
+  var remRaw = t && t.reminder_offset != null ? String(t.reminder_offset).trim() : "";
+  document.getElementById("editTaskReminder").value = (remRaw === "" ? "-1" : remRaw);
 
   var titleEl = document.getElementById("taskModalTitle");
   if (titleEl) titleEl.textContent = t ? "Edit Task" : "Add Task";
@@ -282,6 +300,8 @@ export async function saveTaskModal(refresh) {
   var id = document.getElementById("editTaskId").value;
   var name = document.getElementById("editTaskName").value.trim();
   var category = document.getElementById("editTaskCategory").value || null;
+  var priority = document.getElementById("editTaskPriority").value || null;
+  var reminder_offset = document.getElementById("editTaskReminder").value || "-1";
   var due_date = document.getElementById("editTaskDue").value || null;
   var due = due_date ? due_date.substring(0, 10) : null;
   var recurrence = document.getElementById("editTaskRecurrence").value || null;
@@ -292,6 +312,8 @@ export async function saveTaskModal(refresh) {
     await api("PUT", "/api/tasks/" + id, {
       name: name,
       category: category,
+      priority: priority,
+      reminder_offset: reminder_offset,
       due_date: due_date,
       due: due,
       recurrence: recurrence
@@ -311,6 +333,8 @@ export async function saveTaskModal(refresh) {
       due: due,
       due_date: due_date,
       category: category,
+      priority: priority,
+      reminder_offset: reminder_offset,
       order_index: maxOrder + 1,
       recurrence: recurrence
     });
@@ -362,7 +386,11 @@ export function renderTasks() {
     }
 
     var parentTasks = S.tasks.filter(function(t) { return !t.parent_id; });
+    // Sort by priority (high → med → low → none), then manual order_index within
+    // a priority group. Manual drag-reorder still orders same-priority tasks.
     parentTasks.sort(function(a, b) {
+      var r = priorityRank(a.priority) - priorityRank(b.priority);
+      if (r !== 0) return r;
       return (a.order_index || 0) - (b.order_index || 0);
     });
 
@@ -497,6 +525,14 @@ export function renderTasks() {
       var badgeContainer = card.querySelector('.badge-container');
       if (badgeContainer) {
         badgeContainer.innerHTML = '';
+        var prioMeta = PRIORITY_META[t.priority];
+        if (prioMeta && !t.done) {
+          var prioBadge = document.createElement("span");
+          prioBadge.className = "badge " + prioMeta.badge;
+          prioBadge.style.marginRight = "8px";
+          prioBadge.textContent = prioMeta.label;
+          badgeContainer.appendChild(prioBadge);
+        }
         var catObj = cats.find(function(c) { return c.name === t.category; });
         var color = catObj ? catObj.color : '#4f8cff';
         if (t.category) {
@@ -539,6 +575,16 @@ export function renderTasks() {
           recBadge.title = "Completing reschedules to the next occurrence";
           recBadge.textContent = "↻ " + t.recurrence;
           badgeContainer.appendChild(recBadge);
+        }
+
+        var remRaw = t.reminder_offset != null ? String(t.reminder_offset).trim() : "";
+        if (remRaw && remRaw !== "-1" && !t.done) {
+          var remBadge = document.createElement("span");
+          remBadge.className = "badge gray";
+          remBadge.style.marginRight = "8px";
+          remBadge.title = "Reminder set";
+          remBadge.textContent = "🔔";
+          badgeContainer.appendChild(remBadge);
         }
       }
 

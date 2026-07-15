@@ -325,6 +325,7 @@ function renderWorkoutsWidget(id) {
     '<div class="stat"><div class="v">' + t.count + '</div><div class="l">sessions</div></div>' +
     '<div class="stat"><div class="v">' + (Math.round(t.runKm * 10) / 10) + '</div><div class="l">run km</div></div>' +
     '<div class="stat"><div class="v">' + (Math.round(t.bikeKm * 10) / 10) + '</div><div class="l">bike km</div></div>' +
+    '<div class="stat"><div class="v">' + (Math.round(t.swimKm * 10) / 10) + '</div><div class="l">swim km</div></div>' +
     '<div class="stat"><div class="v">' + Math.round(t.min) + '</div><div class="l">min</div></div></div>';
   return html;
 }
@@ -429,6 +430,7 @@ function renderQuickAddWidget(id) {
     '      <select class="qa-workout-type" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '        <option value="run">🏃 Run</option>' +
     '        <option value="bike">🚴 Bike</option>' +
+    '        <option value="swim">🏊 Swim</option>' +
     '        <option value="gym">🏋️ Gym</option>' +
     '      </select>' +
     '      <input class="qa-workout-date" type="date" value="' + today + '" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
@@ -536,7 +538,8 @@ function renderAnalyticsWidget(id) {
     'workouts': 'Workouts Count',
     'habits': 'Habit Check-ins',
     'run_km': 'Running (km)',
-    'cycle_km': 'Cycling (km)'
+    'cycle_km': 'Cycling (km)',
+    'swim_km': 'Swimming (km)'
   }[metric] || 'Analytics';
 
   var months = [];
@@ -564,6 +567,11 @@ function renderAnalyticsWidget(id) {
       var k = (w.date || "").slice(0, 7);
       if (w.type === "bike" && k in values) values[k] += w.dist || 0;
     });
+  } else if (metric === 'swim_km') {
+    S.workouts.forEach(function(w) {
+      var k = (w.date || "").slice(0, 7);
+      if (w.type === "swim" && k in values) values[k] += w.dist || 0;
+    });
   } else if (metric === 'study_hours') {
     S.events.forEach(function(e) {
       if (e.type !== "study" || !e.start || !e.end) return;
@@ -585,9 +593,9 @@ function renderAnalyticsWidget(id) {
 
   var colorClass = "";
   if (metric === 'study_hours') colorClass = "orange";
-  else if (metric === 'run_km' || metric === 'cycle_km') colorClass = "green";
+  else if (metric === 'run_km' || metric === 'cycle_km' || metric === 'swim_km') colorClass = "green";
 
-  var isDecimal = metric === 'run_km' || metric === 'cycle_km' || metric === 'study_hours';
+  var isDecimal = metric === 'run_km' || metric === 'cycle_km' || metric === 'swim_km' || metric === 'study_hours';
 
   var ch = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-shrink:0;">' +
            '  <h3 style="margin:0;">' + esc(title) + '</h3>' +
@@ -597,6 +605,7 @@ function renderAnalyticsWidget(id) {
            '    <option value="habits"' + (metric === 'habits' ? ' selected' : '') + '>habits</option>' +
            '    <option value="run_km"' + (metric === 'run_km' ? ' selected' : '') + '>run km</option>' +
            '    <option value="cycle_km"' + (metric === 'cycle_km' ? ' selected' : '') + '>bike km</option>' +
+           '    <option value="swim_km"' + (metric === 'swim_km' ? ' selected' : '') + '>swim km</option>' +
            '  </select>' +
            '</div>';
 
@@ -830,6 +839,7 @@ window.openWidgetSettings = function(event, id) {
                  '        <option value="habits"' + (metric === 'habits' ? ' selected' : '') + '>Habits Count</option>' +
                  '        <option value="run_km"' + (metric === 'run_km' ? ' selected' : '') + '>Running Distance (km)</option>' +
                  '        <option value="cycle_km"' + (metric === 'cycle_km' ? ' selected' : '') + '>Cycling Distance (km)</option>' +
+                 '        <option value="swim_km"' + (metric === 'swim_km' ? ' selected' : '') + '>Swimming Distance (km)</option>' +
                  '      </select>' +
                  '    </div>';
   } else if (item.type === 'custom_text') {

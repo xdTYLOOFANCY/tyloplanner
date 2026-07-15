@@ -2,6 +2,119 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.26.0 — 2026-07-15
+
+- **Markdown shortcuts in the notes editor.** Type `# ` through `###### ` at
+  the start of a line for a heading, or `> ` for a quote — the marker converts
+  in place, Notion-style. (Lists already worked: `- `, `1. `, and `[ ] `.)
+- **Callout blocks.** The `/` slash menu gains 💡 Callout, ⚠️ Warning, and
+  ✅ Success — colored boxes for tips and pitfalls. Pick the same one again on
+  a line to turn it back into normal text. Callouts keep their styling in
+  exported notes and compiled notebooks.
+- **Outline sidebar.** The new 📑 button in the editor top bar toggles a
+  Google-Docs-style table of contents built from your headings; click an entry
+  to jump there. It updates as you type and remembers whether you left it open.
+- **Cmd/Ctrl+F and Cmd/Ctrl+S in notes.** With a note open, Cmd/Ctrl+F opens
+  Find & replace (Escape closes it) and Cmd/Ctrl+S saves immediately instead of
+  waiting for the autosave. Everywhere else the browser defaults still apply.
+- **Fix: switching notes no longer re-saves already-saved content**, which
+  previously could burn a version-history snapshot on an unchanged note.
+
+## 1.25.0 — 2026-07-15
+
+- **Tags on notes.** Tag any note from its right-click menu or the 🏷️ button in
+  the editor top bar. Tag chips show on notes in the sidebar, and a chip bar
+  under the search box filters the list by tag (right-click a chip to rename or
+  delete it everywhere) — the same tagging you know from Exams.
+- **Note templates.** Tag a note `template` and "+ Note" turns into a picker:
+  start from a blank note or any template (title, content, and its other tags
+  are copied). There's also a new **Duplicate** option in the note right-click
+  menu for one-off copies.
+- **Fix: "Compiled HTML" folder exports include nested content.** Exporting a
+  folder as a digital notebook silently dropped every subfolder and the notes
+  inside them; the whole subtree is now included.
+- **Fix: word counts in compiled notebooks.** The exported notebook showed
+  "1 word" for nearly every note due to a broken counting regex.
+
+## 1.24.1 — 2026-07-13
+
+- **Fix: task updates carrying `last_updated` no longer error.** The
+  edit-conflict check assumed an `updated` column that tasks don't have, so a
+  task save that included `last_updated` failed with a server error.
+- **Hardening: every writable API column is now validated.** Exam fields
+  (`grade_text`, `grading_type`, `academic_year`, `tags`, `tracker_id`) and
+  event `task_id` gained validation rules, and the server now refuses to start
+  if a whitelisted column is missing one. Test suite extended to cover the
+  validation table, edit-conflict (409) handling, server-side recurrence
+  expansion, and session cleanup (176 tests).
+
+## 1.24.0 — 2026-07-13
+
+- **Task priorities.** Tasks now take a High / Medium / Low priority, shown as a
+  colored badge and used to sort the list — high-priority tasks float to the
+  top, with your manual drag order preserved within each priority group. Set it
+  from the quick-add row or the task editor.
+- **Per-task reminders.** Give a task a due date & time and pick a reminder
+  (at due time, or 10 min / 30 min / 1 h / 2 h / 1 day before) in the task
+  editor; the background scheduler sends a push just like event reminders. A 🔔
+  badge marks tasks that have one set.
+- **Time-block a task from the planner.** Open the new **📋 Tasks** tray on the
+  Planner, then drag an unscheduled task onto a day (or a time slot in the
+  day/week views) to create a linked calendar block. Deleting the task removes
+  its block, and scheduled tasks drop out of the tray automatically.
+
+## 1.22.1 — 2026-07-13
+
+- **Fix: reminders and the morning agenda now understand advanced repeats.**
+  Events repeating "every N days/weeks/months", on specific weekdays, yearly,
+  ending after N occurrences, or with deleted single occurrences were expanded
+  with the simple weekly/monthly rules — so an "every 2 weeks" event pushed
+  reminders every week, and deleted occurrences still notified. The
+  background scheduler now uses the same recurrence model as the planner.
+- **Fix: the iCal feed (`/calendar.ics`) exports full recurrence rules.**
+  Subscribed calendars (Google, Apple, …) now see the repeat interval,
+  weekly day sets, yearly repeats, occurrence counts, and skipped dates
+  (`INTERVAL`/`BYDAY`/`COUNT`/`EXDATE`) instead of a plain weekly/monthly rule.
+- Fixed: toggling a habit that no longer exists returned success and left
+  orphaned log rows; it now returns 404.
+- Fixed: the bulk note-move endpoint accepted malformed payloads; it now
+  validates them (and caps a single move at 500 notes).
+- Background-task errors in the scheduler are now logged instead of silently
+  swallowed, and the one-per-reminder "already sent" markers are purged after
+  a week instead of accumulating forever.
+
+## 1.22.0 — 2026-07-13
+
+- **Pace & speed everywhere.** Workout history now shows the derived pace per
+  entry: min/km for runs, km/h for rides, min/100m for swims.
+- **Weekly training goals.** Set a weekly km target for run/bike/swim and a
+  gym-sessions target on the Workouts tab; the "This week" stats show
+  progress bars toward each goal.
+- **Personal records.** A new card on the Workouts tab tracks your longest
+  run/ride/swim and best pace or speed per sport (with a minimum distance of
+  3 / 10 / 0.5 km so short efforts don't count).
+- **Training load chart.** Analytics has a new multi-line trend chart of
+  training hours per discipline per week over the last 12 weeks, with one
+  line per sport (run/bike/swim/gym).
+
+## 1.21.1 — 2026-07-13
+
+- **Fix: pasting or dragging screenshots into a note no longer breaks saving.**
+  Pasted/dropped images were embedded inline as base64, so a handful of
+  screenshots pushed the note past the server's size limit — the save was
+  rejected and the note silently reverted to its last good state on refresh.
+  Screenshots are now uploaded to Files (like the toolbar image button) and
+  the note stores only a small URL, so you can add as many as you like. Also
+  fixes the toolbar image button, which was missing its CSRF header.
+
+## 1.21.0 — 2026-07-13
+
+- **New: Swimming workout type — full triathlon support.** Log swims from the
+  Workouts tab and the dashboard quick-add. Swim km show up in the weekly
+  stats, the dashboard training widget, the Analytics distance chart and
+  totals, and as a "swim km" metric for custom analytics widgets. Strava
+  sync now imports Swim and OpenWaterSwim activities too.
+
 ## 1.20.0 — 2026-07-10
 
 - **New: Music tab — a built-in media player for your uploaded audio.** Upload
@@ -21,6 +134,17 @@ All notable changes to TyloPlanner are documented here.
 - **Offline listening.** Right-click a track → "Download for offline" keeps a
   copy on the device so it plays without a connection; the Library shows how
   much storage downloads use, and downloads can be removed the same way.
+- Clicking the track name or album art in the player bar jumps back to where
+  playback started (the playlist or the library) with the current track
+  highlighted and scrolled into view.
+- Fixed: upload progress panel and toasts no longer hide behind the player
+  bar, and the volume/seek slider thumbs now visually reach 0% and 100% (a
+  global input padding rule was insetting their travel).
+- Fixed: the date in the mobile drawer was crushed to a sliver once the nav
+  grew taller than the screen — it now sits on the brand row next to the
+  TyloPlanner logo (and on its own line in the desktop rail), the drawer
+  scrolls instead of squashing its items, and the date shows on first load
+  even when the app doesn't open on the dashboard tab.
 
 - **New: command palette.** Press **Ctrl/Cmd+K** anywhere (or the new Search
   button in the sidebar / top bar) to search notes, open to-dos, events,

@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.20.0"
+VERSION = "1.26.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -37,12 +37,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # ---------------- whitelisted writable columns ----------------
 # whitelisted writable columns per table (id is managed by the server)
 TABLES = {
-    "events":   ["date", "start", "end", "title", "type", "source", "description", "location", "recurrence", "recurrence_until", "reminder_offset", "end_date", "recurrence_interval", "recurrence_days", "recurrence_count", "excluded_dates", "color"],
+    "events":   ["date", "start", "end", "title", "type", "source", "description", "location", "recurrence", "recurrence_until", "reminder_offset", "end_date", "recurrence_interval", "recurrence_days", "recurrence_count", "excluded_dates", "color", "task_id"],
     "exams":    ["name", "date", "grade", "grade_text", "grading_type", "ects", "academic_year", "tags", "tracker_id"],
-    "habits":   ["name", "created"],
+    "habits":   ["name", "created", "frequency", "archived", "order_index"],
     "workouts": ["type", "date", "dur", "dist", "note", "source", "ext_id"],
-    "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id", "recurrence"],
-    "notes":    ["title", "body", "updated", "is_pinned", "folder_id", "body_format"],
+    "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id", "recurrence", "priority", "reminder_offset"],
+    "notes":    ["title", "body", "updated", "is_pinned", "folder_id", "body_format", "tags"],
     "note_folders": ["name", "parent_id", "icon", "order_index"],
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
     "folders":  ["name", "parent_id", "icon"],
@@ -678,9 +678,14 @@ SETTING_DEFAULTS = {
     "ects_goal": "",
     "exam_trackers": "[]",
     "exam_tags": "[]",
+    "note_tags": "[]",
     "music_volume": "1.0",
     "music_repeat": "off",
     "music_shuffle": "0",
+    "goal_run_km": "",
+    "goal_bike_km": "",
+    "goal_swim_km": "",
+    "goal_gym_sessions": "",
 }
 
 

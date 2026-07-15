@@ -25,6 +25,7 @@ TYPE_MAP = {
     "Ride": "bike", "VirtualRide": "bike", "GravelRide": "bike",
     "MountainBikeRide": "bike", "EBikeRide": "bike",
     "WeightTraining": "gym", "Workout": "gym", "Crossfit": "gym",
+    "Swim": "swim", "OpenWaterSwim": "swim",
 }
 
 

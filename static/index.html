@@ -92,11 +92,11 @@
   <div class="sidebar-brand">
     <img src="logo.svg" alt="" class="headlogo">
     <span class="sidebar-brand-name">TyloPlanner</span>
+    <div class="sidebar-date" id="sidebarDate"></div>
     <button class="sidebar-collapse" id="sidebarCollapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
   </div>
-  <div class="sidebar-date" id="sidebarDate"></div>
   <nav class="sidebar-nav" id="sidebarNav" aria-label="Primary">
     <div class="sidebar-group">
       <div class="sidebar-group-label">Overview</div>
@@ -206,7 +206,7 @@
       
       <div class="bento-item chart-item">
         <div class="chart-header">
-          <h3>Running & Cycling (km)</h3>
+          <h3>Distance (km)</h3>
         </div>
         <div class="chart-container">
           <canvas id="chartDistance"></canvas>
@@ -228,6 +228,15 @@
         </div>
         <div class="chart-container">
           <canvas id="chartHabits"></canvas>
+        </div>
+      </div>
+
+      <div class="bento-item chart-item" style="grid-column: span 12">
+        <div class="chart-header">
+          <h3>Training Load (hours/week, last 12 weeks)</h3>
+        </div>
+        <div class="chart-container">
+          <canvas id="chartTrainingLoad"></canvas>
         </div>
       </div>
 
@@ -263,6 +272,7 @@
       <span class="label" id="weekLabel" title="Jump to date" onclick="var g=document.getElementById('plannerGoToDate'); if(g&&g.showPicker){try{g.showPicker()}catch(e){}}"></span>
       <div class="weeknav-actions">
         <button class="btn ghost header-desktop-only" onclick="window.dispatchEvent(new CustomEvent('open-shortcuts-modal'))">⌨️ Shortcuts</button>
+        <button class="btn ghost" id="plannerTaskTrayBtn" onclick="togglePlannerTaskTray()" title="Drag tasks onto the calendar to time-block them">📋 Tasks</button>
         <button class="btn ghost" onclick="renderPlannerCalendarsPanel(); window.dispatchEvent(new CustomEvent('open-planner-calendars-modal'))">⚙️ Calendars</button>
         <input id="plannerQuickAdd" class="planner-quickadd" placeholder="✨ Quick add — e.g. Lunch tomorrow 1pm @Cafe" title="Type an event in plain language, then press Enter" onkeydown="handleQuickAddKeydown(event)">
         <div class="planner-search">
@@ -271,6 +281,7 @@
         </div>
       </div>
     </div>
+    <div class="planner-task-tray" id="plannerTaskTray" style="display:none"></div>
     <div class="weekgrid" id="weekGrid"></div>
   </section>
 
@@ -295,10 +306,23 @@
     <div class="card">
       <div class="formrow">
         <input id="habitName" placeholder="New habit (e.g. 8h sleep, study 2h, no snooze)" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addHabit()">
+        <select id="habitFreq" style="width:auto">
+          <option value="7">Daily</option>
+          <option value="8">Weekdays (Mon–Fri)</option>
+          <option value="9">Weekend (Sat–Sun)</option>
+          <option value="6">6×/week</option>
+          <option value="5">5×/week</option>
+          <option value="4">4×/week</option>
+          <option value="3">3×/week</option>
+          <option value="2">2×/week</option>
+          <option value="1">1×/week</option>
+        </select>
         <button class="btn" onclick="addHabit()">Add habit</button>
       </div>
       <div style="overflow-x:auto"><table class="habits" id="habitTable"></table></div>
     </div>
+    <div id="habitHeatmap"></div>
+    <div id="habitArchived"></div>
   </section>
 
   <section id="tab-workouts">
@@ -308,6 +332,7 @@
         <select id="wType">
           <option value="run">🏃 Run</option>
           <option value="bike">🚴 Bike</option>
+          <option value="swim">🏊 Swim</option>
           <option value="gym">🏋️ Gym</option>
         </select>
         <input id="wDate" type="date" onkeydown="if(event.key==='Enter')addWorkout()">
@@ -321,7 +346,9 @@
     <div class="card">
       <h3>This week</h3>
       <div class="wstats" id="wStats"></div>
+      <div class="formrow" id="wGoalsRow" style="margin-top:12px;align-items:center"></div>
     </div>
+    <div class="card"><h3>Personal records</h3><div class="wstats" id="wPRs"></div></div>
     <div class="card"><h3>History</h3><div id="wList"></div></div>
   </section>
 
@@ -329,6 +356,12 @@
     <div class="card">
       <div class="formrow">
         <input id="taskName" placeholder="Add a task…" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')addTask()">
+        <select id="taskPriority" style="min-width:110px;" title="Priority">
+          <option value="">No priority</option>
+          <option value="high">🔴 High</option>
+          <option value="med">🟠 Medium</option>
+          <option value="low">🔵 Low</option>
+        </select>
         <select id="taskCategory" style="min-width:120px;"></select>
         <div>
           <button class="btn ghost" onclick="window.dispatchEvent(new CustomEvent('open-categories-modal'))" style="padding:4px 8px; line-height:1; font-size:14px;" title="Manage categories">🏷️</button>
@@ -350,6 +383,7 @@
         </div>
         <div id="noteFolderHeader" style="margin-bottom:10px;"></div>
         <input id="noteSearch" placeholder="Search notes…" oninput="noteSearchInput()" onkeydown="handleNoteSearchKeydown(event)" style="width:100%;margin-bottom:8px">
+        <div id="noteTagBar" class="exam-pill-row" style="margin-bottom:8px"></div>
         <div id="noteFolderList"></div>
         <div id="noteList"></div>
       </div>
@@ -366,6 +400,8 @@
             <span id="noteCharCount">0 characters</span>
           </div>
           <div class="note-topbar-actions">
+            <button class="btn small ghost note-outline-btn" onclick="toggleNoteOutline()" title="Outline" aria-label="Toggle outline">&#128209;</button>
+            <button class="btn small ghost" onclick="editCurrentNoteTags()" title="Tags" aria-label="Edit tags">&#127991;&#65039;</button>
             <button class="btn small ghost note-search-toggle" onclick="toggleNoteSearchBar()" title="Find &amp; replace" aria-label="Find and replace">&#128269;</button>
             <button class="btn small ghost" onclick="openNoteHistory()" title="Version history" aria-label="Version history">&#128336;</button>
             <div class="dropdown" id="noteDownloadDropdown">
@@ -395,6 +431,7 @@
             <input id="noteTitle" class="note-page-title" placeholder="Untitled document" oninput="noteChanged()">
             <div id="noteEditorQuill"></div>
           </div>
+          <div id="noteOutline" class="note-outline"></div>
         </div>
       </div>
     </div>
@@ -704,8 +741,29 @@
           <select id="editTaskCategory" style="width:100%; padding:6px; box-sizing:border-box;"></select>
         </div>
         <div>
+          <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Priority</label>
+          <select id="editTaskPriority" style="width:100%; padding:6px; box-sizing:border-box;">
+            <option value="">No priority</option>
+            <option value="high">🔴 High</option>
+            <option value="med">🟠 Medium</option>
+            <option value="low">🔵 Low</option>
+          </select>
+        </div>
+        <div>
           <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Due Date &amp; Time</label>
           <input type="datetime-local" id="editTaskDue" style="width:100%; padding:6px; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Reminder</label>
+          <select id="editTaskReminder" style="width:100%; padding:6px; box-sizing:border-box;" title="Needs a due date &amp; time">
+            <option value="-1">No reminder</option>
+            <option value="0">At due time</option>
+            <option value="10">10 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="120">2 hours before</option>
+            <option value="1440">1 day before</option>
+          </select>
         </div>
         <div>
           <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Repeat</label>
@@ -1033,7 +1091,7 @@
 </main>
 <!-- Persistent music player bar — outside <main> so it survives tab switches -->
 <div id="musicPlayerBar" class="music-player-bar" style="display:none">
-  <div class="player-track-info">
+  <div class="player-track-info" onclick="playerJumpToSource()" title="Go to song" role="button">
     <img id="playerArt" class="player-art" src="" alt="">
     <div class="player-text">
       <div id="playerTitle" class="player-title">—</div>

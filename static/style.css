@@ -140,6 +140,12 @@ body.auth-enabled #logoutBtn { display: inline-block; }
   body[data-nav-layout="sidebar"] #noteEditor { height: calc(100dvh - 76px); }
   body[data-nav-layout="sidebar"] .notelist { height: calc(100dvh - 76px); }
   body[data-nav-layout="sidebar"] .note-page { min-height: calc(100dvh - 196px); }
+
+  /* The 220px rail can't fit name + date + collapse on one line: wrap the
+     date onto its own row under the logo (order puts it after the collapse
+     button so that stays on row one). */
+  .sidebar-brand { flex-wrap: wrap; }
+  .sidebar-date { order: 5; flex-basis: 100%; padding: 4px 0 0 2px; }
 }
 
 /* Shared sidebar styles — used by both the desktop rail (≥901px) and the
@@ -168,14 +174,22 @@ body.auth-enabled #logoutBtn { display: inline-block; }
     opacity: 1;
     transition: opacity 0.15s ease;
   }
+  /* Lives inside .sidebar-brand: inline right of the name on mobile; on the
+     desktop rail it wraps onto its own line under the logo (order + basis). */
   .sidebar-date {
     font-size: 11.5px;
     color: var(--muted);
-    padding: 0 8px 8px;
     white-space: nowrap;
     overflow: hidden;
+    /* shrink-only: the desktop rail block (earlier in the file) sets
+       flex-basis:100% to wrap the date onto its own line — `flex: none`
+       here would override that basis back to auto. */
+    flex-shrink: 0;
   }
   .sidebar-date:empty { display: none; }
+  /* A drawer taller than the screen must scroll (.sidebar has overflow-y),
+     not flex-shrink its children — shrinking crushed the date to 8px tall. */
+  .sidebar-brand, .sidebar-nav, .sidebar-footer { flex-shrink: 0; }
   .sidebar-collapse {
     background: transparent;
     border: none;
@@ -533,6 +547,12 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .badge.green{background:rgba(62,207,142,.15);color:var(--green)}
 .badge.gray{background:var(--panel2);color:var(--muted)}
 .badge.blue{background:rgba(79,140,255,.15);color:var(--accent)}
+.planner-task-tray{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;margin-bottom:8px;background:var(--panel2);border:1px solid var(--border);border-radius:10px}
+.planner-task-tray .tray-label{font-size:12px;font-weight:600;color:var(--muted);margin-right:2px}
+.task-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;font-size:12px;font-weight:600;background:var(--panel);border:1px solid var(--border);color:var(--text);cursor:grab;user-select:none;white-space:nowrap}
+.task-chip:hover{border-color:var(--accent)}
+.task-chip.dragging{opacity:.5}
+.task-chip .chip-dot{width:8px;height:8px;border-radius:50%;flex:none}
 .ios-toggle{appearance:none;-webkit-appearance:none;width:44px;height:24px;background:var(--panel2);border:1px solid var(--border);border-radius:12px;position:relative;cursor:pointer;outline:none;transition:background 0.3s,border-color 0.3s;margin:0;padding:0}
 .ios-toggle::after{content:'';position:absolute;top:1px;left:1px;width:20px;height:20px;background:var(--muted);border-radius:50%;transition:transform 0.3s}
 .ios-toggle:checked{background:var(--accent);border-color:var(--accent)}
@@ -598,6 +618,7 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .month-event.work { background: var(--red); }
 .month-event.personal { background: var(--orange); }
 .month-event.deadline { background: var(--red); }
+.month-event.task { background: var(--accent); }
 .month-event.ics { background: var(--muted); }
 
 /* Absolute Event */
@@ -668,6 +689,7 @@ input:focus,select:focus,textarea:focus{outline:1px solid var(--accent)}
 .event.absolute.work { background: var(--red); }
 .event.absolute.personal { background: var(--orange); }
 .event.absolute.deadline { background: var(--red); }
+.event.absolute.task { background: var(--accent); }
 .event.absolute.ics { background: var(--muted); }
 .resize-handle { position: absolute; left: 0; right: 0; height: 8px; z-index: 20; opacity: 0; cursor: ns-resize; transition: opacity 0.2s; background: rgba(255,255,255,0.1); }
 .resize-handle.top { top: 0; border-top-left-radius: 6px; border-top-right-radius: 6px; }
@@ -693,6 +715,7 @@ body.dragging-move-active { cursor: grabbing; user-select: none; }
 .event.work{background:var(--red)}
 .event.personal{background:var(--orange)}
 .event.deadline{background:var(--red)}
+.event.task{background:var(--accent)}
 .event.ics{background:var(--muted)}
 .event .muted{color:rgba(255,255,255,0.85)!important}
 .event .x{position:absolute;top:4px;right:6px;cursor:pointer;color:var(--muted);font-size:11px}
@@ -748,12 +771,31 @@ table.habits th:first-child,table.habits td:first-child{text-align:left}
   transform: translate(-50%, -60%) rotate(45deg) scale(1);
   opacity: 1;
 }
+.hcheck.dimmed {
+  opacity: 0.3;
+}
+table.habits tr[draggable]{transition:opacity 0.2s}
+table.habits tr.dragging{opacity:0.4}
+/* heatmap */
+.heatmap-grid{display:flex;gap:4px;overflow-x:auto}
+.heatmap-days{display:flex;flex-direction:column;gap:2px;padding-right:4px}
+.heatmap-days span{height:13px;font-size:10px;line-height:13px;color:var(--muted);text-align:right;min-width:28px}
+.heatmap-cells{display:grid;grid-template-rows:repeat(7,13px);grid-auto-flow:column;grid-auto-columns:13px;gap:2px}
+.heatmap-cell{width:13px;height:13px;border-radius:2px;background:var(--border)}
+.heatmap-cell[data-level="empty"]{background:transparent}
+.heatmap-cell[data-level="0"]{background:var(--border)}
+.heatmap-cell[data-level="4"]{background:var(--green)}
+.heatmap-months{display:grid;grid-auto-flow:column;grid-auto-columns:13px;gap:2px;margin-bottom:4px;margin-left:32px;font-size:10px;color:var(--muted);overflow:hidden}
+.heatmap-legend{display:flex;align-items:center;gap:4px;margin-top:10px}
 /* stats + charts */
 .wstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
 .stat{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:left;display:flex;flex-direction:column;gap:4px;transition:transform 0.2s}
 .stat:hover{transform:translateY(-2px);border-color:var(--accent)}
 .stat .v{font-size:28px;font-weight:700;line-height:1.2;color:var(--text)}
 .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.goalbar{height:5px;background:var(--border);border-radius:3px;margin-top:6px;overflow:hidden}
+.goalbar>div{height:100%;background:var(--green);border-radius:3px}
+.goal-sub{font-size:11px;color:var(--muted);margin-top:3px}
 .chart{display:flex;align-items:flex-end;gap:6px;height:130px;padding:18px 4px 0}
 .chart .bar{flex:1;background:linear-gradient(180deg,var(--accent),var(--accent2));border-radius:5px 5px 0 0;min-height:2px;position:relative}
 .chart .bar.green{background:linear-gradient(180deg,var(--green),#1f8f60)}
@@ -1140,9 +1182,13 @@ mark.cur{background:#f5a623;color:#1c2230}
 }
 .note-doctoolbar .ql-toolbar.ql-snow .ql-formats:last-child { border-right: none; margin-right: 0; padding-right: 0; }
 
-/* Scrolling canvas + the floating page */
+/* Scrolling canvas + the floating page (flex row so the outline panel can sit
+   beside the page; with the outline hidden the auto margins center as before) */
 .note-canvas {
   flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
   overflow-y: auto;
   background: var(--bg);
   padding: 24px 16px 60px;
@@ -1150,6 +1196,7 @@ mark.cur{background:#f5a623;color:#1c2230}
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 .note-page {
+  flex: 1 1 auto;
   max-width: 820px;
   min-height: calc(100dvh - 250px);
   margin: 0 auto;
@@ -1287,6 +1334,50 @@ mark.cur{background:#f5a623;color:#1c2230}
 }
 
 /* ---- Inline editor popup (slash menu + wiki-links) ---- */
+/* ---- Outline sidebar (heading TOC) ---- */
+.note-outline {
+  display: none;
+  flex: 0 0 205px;
+  position: sticky;   /* sticks inside the scrolling canvas */
+  top: 4px;
+  max-height: 72vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 8px;
+  scrollbar-width: thin;
+}
+#noteEditor.note-outline-open .note-outline { display: block; }
+.note-outline-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted); padding: 0 6px 6px;
+}
+.note-outline-item {
+  display: block; padding: 3px 6px; border-radius: 6px; font-size: 13px;
+  color: var(--muted); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-outline-item:hover { background: rgba(var(--accent-rgb), 0.14); color: var(--text); }
+@media (max-width: 900px) { .note-outline, .note-outline-btn { display: none !important; } }
+@media print { .note-outline, .note-outline-btn { display: none !important; } }
+
+/* ---- Callout blocks (slash menu; class survives the note sanitizer) ----
+   Spacing needs .ql-editor/.markdown-body scoping to out-rank Quill's own
+   ".ql-editor p { padding: 0 }" reset; the color rules can stay unscoped. */
+.ql-editor [class*="ql-callout-"], .markdown-body [class*="ql-callout-"] {
+  position: relative; margin: 6px 0; padding: 10px 14px 10px 42px; border-radius: 8px;
+}
+.ql-editor [class*="ql-callout-"]::before, .markdown-body [class*="ql-callout-"]::before {
+  position: absolute; left: 13px; top: 9px;
+}
+.ql-callout-info { background: rgba(79, 140, 255, 0.10); border-left: 3px solid var(--accent); }
+.ql-callout-info::before { content: "💡"; }
+.ql-callout-warn { background: rgba(245, 166, 35, 0.10); border-left: 3px solid var(--orange); }
+.ql-callout-warn::before { content: "⚠️"; }
+.ql-callout-success { background: rgba(62, 207, 142, 0.10); border-left: 3px solid var(--green); }
+.ql-callout-success::before { content: "✅"; }
+
 .editor-popup {
   width: 260px;
   max-height: 264px;
@@ -4364,6 +4455,10 @@ main { view-transition-name: main-content; }
 /* Reserve room for the fixed player bar so content never hides behind it */
 body.has-player main { padding-bottom: 96px; }
 body.has-player footer { margin-bottom: 96px; }
+/* Fixed bottom-anchored overlays (upload progress, toasts) sit at z-index 99,
+   under the bar (900) — lift them above it while the player is open. */
+body.has-player #uploadProgressPanel { bottom: 96px; }
+body.has-player .toast { bottom: 96px; }
 
 .music-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -4473,7 +4568,8 @@ body.has-player footer { margin-bottom: 96px; }
 body[data-nav-layout="sidebar"] .music-player-bar { left: var(--sidebar-w, 0px); }
 @keyframes playerSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
-.player-track-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.player-track-info { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.player-track-info:hover .player-title { color: var(--accent); }
 .player-art {
   width: 48px; height: 48px; border-radius: 8px; object-fit: cover;
   background: var(--panel2); flex-shrink: 0;
@@ -4524,6 +4620,9 @@ body[data-nav-layout="sidebar"] .music-player-bar { left: var(--sidebar-w, 0px);
 .player-progress input[type="range"], .player-right input[type="range"] {
   -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px;
   background: var(--border); cursor: pointer; flex: 1;
+  /* the global input{padding;border} rule insets the thumb's travel ~11px per
+     side on appearance:none ranges — the thumb never visually reached 0/100% */
+  padding: 0; border: none;
 }
 .player-progress input[type="range"]::-webkit-slider-thumb,
 .player-right input[type="range"]::-webkit-slider-thumb {
@@ -4555,6 +4654,8 @@ body[data-nav-layout="sidebar"] .music-player-bar { left: var(--sidebar-w, 0px);
   .music-player-bar input[type="range"] { min-height: 0; padding-top: 0; padding-bottom: 0; }
   body.has-player main { padding-bottom: 140px; }
   body.has-player footer { margin-bottom: 130px; }
+  body.has-player #uploadProgressPanel { bottom: calc(130px + env(safe-area-inset-bottom)); }
+  body.has-player .toast { bottom: calc(130px + env(safe-area-inset-bottom)); }
   .music-search-container { max-width: none; }
   .track-dur { display: none; }
 }

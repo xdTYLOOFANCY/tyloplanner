@@ -1,6 +1,6 @@
 // TyloPlanner — notes module (editor, markdown, search, cross-links).
 
-import { S, safeRender } from './state.js';
+import { S, SET, safeRender } from './state.js';
 import { esc, api, z, mdToHtml, toast, askConfirm, askPrompt, showContextMenu } from './utils.js';
 
 var currentNote = null, noteTimer = null;
@@ -174,6 +174,15 @@ function initQuill() {
   if (!window.Quill) return null;
   var host = document.getElementById("noteEditorQuill");
   if (!host) return null;
+  // Callout blocks: a block-level class attributor (→ class="ql-callout-<type>")
+  // styled purely in CSS. The server sanitizer already allows class on <p>.
+  var Parchment = window.Quill.import("parchment");
+  window.Quill.register({
+    "formats/callout": new Parchment.ClassAttributor("callout", "ql-callout", {
+      scope: Parchment.Scope.BLOCK,
+      whitelist: ["info", "warn", "success"]
+    })
+  }, true);
   quill = new window.Quill(host, {
     theme: "snow",
     placeholder: "Write anything…",
@@ -185,6 +194,20 @@ function initQuill() {
       }
     }
   });
+  // Markdown block shortcuts: "# "…"###### " → heading, "> " → quote. Lists
+  // and checklists ("- ", "1. ", "[ ] ") are covered by Quill's own built-in
+  // "list autofill" binding, so only these two are added.
+  quill.keyboard.addBinding({ key: " " }, { collapsed: true, prefix: /^#{1,6}$/, format: { "code-block": false } },
+    function(range, ctx) {
+      var n = ctx.prefix.length;
+      quill.deleteText(range.index - n, n, "user");
+      quill.formatLine(range.index - n, 1, "header", n, "user");
+    });
+  quill.keyboard.addBinding({ key: " " }, { collapsed: true, prefix: /^>$/, format: { "code-block": false, blockquote: false } },
+    function(range) {
+      quill.deleteText(range.index - 1, 1, "user");
+      quill.formatLine(range.index - 1, 1, "blockquote", true, "user");
+    });
   // Quill injects the toolbar right before the editor (inside the page); move it
   // up into the sticky Docs-style formatting bar above the canvas.
   var slot = document.getElementById("noteToolbarSlot");
@@ -193,6 +216,7 @@ function initQuill() {
   quill.on("text-change", function(delta, oldDelta, source) {
     if (suppressChange || source !== "user") return;
     updateCounters();
+    renderNoteOutline();
     noteChanged();
     // Defer a tick: Quill hasn't committed the new selection yet when
     // text-change fires, so getSelection() can be stale on the first keystroke.
@@ -234,6 +258,39 @@ function initQuill() {
     if (e.target.tagName === "IMG") { selectEditorImage(e.target); return; }
     hideImgOverlay();
   }, true);
+  // Intercept pasted/dropped images (screenshots) and upload them instead of
+  // letting Quill inline them as base64 — otherwise a few screenshots exceed
+  // the server's note-body size limit and every save silently fails. Listen on
+  // the container in the capture phase and stopPropagation, so the event never
+  // reaches Quill's own paste handler on .ql-editor (which would run first).
+  var host = quill.root.parentNode;
+  host.addEventListener("paste", function(e) {
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    var files = [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind === "file" && items[i].type.indexOf("image/") === 0) {
+        var f = items[i].getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (!files.length) return;  // plain text/html paste: let Quill handle it
+    e.preventDefault();
+    e.stopPropagation();
+    var idx = (quill.getSelection(true) || { index: quill.getLength() }).index;
+    files.forEach(function(f) { uploadImageToEditor(f, idx++); });
+  }, true);
+  host.addEventListener("drop", function(e) {
+    var dt = e.dataTransfer;
+    var files = dt && dt.files ? Array.prototype.filter.call(dt.files, function(f) {
+      return f.type.indexOf("image/") === 0;
+    }) : [];
+    if (!files.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var idx = (quill.getSelection() || { index: quill.getLength() }).index;
+    files.forEach(function(f) { uploadImageToEditor(f, idx++); });
+  }, true);
   return quill;
 }
 
@@ -265,8 +322,29 @@ function setEditorBody(html) {
   }
 }
 
-// Toolbar image button: upload through the existing files API and embed the
-// stored URL (keeps big base64 blobs out of the notes table).
+// Upload an image file through the files API and embed the stored URL at the
+// given editor index. Keeps big base64 blobs out of the notes table — pasting
+// or dropping screenshots otherwise inlines them as data: URIs and blows past
+// the server's note-body size limit once a few are added.
+function uploadImageToEditor(file, index) {
+  if (!quill || !file) return;
+  var fd = new FormData();
+  fd.append("file", file);
+  return fetch("/api/files/upload", {
+    method: "POST",
+    headers: { "X-Requested-With": "XMLHttpRequest" },  // CSRF guard (blueprints/auth.py)
+    body: fd
+  })
+    .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function(res) {
+      if (!res || !res.id) return Promise.reject();
+      quill.insertEmbed(index, "image", "/api/files/" + res.id + "/view", "user");
+      quill.setSelection(index + 1, 0, "user");
+    })
+    .catch(function() { alert("Image upload failed."); });
+}
+
+// Toolbar image button: pick a file and upload it through the files API.
 function quillImageHandler() {
   if (!quill) return;
   var input = document.createElement("input");
@@ -276,16 +354,7 @@ function quillImageHandler() {
     var file = input.files && input.files[0];
     if (!file) return;
     var range = quill.getSelection(true) || { index: quill.getLength() };
-    var fd = new FormData();
-    fd.append("file", file);
-    fetch("/api/files/upload", { method: "POST", body: fd })
-      .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
-      .then(function(res) {
-        if (!res || !res.id) return Promise.reject();
-        quill.insertEmbed(range.index, "image", "/api/files/" + res.id + "/view", "user");
-        quill.setSelection(range.index + 1, 0, "user");
-      })
-      .catch(function() { alert("Image upload failed."); });
+    uploadImageToEditor(file, range.index);
   };
   input.click();
 }
@@ -316,10 +385,19 @@ var SLASH_ITEMS = [
   { icon: "1.", label: "Numbered list", kw: "ordered", apply: function() { quill.format("list", "ordered", "user"); } },
   { icon: "☑", label: "Checklist", kw: "todo task", apply: function() { quill.format("list", "unchecked", "user"); } },
   { icon: "❝", label: "Quote", kw: "blockquote", apply: function() { quill.format("blockquote", true, "user"); } },
+  { icon: "💡", label: "Callout", kw: "info highlight box", apply: function() { toggleCallout("info"); } },
+  { icon: "⚠️", label: "Warning callout", kw: "warn alert", apply: function() { toggleCallout("warn"); } },
+  { icon: "✅", label: "Success callout", kw: "done tip green", apply: function() { toggleCallout("success"); } },
   { icon: "</>", label: "Code block", kw: "pre monospace", apply: function() { quill.format("code-block", true, "user"); } },
   { icon: "▦", label: "Table", kw: "grid", apply: function() { insertTable(); } },
   { icon: "🖼", label: "Image", kw: "picture photo", apply: function() { quillImageHandler(); } }
 ];
+
+// Re-picking the same callout type removes it (toggle, like the toolbar buttons).
+function toggleCallout(type) {
+  var cur = quill.getFormat().callout;
+  quill.format("callout", cur === type ? false : type, "user");
+}
 
 function insertTable() {
   var t = quill.getModule("table");
@@ -642,8 +720,145 @@ function choosePopupItem() {
   }
 }
 
+// ---- custom tags (global list in setting note_tags; per-note CSV in notes.tags) ----
+// Same pattern as exam tags (exams.js); reuses the .exam-tag / .tagpick-* CSS.
+
+function allNoteTags() {
+  try { return JSON.parse(SET.note_tags || '[]') || []; } catch (e) { return []; }
+}
+
+function noteTagList(n) {
+  return n.tags ? n.tags.split(',').filter(Boolean) : [];
+}
+
+var noteTagFilter = null; // active tag filter, not persisted
+
+export function toggleNoteTagFilter(tag) {
+  noteTagFilter = noteTagFilter === tag ? null : tag;
+  renderNoteList();
+}
+
+export function noteTagMenu(ev, tag) {
+  showContextMenu(ev, [
+    { label: 'Rename', icon: '✏️', onClick: async function() {
+        var name = await askPrompt('Rename tag', tag, { okText: 'Save' });
+        if (!name || !name.trim() || name === tag) return;
+        name = name.trim().replace(/,/g, '');
+        var tags = allNoteTags().map(function(x) { return x === tag ? name : x; });
+        for (var i = 0; i < S.notes.length; i++) {
+          var n = S.notes[i], list = noteTagList(n);
+          var idx = list.indexOf(tag);
+          if (idx !== -1) { list[idx] = name; await api('PUT', '/api/notes/' + n.id, { tags: list.join(',') }); }
+        }
+        if (noteTagFilter === tag) noteTagFilter = name;
+        await api('POST', '/api/settings', { note_tags: JSON.stringify(tags) });
+        if (window.refreshApp) await window.refreshApp();
+      } },
+    { label: 'Delete', icon: '🗑', danger: true, onClick: function() { deleteNoteTag(tag); } },
+  ]);
+}
+
+// Delete a tag globally: from the tag list and from every note that has it.
+async function deleteNoteTag(tag) {
+  var ok = await askConfirm('Delete tag "' + tag + '"? It is removed from all notes.', { danger: true, okText: 'Delete' });
+  if (!ok) return;
+  for (var i = 0; i < S.notes.length; i++) {
+    var n = S.notes[i], list = noteTagList(n);
+    if (list.indexOf(tag) !== -1) {
+      await api('PUT', '/api/notes/' + n.id, { tags: list.filter(function(x) { return x !== tag; }).join(',') || null });
+    }
+  }
+  if (noteTagFilter === tag) noteTagFilter = null;
+  await api('POST', '/api/settings', { note_tags: JSON.stringify(allNoteTags().filter(function(x) { return x !== tag; })) });
+  if (window.refreshApp) await window.refreshApp();
+}
+
+// Checkbox dialog to assign tags to one note (and create new tags inline).
+export function editNoteTags(id) {
+  var n = (S.notes || []).find(function(x) { return x.id === id; });
+  if (!n) return;
+  var current = noteTagList(n);
+  var tags = allNoteTags();
+  var dlg = document.createElement('dialog');
+  dlg.className = 'modal';
+  var boxes = tags.map(function(t) {
+    return '<label class="tagpick-row"><input type="checkbox" value="' + esc(t) + '"' +
+      (current.indexOf(t) !== -1 ? ' checked' : '') + '> ' + esc(t) +
+      '<button type="button" class="tagpick-del" data-del="' + esc(t) + '" title="Delete tag everywhere">✕</button></label>';
+  }).join('');
+  dlg.innerHTML = '<div class="modal-content" style="max-width:340px;width:90%">' +
+    '<h3 style="margin:0 0 12px;font-size:16px;font-weight:700">Tags — ' + esc(n.title || 'Untitled') + '</h3>' +
+    '<div class="tagpick-list">' + (boxes || '<span class="muted" style="font-size:13px">No tags yet — create one below.</span>') + '</div>' +
+    '<input data-newtag placeholder="New tag (e.g. lecture, template, todo)" style="width:100%;box-sizing:border-box;margin:10px 0 16px;padding:8px">' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="btn ghost" data-act="cancel">Cancel</button>' +
+      '<button class="btn" data-act="ok">Save</button>' +
+    '</div></div>';
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  function close() { try { dlg.close(); } catch (err) {} dlg.remove(); }
+  async function save() {
+    var picked = Array.prototype.map.call(dlg.querySelectorAll('input[type=checkbox]:checked'), function(c) { return c.value; });
+    var nt = dlg.querySelector('[data-newtag]').value.trim().replace(/,/g, '');
+    if (nt) {
+      if (tags.indexOf(nt) === -1) await api('POST', '/api/settings', { note_tags: JSON.stringify(tags.concat([nt])) });
+      if (picked.indexOf(nt) === -1) picked.push(nt);
+    }
+    close();
+    await api('PUT', '/api/notes/' + id, { tags: picked.join(',') || null });
+    if (window.refreshApp) await window.refreshApp();
+  }
+  dlg.addEventListener('click', function(ev) {
+    var del = ev.target.getAttribute && ev.target.getAttribute('data-del');
+    if (del) {
+      // close first — the dialog's tag list is stale once the tag is gone
+      ev.preventDefault();
+      close();
+      deleteNoteTag(del);
+      return;
+    }
+    var act = ev.target.getAttribute && ev.target.getAttribute('data-act');
+    if (act === 'ok') save();
+    else if (act === 'cancel' || ev.target === dlg) close();
+  });
+  dlg.querySelector('[data-newtag]').addEventListener('keydown', function(ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); save(); }
+  });
+}
+
+// Tags button in the editor top bar (currentNote is module-private).
+export function editCurrentNoteTags() {
+  if (currentNote) editNoteTags(currentNote);
+}
+
+// ---- templates ----
+// A note tagged "template" (any case) is a template: creating a new note
+// offers it as a starting point. ponytail: a tag is the flag — no template table.
+function templateNotes() {
+  return (S.notes || []).filter(function(n) {
+    return noteTagList(n).some(function(t) { return t.toLowerCase() === 'template'; });
+  });
+}
+
 export async function newNote(refresh) {
   var payload = { title: "", body: "", body_format: "html", updated: Date.now() };
+  var tpls = templateNotes();
+  if (tpls.length) {
+    var options = [{ value: "", label: "Blank note" }].concat(tpls.map(function(t) {
+      return { value: t.id, label: "📄 " + (t.title || "Untitled") };
+    }));
+    var pick = await askPrompt("New note", "", { okText: "Create", options: options });
+    if (pick === null) return;
+    var tpl = tpls.find(function(t) { return t.id === pick; });
+    if (tpl) {
+      payload.title = tpl.title || "";
+      payload.body = tpl.body || "";
+      payload.body_format = tpl.body_format || "html";
+      // Copy the template's tags, minus the "template" marker itself.
+      var keep = noteTagList(tpl).filter(function(t) { return t.toLowerCase() !== "template"; });
+      if (keep.length) payload.tags = keep.join(",");
+    }
+  }
   if (activeNoteFolderId) payload.folder_id = activeNoteFolderId;
   var r = await api("POST", "/api/notes", payload);
   currentNote = r.id;
@@ -651,6 +866,23 @@ export async function newNote(refresh) {
   await refresh();
   var titleEl = document.getElementById("noteTitle");
   if (titleEl) titleEl.focus();
+}
+
+// Duplicate a note in place (also handy as an ad-hoc template).
+export async function duplicateNote(id) {
+  var n = (S.notes || []).find(function(x) { return x.id === id; });
+  if (!n) return;
+  var r = await api("POST", "/api/notes", {
+    title: (n.title || "Untitled") + " (copy)",
+    body: n.body || "",
+    body_format: n.body_format || "html",
+    tags: n.tags || null,
+    folder_id: n.folder_id || null,
+    updated: Date.now()
+  });
+  currentNote = r.id;
+  localStorage.setItem("active_note_id", r.id);
+  if (window.refreshApp) await window.refreshApp();
 }
 
 export function openNote(id) {
@@ -716,8 +948,6 @@ export function selectNote(id) {
 export function noteChanged() {
   clearTimeout(noteTimer);
 
-  updateCounters();
-
   var statusEl = document.getElementById("noteSaveStatus");
   if (statusEl) {
     statusEl.textContent = "Typing...";
@@ -728,79 +958,110 @@ export function noteChanged() {
   var pendingTitle = document.getElementById("noteTitle").value;
   var pendingBody = getEditorBody();
 
-  noteTimer = setTimeout(async function() {
-    if (!pendingNoteId) return;
-    
-    if (statusEl && currentNote === pendingNoteId) {
-      statusEl.textContent = "Saving...";
-      statusEl.className = "note-status saving";
-    }
-    
-    try {
-      var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
-      var lastUpdated = n ? n.updated : 0;
-      var updatedTime = Date.now();
-      await api("PUT", "/api/notes/" + pendingNoteId, {
-        title: pendingTitle,
-        body: pendingBody,
-        body_format: "html",
-        updated: updatedTime,
-        last_updated: lastUpdated
-      });
-      var n2 = S.notes.find(function(x) { return x.id === pendingNoteId; });
-      if (n2) {
-        n2.title = pendingTitle;
-        n2.body = pendingBody;
-        n2.body_format = "html";
-        n2.updated = updatedTime;
-      }
-      renderNoteList();
-      
-      if (statusEl && currentNote === pendingNoteId) {
-        statusEl.textContent = "Saved at " + formatTime(updatedTime);
-        statusEl.className = "note-status saved";
-      }
-    } catch (err) {
-      if (err.message === "conflict") {
-        if (statusEl && currentNote === pendingNoteId) {
-          statusEl.textContent = "Conflict! Modified elsewhere.";
-          statusEl.className = "note-status danger";
-        }
-        var overwrite = await askConfirm("This note was modified elsewhere. Overwrite it with your version, or reload the newer one?", { title: "Note conflict", okText: "Overwrite", cancelText: "Reload", danger: true });
-        if (overwrite) {
-          var updatedTime2 = Date.now();
-          await api("PUT", "/api/notes/" + pendingNoteId, {
-            title: pendingTitle,
-            body: pendingBody,
-            body_format: "html",
-            updated: updatedTime2,
-            last_updated: updatedTime2 // force overwrite
-          });
-          var n3 = S.notes.find(function(x) { return x.id === pendingNoteId; });
-          if (n3) {
-            n3.title = pendingTitle;
-            n3.body = pendingBody;
-            n3.body_format = "html";
-            n3.updated = updatedTime2;
-          }
-          renderNoteList();
-          if (statusEl && currentNote === pendingNoteId) {
-            statusEl.textContent = "Saved at " + formatTime(updatedTime2);
-            statusEl.className = "note-status saved";
-          }
-        } else {
-          window.refreshApp && window.refreshApp();
-        }
-      } else {
-        if (statusEl && currentNote === pendingNoteId) {
-          statusEl.textContent = "Error saving";
-          statusEl.className = "note-status danger";
-        }
-        console.error(err);
-      }
-    }
+  noteTimer = setTimeout(function() {
+    noteTimer = null;  // fired: selectNote's flush must not re-save this content
+    doSaveNote(pendingNoteId, pendingTitle, pendingBody);
   }, 500);
 }
+
+// Save immediately (Cmd/Ctrl+S), flushing any pending debounced save.
+export function forceSaveNote() {
+  if (!currentNote) return;
+  clearTimeout(noteTimer);
+  noteTimer = null;
+  var titleEl = document.getElementById("noteTitle");
+  doSaveNote(currentNote, titleEl ? titleEl.value : "", getEditorBody());
+}
+
+async function doSaveNote(pendingNoteId, pendingTitle, pendingBody) {
+  if (!pendingNoteId) return;
+  var statusEl = document.getElementById("noteSaveStatus");
+
+  if (statusEl && currentNote === pendingNoteId) {
+    statusEl.textContent = "Saving...";
+    statusEl.className = "note-status saving";
+  }
+
+  try {
+    var n = S.notes.find(function(x) { return x.id === pendingNoteId; });
+    var lastUpdated = n ? n.updated : 0;
+    var updatedTime = Date.now();
+    await api("PUT", "/api/notes/" + pendingNoteId, {
+      title: pendingTitle,
+      body: pendingBody,
+      body_format: "html",
+      updated: updatedTime,
+      last_updated: lastUpdated
+    });
+    var n2 = S.notes.find(function(x) { return x.id === pendingNoteId; });
+    if (n2) {
+      n2.title = pendingTitle;
+      n2.body = pendingBody;
+      n2.body_format = "html";
+      n2.updated = updatedTime;
+    }
+    renderNoteList();
+
+    if (statusEl && currentNote === pendingNoteId) {
+      statusEl.textContent = "Saved at " + formatTime(updatedTime);
+      statusEl.className = "note-status saved";
+    }
+  } catch (err) {
+    if (err.message === "conflict") {
+      if (statusEl && currentNote === pendingNoteId) {
+        statusEl.textContent = "Conflict! Modified elsewhere.";
+        statusEl.className = "note-status danger";
+      }
+      var overwrite = await askConfirm("This note was modified elsewhere. Overwrite it with your version, or reload the newer one?", { title: "Note conflict", okText: "Overwrite", cancelText: "Reload", danger: true });
+      if (overwrite) {
+        var updatedTime2 = Date.now();
+        await api("PUT", "/api/notes/" + pendingNoteId, {
+          title: pendingTitle,
+          body: pendingBody,
+          body_format: "html",
+          updated: updatedTime2,
+          last_updated: updatedTime2 // force overwrite
+        });
+        var n3 = S.notes.find(function(x) { return x.id === pendingNoteId; });
+        if (n3) {
+          n3.title = pendingTitle;
+          n3.body = pendingBody;
+          n3.body_format = "html";
+          n3.updated = updatedTime2;
+        }
+        renderNoteList();
+        if (statusEl && currentNote === pendingNoteId) {
+          statusEl.textContent = "Saved at " + formatTime(updatedTime2);
+          statusEl.className = "note-status saved";
+        }
+      } else {
+        window.refreshApp && window.refreshApp();
+      }
+    } else {
+      if (statusEl && currentNote === pendingNoteId) {
+        statusEl.textContent = "Error saving";
+        statusEl.className = "note-status danger";
+      }
+      console.error(err);
+    }
+  }
+}
+
+// Cmd/Ctrl+F opens find & replace, Cmd/Ctrl+S saves now — hijacked only while
+// the Notes tab is showing an open note, so browser defaults survive elsewhere.
+document.addEventListener("keydown", function(e) {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+  var k = (e.key || "").toLowerCase();
+  if (k !== "f" && k !== "s") return;
+  var tab = document.getElementById("tab-notes");
+  var ed = document.getElementById("noteEditor");
+  if (!tab || !tab.classList.contains("active") || !ed || ed.style.display === "none" || !currentNote) return;
+  e.preventDefault();
+  if (k === "s") { forceSaveNote(); return; }
+  if (!ed.classList.contains("note-search-open")) toggleNoteSearchBar();
+  var input = document.getElementById("noteBodySearch");
+  if (input) { input.focus(); input.select(); }
+});
 
 export async function deleteNote(refresh) {
   return deleteNoteById(currentNote, refresh);
@@ -888,6 +1149,10 @@ export function handleNoteBodySearchKeydown(e) {
   if (e.key === "Enter") {
     e.preventDefault();
     noteBodySearchNav(1);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    toggleNoteSearchBar();  // closes + clears when open
+    if (quill) quill.focus();
   }
 }
 
@@ -1103,9 +1368,24 @@ function renderNoteList() {
     header.innerHTML = breadcrumbsHtml;
   }
 
-  // Folder tree (search falls back to a flat filtered list).
+  // Tag filter bar (chips reuse the exam-tag styling).
+  var tagBarEl = document.getElementById("noteTagBar");
+  if (tagBarEl) {
+    var tags = allNoteTags();
+    if (noteTagFilter && tags.indexOf(noteTagFilter) === -1) noteTagFilter = null;
+    tagBarEl.innerHTML = tags.map(function(t) {
+      var a = esc(t.replace(/'/g, "\\'"));
+      return '<button class="exam-tag' + (noteTagFilter === t ? ' active' : '') + '" ' +
+        'onclick="noteToggleTagFilter(\'' + a + '\')" ' +
+        'oncontextmenu="noteTagMenu(event,\'' + a + '\')">' + esc(t) + '</button>';
+    }).join('');
+  }
+
+  // Folder tree (search and tag filtering fall back to a flat note list).
   var fHtml = "";
-  if (q) {
+  if (noteTagFilter && !q) {
+    // flat list only — the tree would hide tagged notes inside collapsed folders
+  } else if (q) {
     var folders = (S.note_folders || []).filter(function(f) {
       var match = (f.name || "").toLowerCase().indexOf(q) !== -1;
       if (!match) return false;
@@ -1123,7 +1403,12 @@ function renderNoteList() {
   // Notes below the tree: root-level notes (folder notes render inside the
   // tree), or the flat result list while searching.
   var list = S.notes.slice();
-  if (q) {
+  if (noteTagFilter) {
+    list = list.filter(function(n) { return noteTagList(n).indexOf(noteTagFilter) !== -1; });
+  }
+  if (noteTagFilter && !q) {
+    list.sort(sortNotesDefault);
+  } else if (q) {
     if (noteSearchResults !== null) {
       list = list.filter(function(n) {
         var inFts = noteSearchResults.indexOf(n.id) !== -1;
@@ -1155,7 +1440,7 @@ function renderNoteList() {
   list.forEach(function(n) { html += noteRowHtml(n, q, 0); });
   var noteListEl = document.getElementById("noteList");
   if (noteListEl) {
-    noteListEl.innerHTML = html || (q && !fHtml ? '<div class="muted">No notes match.</div>' : (!fHtml ? '<div class="muted">No notes yet.</div>' : ''));
+    noteListEl.innerHTML = html || ((q || noteTagFilter) && !fHtml ? '<div class="muted">No notes match.</div>' : (!fHtml ? '<div class="muted">No notes yet.</div>' : ''));
   }
 }
 
@@ -1175,9 +1460,11 @@ function noteRowHtml(n, q, depth) {
   }
   var pinned = n.is_pinned ? 'note-pinned' : '';
   var indent = depth ? ' style="margin-left:' + (depth * 14) + 'px"' : '';
+  var chips = noteTagList(n).map(function(t) { return '<span class="exam-tag mini">' + esc(t) + '</span>'; }).join('');
   return '<div class="list-item ' + pinned + (n.id === currentNote ? ' sel' : '') + '"' + indent + ' data-id="' + n.id + '" oncontextmenu="noteContextMenu(event, \'' + n.id + '\')" onclick="selectNote(\'' + n.id + '\')" draggable="true" ondragstart="onNoteDragStart(event, \'' + n.id + '\')" ondragend="onNoteDragEnd(event)">' +
     '<button class="btn-pin" onclick="toggleNotePin(\'' + n.id + '\',event)" title="' + (n.is_pinned ? 'Unpin' : 'Pin') + '">\u2605</button>' +
     '<div class="grow"><div>' + title + '</div>' + snippet +
+    (chips ? '<div style="margin:2px 0">' + chips + '</div>' : '') +
     '<div class="muted">' + new Date(n.updated || 0).toLocaleDateString() + '</div></div></div>';
 }
 
@@ -1269,6 +1556,7 @@ export function renderNotes() {
     searchMatches = [];
     updateCounters();
   }
+  applyNoteOutline();
 
   var statusEl = document.getElementById("noteSaveStatus");
   if (statusEl && !noteTimer) {
@@ -1277,6 +1565,52 @@ export function renderNotes() {
   }
   });
 }
+
+// ---- Outline sidebar (heading TOC, Google-Docs style) ----
+// Rebuilt from the loaded Quill contents on note load and on every user edit;
+// the panel lives in static HTML, so live-sync re-renders can't disturb it.
+var outlineOpen = localStorage.getItem("note_outline_open") === "1";
+
+export function toggleNoteOutline() {
+  outlineOpen = !outlineOpen;
+  localStorage.setItem("note_outline_open", outlineOpen ? "1" : "0");
+  applyNoteOutline();
+}
+
+function applyNoteOutline() {
+  var ed = document.getElementById("noteEditor");
+  if (ed) ed.classList.toggle("note-outline-open", outlineOpen);
+  if (outlineOpen) renderNoteOutline();
+}
+
+function renderNoteOutline() {
+  if (!outlineOpen) return;
+  var box = document.getElementById("noteOutline");
+  if (!box || !quill) return;
+  var hs = quill.root.querySelectorAll("h1,h2,h3,h4,h5,h6");
+  var html = '<div class="note-outline-title">Outline</div>';
+  if (!hs.length) {
+    html += '<div class="muted" style="font-size:12px;padding:0 6px">Add headings to build an outline.</div>';
+  } else {
+    Array.prototype.forEach.call(hs, function(h, i) {
+      var lvl = +h.tagName[1];
+      html += '<a class="note-outline-item" data-oi="' + i + '" style="padding-left:' + ((lvl - 1) * 10 + 6) + 'px">' +
+        esc(h.textContent || "(empty heading)") + '</a>';
+    });
+  }
+  box.innerHTML = html;
+}
+
+// Click an outline item: scroll its heading into the canvas viewport.
+document.addEventListener("click", function(e) {
+  var it = e.target.closest && e.target.closest(".note-outline-item");
+  if (!it || !quill) return;
+  var hs = quill.root.querySelectorAll("h1,h2,h3,h4,h5,h6");
+  var h = hs[+it.getAttribute("data-oi")];
+  var canvas = document.querySelector(".note-canvas");
+  if (!h || !canvas) return;
+  canvas.scrollTop += h.getBoundingClientRect().top - canvas.getBoundingClientRect().top - 16;
+});
 
 // Toggle the in-note search bar. On mobile it is collapsed by default to give
 // the editor maximum room; this reveals/hides it and focuses the field.
@@ -1392,6 +1726,8 @@ export function noteContextMenu(ev, id) {
   showContextMenu(ev, [
     { label: "Open", icon: "📝", onClick: function() { selectNote(id); } },
     { label: n.is_pinned ? "Unpin" : "Pin", icon: "★", onClick: function() { toggleNotePin(id, ev); } },
+    { label: "Tags…", icon: "🏷️", onClick: function() { editNoteTags(id); } },
+    { label: "Duplicate", icon: "⧉", onClick: function() { duplicateNote(id); } },
     { label: "Move to…", icon: "📁", onClick: function() { moveNoteDialog(id); } },
     { sep: true },
     { label: "Delete", icon: "✕", danger: true, onClick: function() { deleteNoteById(id); } }
@@ -1718,6 +2054,18 @@ export async function downloadNoteAs(format) {
       display: block;
       margin: 8px 0;
     }
+    .markdown-body [class*="ql-callout-"] {
+      position: relative; margin: 6px 0; padding: 10px 14px 10px 42px; border-radius: 8px;
+    }
+    .markdown-body [class*="ql-callout-"]::before {
+      position: absolute; left: 13px; top: 9px;
+    }
+    .ql-callout-info { background: rgba(79, 140, 255, 0.10); border-left: 3px solid #4f8cff; }
+    .ql-callout-info::before { content: "💡"; }
+    .ql-callout-warn { background: rgba(245, 166, 35, 0.10); border-left: 3px solid #f5a623; }
+    .ql-callout-warn::before { content: "⚠️"; }
+    .ql-callout-success { background: rgba(62, 207, 142, 0.10); border-left: 3px solid #3ecf8e; }
+    .ql-callout-success::before { content: "✅"; }
     .note-link {
       color: var(--accent);
       text-decoration: none;
@@ -1794,30 +2142,18 @@ async function compileDigitalNotebook(rootFolderId, notebookTitle) {
   var exportedFolders = [];
   var exportedNotes = [];
 
-  function isFolderDescendantOf(folderId, ancestorId) {
-    if (!folderId || !ancestorId) return false;
-    var currentId = folderId;
-    var limit = 20;
-    while (currentId && limit > 0) {
-      limit--;
-      var folder = (S.note_folders || []).find(function(f) { return f.id === currentId; });
-      currentId = folder ? folder.parent_id : null;
-    }
-    return false;
-  }
-
   if (rootFolderId) {
     var rootFolder = S.note_folders.find(function(f) { return f.id === rootFolderId; });
     if (rootFolder) exportedFolders.push(rootFolder);
-    
+
     (S.note_folders || []).forEach(function(f) {
-      if (isFolderDescendantOf(f.id, rootFolderId)) {
+      if (f.id !== rootFolderId && isNoteDescendant(f.id, rootFolderId)) {
         exportedFolders.push(f);
       }
     });
-    
+
     (S.notes || []).forEach(function(n) {
-      if (n.folder_id === rootFolderId || isFolderDescendantOf(n.folder_id, rootFolderId)) {
+      if (isNoteDescendant(n.folder_id, rootFolderId)) {
         exportedNotes.push(n);
       }
     });
@@ -2143,7 +2479,19 @@ async function compileDigitalNotebook(rootFolderId, notebookTitle) {
       display: block;
       margin: 8px 0;
     }
-    
+    .markdown-body [class*="ql-callout-"] {
+      position: relative; margin: 6px 0; padding: 10px 14px 10px 42px; border-radius: 8px;
+    }
+    .markdown-body [class*="ql-callout-"]::before {
+      position: absolute; left: 13px; top: 9px;
+    }
+    .ql-callout-info { background: rgba(79, 140, 255, 0.10); border-left: 3px solid #4f8cff; }
+    .ql-callout-info::before { content: "💡"; }
+    .ql-callout-warn { background: rgba(245, 166, 35, 0.10); border-left: 3px solid #f5a623; }
+    .ql-callout-warn::before { content: "⚠️"; }
+    .ql-callout-success { background: rgba(62, 207, 142, 0.10); border-left: 3px solid #3ecf8e; }
+    .ql-callout-success::before { content: "✅"; }
+
     .note-link { color: var(--accent); text-decoration: none; }
     .note-link:hover { text-decoration: underline; }
     .note-link-missing { color: var(--muted); text-decoration: underline dashed; cursor: default; }
@@ -2305,7 +2653,7 @@ async function compileDigitalNotebook(rootFolderId, notebookTitle) {
       if (!text) return 0;
       var cleanText = text.trim();
       if (cleanText === "") return 0;
-      return cleanText.split(/\\\\s+/).length;
+      return cleanText.split(/\\s+/).length;
     }
 
     function escapeHtml(s) {

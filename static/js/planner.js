@@ -2,6 +2,7 @@ import { S, SET, safeRender } from './state.js';
 import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce, askConfirm, showContextMenu } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
+import { priorityRank } from './tasks.js';
 
 // Default to a single-day agenda on phones (the multi-day grid is unreadable
 // at <=640px); desktop keeps the week view. Scoped to initial load only.
@@ -20,6 +21,9 @@ var draggingEventId = null, draggingOccDate = null, draggingOffsetY = 0, current
 // non-recurring event or the whole series), so Save can ask "this / following /
 // all events" and apply the change to the right scope.
 var editingOccurrenceDate = null;
+// Task tray: draggable open tasks shown above the grid so they can be dropped
+// onto a day/time to create a linked time-block event (events.task_id).
+var taskTrayOpen = false;
 var isTouchDragging = false, touchDragPointerId = null, touchDragStartClientX = 0, touchDragStartClientY = 0, touchDragLongPressTimer = null, justTouchDragged = false, lastTouchTime = 0;
 
 var defaultShortcuts = {
@@ -588,7 +592,8 @@ export function renderPlanner() {
     });
   }
   sizeTimeGrid();
-  
+  renderPlannerTaskTray();
+
   document.querySelectorAll(currentView === 'month' ? ".month-cell" : ".day-col").forEach(function(col) {
     col.addEventListener("dragover", function(ev) {
       ev.preventDefault();
@@ -678,6 +683,30 @@ export function renderPlanner() {
     col.addEventListener("drop", async function(ev) {
       ev.preventDefault();
       col.classList.remove("drag-over");
+
+      // Task dropped from the tray → create a linked time-block. Timed when
+      // dropped on the day grid, all-day in month view.
+      var taskId = ev.dataTransfer.getData("tylo/task");
+      if (taskId) {
+        if (dragPreviewEl) { dragPreviewEl.remove(); dragPreviewEl = null; }
+        var tiso = col.getAttribute("data-iso");
+        var tStart = '', tEnd = '';
+        var ttgc = col.querySelector('.time-grid-content');
+        if (ttgc && currentView !== 'month') {
+          var trect = ttgc.getBoundingClientRect();
+          var ty = ev.clientY - trect.top;
+          var tStartMin = Math.max(0, Math.round(ty / 15) * 15);
+          var tEndMin = tStartMin + 60;
+          var tsh = Math.floor(tStartMin / 60), tsm = tStartMin % 60;
+          var teh = Math.floor(tEndMin / 60), tem = tEndMin % 60;
+          if (teh >= 24) { teh = 23; tem = 59; }
+          tStart = (tsh < 10 ? '0'+tsh : tsh) + ':' + (tsm < 10 ? '0'+tsm : tsm);
+          tEnd = (teh < 10 ? '0'+teh : teh) + ':' + (tem < 10 ? '0'+tem : tem);
+        }
+        await createTaskTimeBlock(taskId, tiso, tStart, tEnd);
+        return;
+      }
+
       var id = ev.dataTransfer.getData("text/plain");
       var iso = col.getAttribute("data-iso");
       if (id && iso) {
@@ -1638,6 +1667,88 @@ function renderReminderPills() {
     
     list.appendChild(pill);
   });
+}
+
+// ---- Task tray (drag a task onto the calendar to time-block it) ----
+
+var TRAY_PRIO_DOT = { high: 'var(--red)', med: 'var(--orange)', low: 'var(--accent)' };
+
+export function togglePlannerTaskTray() {
+  taskTrayOpen = !taskTrayOpen;
+  var tray = document.getElementById('plannerTaskTray');
+  var btn = document.getElementById('plannerTaskTrayBtn');
+  if (tray) tray.style.display = taskTrayOpen ? 'flex' : 'none';
+  if (btn) btn.classList.toggle('active', taskTrayOpen);
+  if (taskTrayOpen) renderPlannerTaskTray();
+}
+
+export function renderPlannerTaskTray() {
+  var tray = document.getElementById('plannerTaskTray');
+  if (!tray || !taskTrayOpen) return;
+
+  // Open, top-level tasks that aren't already time-blocked (no event links back).
+  var blocked = {};
+  (S.events || []).forEach(function(e) { if (e.task_id) blocked[e.task_id] = true; });
+  var open = (S.tasks || []).filter(function(t) {
+    return !t.done && !t.parent_id && !blocked[t.id];
+  });
+  open.sort(function(a, b) {
+    var r = priorityRank(a.priority) - priorityRank(b.priority);
+    if (r !== 0) return r;
+    return (a.order_index || 0) - (b.order_index || 0);
+  });
+
+  tray.innerHTML = '';
+  var label = document.createElement('span');
+  label.className = 'tray-label';
+  label.textContent = open.length ? '📋 Drag onto a day to schedule:' : '📋 No unscheduled tasks';
+  tray.appendChild(label);
+
+  open.forEach(function(t) {
+    var chip = document.createElement('span');
+    chip.className = 'task-chip';
+    chip.draggable = true;
+    chip.dataset.taskId = t.id;
+    var dot = TRAY_PRIO_DOT[t.priority];
+    if (dot) {
+      var dotEl = document.createElement('span');
+      dotEl.className = 'chip-dot';
+      dotEl.style.background = dot;
+      chip.appendChild(dotEl);
+    }
+    chip.appendChild(document.createTextNode(t.name));
+    chip.addEventListener('dragstart', function(ev) {
+      // Only tylo/task is set (no text/plain) so the event-move drop path is
+      // skipped and the task branch in the column drop handler takes over.
+      ev.dataTransfer.setData('tylo/task', t.id);
+      ev.dataTransfer.effectAllowed = 'copy';
+      chip.classList.add('dragging');
+    });
+    chip.addEventListener('dragend', function() { chip.classList.remove('dragging'); });
+    tray.appendChild(chip);
+  });
+}
+
+// Create a calendar time-block linked to a task (events.task_id). Timed when
+// dropped on the day grid, all-day when dropped in month view / the all-day bar.
+async function createTaskTimeBlock(taskId, iso, start, end) {
+  var t = (S.tasks || []).find(function(x) { return x.id === taskId; });
+  if (!t || !iso) return;
+  var data = {
+    title: t.name, date: iso,
+    start: start || '', end: end || '',
+    type: 'task', task_id: taskId, source: 'local'
+  };
+  try {
+    var res = await api('POST', '/api/events', data);
+    if (res && res.id) S.events.push(Object.assign({ id: res.id }, data));
+  } catch (err) {
+    console.error('Time-block create failed:', err);
+  }
+  renderPlanner();
+  renderDashboard();
+  renderPlannerTaskTray();
+  if (plannerRefresh) plannerRefresh();
 }
 
 export function openAdd(iso, defaultStart, defaultEnd, allDay) {

@@ -252,6 +252,19 @@ can't leak upward.
   `excluded_dates` (CSV of ISO dates) skips single occurrences. `reminder_offset`
   is **not** a plain int — it's `-1` (none) or a CSV of minute offsets; validated
   by the `reminder` rule in `blueprints/api.py`.
+- **Tasks: priority, reminders, time-blocking** (`tasks.js`, migration 022).
+  `priority` is a closed enum (`high`/`med`/`low`, validated) used as the primary
+  sort key in `renderTasks()` (manual `order_index` breaks ties within a
+  priority); it renders as a colored badge. Tasks reuse the events
+  `reminder_offset` column and the same `reminder` validation; a dated,
+  time-bearing `due_date` plus an offset fires a push via
+  `check_task_reminders()` in `scheduler.py` (deduped with the shared
+  `reminder_sent:*` kv markers). **Time-blocking:** the Planner's 📋 Tasks tray
+  (`renderPlannerTaskTray()`) lists open, un-blocked tasks as draggable chips;
+  dropping one on a day/slot POSTs an event with `type='task'` and
+  `task_id` linking back to the task (a one-way link — editing the block does
+  not rewrite the task). Deleting a task cascades to `DELETE FROM events WHERE
+  task_id=?` in `blueprints/api.py`, and blocked tasks drop out of the tray.
 - **Recurring single-occurrence edits.** Each rendered event carries `data-occ`
   (the occurrence date). Editing/deleting/dragging a recurring instance calls
   `promptRecurrenceScope()` and then `applyRecurringEdit` / `applyRecurringDelete`
@@ -283,7 +296,28 @@ can't leak upward.
   reloads a note's contents **only** when `loadedNoteId` changes (switching
   notes), never on a live-sync re-render, so incremental sync can't clobber the
   caret or in-flight edits. Bodies are sanitized server-side by
-  `sanitize_note_html()` (allowlist, stdlib) on every save.
+  `sanitize_note_html()` (allowlist, stdlib) on every save. Images added by
+  toolbar button, paste, or drag-drop are uploaded through `/api/files/upload`
+  and embedded as `/api/files/<id>/view` URLs — never inlined as base64, which
+  would bloat the body past the `_MAX_BODY` limit and make saves fail. The
+  paste/drop interception lives on the editor container in the capture phase
+  (`initQuill()`) so it beats Quill's own base64 clipboard handler.
+- **Notes editor extras.** Markdown block shortcuts (`# `…`###### `, `> `) are
+  custom Quill keyboard bindings in `initQuill()`; lists come from Quill 2's
+  built-in "list autofill" binding — don't re-add them. Callouts are a block
+  `ClassAttributor` (`ql-callout-info|warn|success`, styled in CSS only; the
+  server sanitizer allows `class` on `<p>`, covered by a test). The outline
+  sidebar (`#noteOutline`, static HTML + `renderNoteOutline()`) rebuilds from
+  `quill.root` headings on load and user edits — never from live sync.
+  Cmd/Ctrl+F / Cmd/Ctrl+S are hijacked only while the Notes tab shows an open
+  note. Debounced saves flow through `doSaveNote()`; `forceSaveNote()` is the
+  flush path.
+- **Note tags & templates.** Notes carry a comma-separated `notes.tags` column
+  (migration 024); the global tag list lives in the `note_tags` setting — the
+  exact pattern exam tags use (migration 019), including the chip bar, the
+  checkbox picker dialog, and global rename/delete. A note tagged `template`
+  (any case) is a template: `newNote()` then offers a "New note" picker (blank
+  or any template) and copies title/body/tags — no separate template table.
 - **Sticky + transforms don't mix.** `position: sticky` breaks inside an
   ancestor with a `transform`/`filter`. The tab-switch animation is therefore
   opacity-only (`tabFadeIn`); keep it that way or the planner axis unsticks.

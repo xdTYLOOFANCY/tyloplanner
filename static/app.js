@@ -4,7 +4,7 @@
 "use strict";
 
 import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
-import { todayStr, esc, delRow as _delRow, navigateWithTransition } from './js/utils.js';
+import { todayStr, esc, fmtShort, delRow as _delRow, navigateWithTransition } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings, applyNavLayoutFromSettings } from './js/theme.js';
 import { exportData, importData, exportArchive, importArchive } from './js/backup.js';
@@ -21,10 +21,10 @@ import {
   showDashboardEventDetails
 } from './js/dashboard.js';
 import { renderAnalytics } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor, togglePlannerTaskTray } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, saveGradeTarget as _saveGradeTarget, whatIfDialog as _examWhatIf, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu } from './js/exams.js';
-import { addHabit as _addHabit, delHabit as _delHabit, toggleHabit as _toggleHabit, renderHabits } from './js/habits.js';
-import { addWorkout as _addWorkout, renderWorkouts } from './js/workouts.js';
+import { addHabit as _addHabit, archiveHabit as _archiveHabit, restoreHabit as _restoreHabit, permanentDeleteHabit as _permanentDeleteHabit, renameHabit as _renameHabit, editHabitFrequency as _editHabitFreq, habitMenu as _habitMenu, toggleHabit as _toggleHabit, toggleHeatmap as _toggleHeatmap, dragHabitStart as _dragHabitStart, dragHabitOver as _dragHabitOver, dragHabitEnd as _dragHabitEnd, dropHabit as _dropHabit, renderHabits } from './js/habits.js';
+import { addWorkout as _addWorkout, renderWorkouts, saveWorkoutGoal as _saveWorkoutGoal } from './js/workouts.js';
 import {
   addTask as _addTask, toggleTask as _toggleTask, renderTasks, addSubtask as _addSubtask,
   dragTaskStart, dragTaskOver, dragTaskEnd, dropTask,
@@ -43,7 +43,8 @@ import {
   noteContextMenu, noteFolderContextMenu,
   onNoteDragStart, onNoteDragEnd, onNoteFolderDragOver, onNoteFolderDragLeave, onNoteFolderDrop,
   onNoteFolderDragStart, onNoteFolderDragEnd,
-  toggleNoteDownloadMenu, downloadNoteAs, downloadNoteFolder, downloadAllNotesNotebook
+  toggleNoteDownloadMenu, downloadNoteAs, downloadNoteFolder, downloadAllNotesNotebook,
+  toggleNoteTagFilter, noteTagMenu, editCurrentNoteTags, toggleNoteOutline
 } from './js/notes.js';
 import {
   renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort, setFileView,
@@ -128,10 +129,20 @@ window.examTrackerMenu = function(ev, id) { _examTrackerMenu(ev, id, R); };
 window.examEditTags = function(id) { _examEditTags(id, R); };
 window.examToggleTagFilter = function(tag) { _examToggleTagFilter(tag, R); };
 window.examTagMenu = function(ev, tag) { _examTagMenu(ev, tag, R); };
+window._habitRefresh = R;
 window.addHabit = function() { _addHabit(R); };
-window.delHabit = function(id) { _delHabit(id, R); };
+window.archiveHabit = function(id) { _archiveHabit(id, R); };
+window.restoreHabit = function(id) { _restoreHabit(id, R); };
+window.permanentDeleteHabit = function(id) { _permanentDeleteHabit(id, R); };
+window.habitMenu = function(ev, id) { _habitMenu(ev, id, R); };
 window.toggleHabit = function(id, iso) { _toggleHabit(id, iso); };
+window.toggleHeatmap = function(id) { _toggleHeatmap(id); };
+window.dragHabitStart = function(ev, id) { _dragHabitStart(ev, id); };
+window.dragHabitOver = function(ev) { _dragHabitOver(ev); };
+window.dragHabitEnd = function(ev) { _dragHabitEnd(ev); };
+window.dropHabit = function(ev, id) { _dropHabit(ev, id, R); };
 window.addWorkout = function() { _addWorkout(R); };
+window.saveWorkoutGoal = function(key, val) { _saveWorkoutGoal(key, val, R); };
 window.addTask = function() { _addTask(R); };
 window.toggleTask = function(id, done) { _toggleTask(id, done, R); };
 window.addSubtask = function(parentId) { _addSubtask(parentId, R); };
@@ -169,6 +180,10 @@ window.onNoteFolderDragLeave = onNoteFolderDragLeave;
 window.onNoteFolderDrop = onNoteFolderDrop;
 window.onNoteFolderDragStart = onNoteFolderDragStart;
 window.onNoteFolderDragEnd = onNoteFolderDragEnd;
+window.noteToggleTagFilter = toggleNoteTagFilter;
+window.noteTagMenu = noteTagMenu;
+window.editCurrentNoteTags = editCurrentNoteTags;
+window.toggleNoteOutline = toggleNoteOutline;
 window.uploadFile = function() { _uploadFile(R); };
 window.uploadCameraFile = function() { _uploadCameraFile(R); };
 window.delFile = function(id) { _delFile(id, R); };
@@ -183,6 +198,7 @@ window.fileContextMenu = fileContextMenu;
 window.folderContextMenu = folderContextMenu;
 window.togglePlannerCalendarsPanel = _togglePlannerCalendarsPanel;
 window.renderPlannerCalendarsPanel = _renderPlannerCalendarsPanel;
+window.togglePlannerTaskTray = togglePlannerTaskTray;
 window.toggleCalendarType = function(id, checked) { _toggleCalendarType(id, checked); };
 window.updateCalendarColor = function(id, color) { _updateCalendarColor(id, color); };
 
@@ -393,6 +409,15 @@ document.getElementById('taskModal')?.addEventListener('keydown', (e) => {
 });
 
 document.getElementById("wDate").value = todayStr();
+// Header/sidebar date at boot — renderDashboard also sets these, but it only
+// runs once the dashboard tab is opened (active tab persists across reloads).
+(function() {
+  var now = new Date(), s = fmtShort(now) + " " + now.getFullYear();
+  var hd = document.getElementById("headerDate");
+  if (hd) hd.textContent = s;
+  var sb = document.getElementById("sidebarDate");
+  if (sb) sb.textContent = s;
+})();
 applyTheme();
 
 // Restore active tab

@@ -1,7 +1,7 @@
 // TyloPlanner — exams & grades module.
 
 import { S, SET, safeRender } from './state.js';
-import { esc, api, daysUntil, todayStr, askConfirm, askPrompt, showContextMenu } from './utils.js';
+import { esc, api, daysUntil, todayStr, askConfirm, askPrompt, showContextMenu, guardFocus } from './utils.js';
 
 // ---- trackers (studies/programmes; stored as JSON in setting exam_trackers) ----
 
@@ -618,13 +618,7 @@ export function renderExams(refresh) {
   // Don't blow away an input the user is actively editing: grade/date/name in
   // the table or the ECTS goal field in analytics. The add form is excluded on
   // purpose — Enter-to-add must still show the new row.
-  var examTable = document.getElementById('examTable');
-  var analytics = document.getElementById('examAnalytics');
-  var active = document.activeElement;
-  if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT') &&
-      ((examTable && examTable.contains(active)) || (analytics && analytics.contains(active)))) {
-    return;
-  }
+  if (guardFocus('examTable', 'examAnalytics')) return;
 
   safeRender('exams', function() {
     var tlist = trackers();

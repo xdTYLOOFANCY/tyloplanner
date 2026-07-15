@@ -183,9 +183,22 @@ class CrudTests(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
 
     def test_delete_habit_cascades_log(self):
+        """DELETE /api/habits/<id> now archives (soft-delete) instead of hard-deleting."""
         hid = self.c.post("/api/habits", json={"name": "run"}).get_json()["id"]
         self.c.post("/api/habits/%s/toggle" % hid, json={"date": "2026-06-10"})
         self.c.delete("/api/habits/%s" % hid)
+        state = self.c.get("/api/state").get_json()
+        # Habit is still present but archived
+        self.assertEqual(len(state["habits"]), 1)
+        self.assertEqual(state["habits"][0]["archived"], 1)
+        # Log entries are preserved
+        self.assertEqual(len(state["habit_log"]), 1)
+
+    def test_permanent_delete_habit_cascades_log(self):
+        """DELETE /api/habits/<id>/permanent hard-deletes habit and its log."""
+        hid = self.c.post("/api/habits", json={"name": "run"}).get_json()["id"]
+        self.c.post("/api/habits/%s/toggle" % hid, json={"date": "2026-06-10"})
+        self.c.delete("/api/habits/%s/permanent" % hid)
         state = self.c.get("/api/state").get_json()
         self.assertEqual(state["habits"], [])
         self.assertEqual(state["habit_log"], [])  # log entry removed too
@@ -338,6 +351,33 @@ class CrudTests(unittest.TestCase):
         self.assertIsNone(row["academic_year"])
         self.assertIsNone(row["tags"])
         self.assertEqual(row["tracker_id"], "trk2")
+
+    def test_note_tags_roundtrip(self):
+        r = self.c.post("/api/notes", json={
+            "title": "Weekly review", "body": "<p>hi</p>", "body_format": "html",
+            "tags": "template,school",
+        })
+        self.assertEqual(r.status_code, 200)
+        row = self._rows("notes")[0]
+        self.assertEqual(row["tags"], "template,school")
+        # update + clear (tags-only PUT must not trip the conflict check)
+        self.c.put("/api/notes/%s" % row["id"], json={"tags": "school"})
+        self.assertEqual(self._rows("notes")[0]["tags"], "school")
+        self.c.put("/api/notes/%s" % row["id"], json={"tags": None})
+        self.assertIsNone(self._rows("notes")[0]["tags"])
+        # global tag list persists as a setting
+        r = self.c.post("/api/settings", json={"note_tags": '["template","school"]'})
+        self.assertEqual(r.status_code, 200)
+        s = self.c.get("/api/settings").get_json()
+        self.assertEqual(s["note_tags"], '["template","school"]')
+
+    def test_note_callout_class_survives_sanitizer(self):
+        # Callout blocks are plain <p class="ql-callout-*"> — the sanitizer
+        # must keep the class or callouts silently unstyle on reload.
+        body = '<p class="ql-callout-info">tip</p><p class="ql-callout-warn">careful</p>'
+        r = self.c.post("/api/notes", json={"title": "c", "body": body, "body_format": "html"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._rows("notes")[0]["body"], body)
 
     def test_exam_tracker_settings_persist(self):
         r = self.c.post("/api/settings", json={
@@ -1391,6 +1431,58 @@ class AdvancedTaskManagementTests(unittest.TestCase):
         self.assertEqual(r_update.status_code, 200)
         t = next(x for x in self.c.get("/api/state").get_json()["tasks"] if x["id"] == tid)
         self.assertIsNone(t["recurrence"])
+
+    def test_task_priority_column_validated(self):
+        # priority is a closed enum; valid values persist, junk is rejected.
+        r = self.c.post("/api/tasks", json={"name": "A", "priority": "high"})
+        self.assertEqual(r.status_code, 200)
+        tid = r.get_json()["id"]
+        t = next(x for x in self.c.get("/api/state").get_json()["tasks"] if x["id"] == tid)
+        self.assertEqual(t["priority"], "high")
+        self.assertEqual(self.c.put("/api/tasks/%s" % tid, json={"priority": "med"}).status_code, 200)
+        self.assertEqual(self.c.put("/api/tasks/%s" % tid, json={"priority": "urgent"}).status_code, 400)
+        # null clears it
+        self.assertEqual(self.c.put("/api/tasks/%s" % tid, json={"priority": None}).status_code, 200)
+
+    def test_task_reminder_offset_column(self):
+        # tasks reuse the events reminder_offset validation (-1 or CSV minutes)
+        r = self.c.post("/api/tasks", json={"name": "Call", "reminder_offset": "30"})
+        self.assertEqual(r.status_code, 200)
+        tid = r.get_json()["id"]
+        t = next(x for x in self.c.get("/api/state").get_json()["tasks"] if x["id"] == tid)
+        self.assertEqual(str(t["reminder_offset"]), "30")
+        self.assertEqual(self.c.put("/api/tasks/%s" % tid, json={"reminder_offset": "abc"}).status_code, 400)
+
+    def test_deleting_task_removes_linked_time_block(self):
+        # A planner time-block links to its task via events.task_id; deleting the
+        # task must delete the block too (no orphan calendar events).
+        tid = self.c.post("/api/tasks", json={"name": "Essay"}).get_json()["id"]
+        eid = self.c.post("/api/events", json={
+            "title": "Essay", "date": "2026-06-15", "start": "10:00", "end": "11:00",
+            "type": "task", "task_id": tid, "source": "local",
+        }).get_json()["id"]
+        self.assertTrue(any(e["id"] == eid for e in self.c.get("/api/state").get_json()["events"]))
+        self.c.delete("/api/tasks/%s" % tid)
+        self.assertFalse(any(e["id"] == eid for e in self.c.get("/api/state").get_json()["events"]))
+
+    def test_check_task_reminders_fires_once(self):
+        from datetime import datetime
+        import scheduler
+        # Task due at a fixed time with a 30-minute reminder.
+        self.c.post("/api/tasks", json={
+            "name": "Submit", "due_date": "2026-06-15T10:00", "reminder_offset": "30",
+        })
+        sent = []
+        orig = scheduler.send_notification
+        scheduler.send_notification = lambda *a, **k: sent.append(a)
+        try:
+            fire = datetime(2026, 6, 15, 9, 30)  # 30 min before due
+            scheduler.check_task_reminders(fire)
+            scheduler.check_task_reminders(fire)  # dedupe: no second notification
+            scheduler.check_task_reminders(datetime(2026, 6, 15, 9, 45))  # wrong time
+        finally:
+            scheduler.send_notification = orig
+        self.assertEqual(len(sent), 1)
 
 
 class VersionCheckTests(unittest.TestCase):
@@ -2691,6 +2783,315 @@ class AccessLoggingTests(unittest.TestCase):
                 os.environ["TESTING"] = orig_testing
             else:
                 os.environ.pop("TESTING", None)
+
+
+class RecurrenceInstanceTests(unittest.TestCase):
+    """scheduler.get_instances must honor the full recurrence model
+    (interval, day sets, count, until, yearly, exclusions) so reminders and
+    the morning agenda match what the planner shows."""
+
+    def hit(self, e, day):
+        import scheduler
+        return scheduler.get_instances(e, day)
+
+    def test_non_recurring_matches_only_its_date(self):
+        e = {"date": "2026-01-05"}
+        self.assertTrue(self.hit(e, "2026-01-05"))
+        self.assertFalse(self.hit(e, "2026-01-06"))
+
+    def test_null_recurrence_treated_as_none(self):
+        e = {"date": "2026-01-05", "recurrence": None}
+        self.assertTrue(self.hit(e, "2026-01-05"))
+
+    def test_daily_interval(self):
+        e = {"date": "2026-01-01", "recurrence": "daily", "recurrence_interval": 2}
+        self.assertTrue(self.hit(e, "2026-01-01"))
+        self.assertFalse(self.hit(e, "2026-01-02"))
+        self.assertTrue(self.hit(e, "2026-01-03"))
+
+    def test_weekly_day_set(self):
+        # Start Mon 2026-01-05; recurrence_days is JS getDay() CSV (1=Mon, 3=Wed)
+        e = {"date": "2026-01-05", "recurrence": "weekly", "recurrence_days": "1,3"}
+        self.assertTrue(self.hit(e, "2026-01-05"))   # Mon
+        self.assertFalse(self.hit(e, "2026-01-06"))  # Tue
+        self.assertTrue(self.hit(e, "2026-01-07"))   # Wed
+
+    def test_weekly_interval_skips_off_weeks(self):
+        e = {"date": "2026-01-05", "recurrence": "weekly", "recurrence_interval": 2}
+        self.assertTrue(self.hit(e, "2026-01-05"))
+        self.assertFalse(self.hit(e, "2026-01-12"))  # off week
+        self.assertTrue(self.hit(e, "2026-01-19"))
+
+    def test_weekly_defaults_to_start_weekday(self):
+        e = {"date": "2026-01-05", "recurrence": "weekly"}
+        self.assertTrue(self.hit(e, "2026-01-12"))   # next Monday
+        self.assertFalse(self.hit(e, "2026-01-13"))
+
+    def test_monthly_interval(self):
+        e = {"date": "2026-01-15", "recurrence": "monthly", "recurrence_interval": 2}
+        self.assertFalse(self.hit(e, "2026-02-15"))
+        self.assertTrue(self.hit(e, "2026-03-15"))
+
+    def test_yearly(self):
+        e = {"date": "2026-03-01", "recurrence": "yearly"}
+        self.assertTrue(self.hit(e, "2027-03-01"))
+        self.assertFalse(self.hit(e, "2027-03-02"))
+
+    def test_excluded_dates_skipped(self):
+        e = {"date": "2026-01-01", "recurrence": "daily",
+             "excluded_dates": "2026-01-02, 2026-01-04"}
+        self.assertTrue(self.hit(e, "2026-01-03"))
+        self.assertFalse(self.hit(e, "2026-01-02"))
+        self.assertFalse(self.hit(e, "2026-01-04"))
+
+    def test_count_limits_series(self):
+        e = {"date": "2026-01-01", "recurrence": "daily", "recurrence_count": 3}
+        self.assertTrue(self.hit(e, "2026-01-03"))
+        self.assertFalse(self.hit(e, "2026-01-04"))
+
+    def test_excluded_dates_consume_count_slots(self):
+        # RRULE COUNT semantics: an excluded occurrence still uses up a slot.
+        e = {"date": "2026-01-01", "recurrence": "daily",
+             "recurrence_count": 3, "excluded_dates": "2026-01-02"}
+        self.assertTrue(self.hit(e, "2026-01-03"))
+        self.assertFalse(self.hit(e, "2026-01-04"))
+
+    def test_until_bounds_series(self):
+        e = {"date": "2026-01-01", "recurrence": "daily",
+             "recurrence_until": "2026-01-05"}
+        self.assertTrue(self.hit(e, "2026-01-05"))
+        self.assertFalse(self.hit(e, "2026-01-06"))
+
+
+class InputValidationEndpointTests(unittest.TestCase):
+    """Guards added around habit toggle and bulk note moves."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_toggle_unknown_habit_404s_without_orphan_log(self):
+        r = self.c.post("/api/habits/nope/toggle", json={"date": "2026-06-10"})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(self.c.get("/api/state").get_json()["habit_log"], [])
+
+    def test_move_notes_rejects_bad_payloads(self):
+        for payload in ({"note_ids": "x"}, {"note_ids": []},
+                        {"note_ids": [1, 2]}, {"note_ids": ["a"], "folder_id": 5}):
+            r = self.c.post("/api/notes/move", json=payload)
+            self.assertEqual(r.status_code, 400, payload)
+
+    def test_move_notes_happy_path(self):
+        nid = self.c.post("/api/notes", json={"title": "n", "body": ""}).get_json()["id"]
+        r = self.c.post("/api/notes/move", json={"note_ids": [nid], "folder_id": None})
+        self.assertEqual(r.status_code, 200)
+
+
+class ValidationTests(unittest.TestCase):
+    """_validate_fields rules table — the code that regresses silently."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_every_whitelisted_column_has_a_rule(self):
+        from blueprints.api import _FIELD_RULES
+        cols = {c for cs in helpers.TABLES.values() for c in cs}
+        self.assertEqual(sorted(cols - set(_FIELD_RULES)), [])
+
+    def _bad(self, table, payload):
+        r = self.c.post("/api/%s" % table, json=payload)
+        self.assertEqual(r.status_code, 400, (table, payload, r.get_json()))
+
+    def _ok(self, table, payload):
+        r = self.c.post("/api/%s" % table, json=payload)
+        self.assertEqual(r.status_code, 200, (table, payload, r.get_json()))
+        return r.get_json()["id"]
+
+    def test_date_rules(self):
+        self._bad("events", {"date": "13-07-2026"})
+        self._bad("events", {"date": "2026-13-01"})
+        self._bad("events", {"date": 20260713})
+        self._ok("events", {"date": "2026-07-13"})
+        self._ok("events", {"date": ""})  # empty clears
+
+    def test_time_rules(self):
+        self._bad("events", {"date": "2026-07-13", "start": "25:00"})
+        self._bad("events", {"date": "2026-07-13", "start": "9:00"})
+        self._ok("events", {"date": "2026-07-13", "start": "09:00", "end": ""})
+
+    def test_datetime_rules(self):
+        self._bad("tasks", {"name": "t", "due_date": "2026-07-13T25:61"})
+        self._ok("tasks", {"name": "t", "due_date": "2026-07-13T09:30"})
+        self._ok("tasks", {"name": "t", "due_date": "2026-07-13"})  # date-only allowed
+
+    def test_int_and_float_bounds(self):
+        self._bad("exams", {"name": "x", "grade": 11})
+        self._bad("exams", {"name": "x", "grade": -1})
+        self._bad("exams", {"name": "x", "ects": "not a number"})
+        self._ok("exams", {"name": "x", "grade": 8.5, "ects": 6})
+        self._bad("events", {"date": "2026-07-13", "recurrence_interval": 0})
+        self._bad("habits", {"name": "h", "frequency": 10})
+
+    def test_bool_coercion(self):
+        self._bad("tasks", {"name": "t", "done": "yes"})
+        self._bad("tasks", {"name": "t", "done": 2})
+        for v in (True, 1, "1", "true"):
+            self._ok("tasks", {"name": "t", "done": v})
+
+    def test_enum_rules(self):
+        self._bad("tasks", {"name": "t", "priority": "urgent"})
+        self._ok("tasks", {"name": "t", "priority": "high"})
+        self._bad("exams", {"name": "x", "grading_type": "roman"})
+        self._ok("exams", {"name": "x", "grading_type": "pass_fail"})
+        self._bad("events", {"date": "2026-07-13", "type": "party"})
+        self._ok("events", {"date": "2026-07-13", "type": "ics_3"})
+        # workouts 'type' is free-form, not the events enum
+        self._ok("workouts", {"date": "2026-07-13", "type": "bouldering"})
+
+    def test_str_max_length(self):
+        self._bad("tasks", {"name": "x" * 9000})
+        self._bad("exams", {"name": "x", "academic_year": "x" * 17})
+
+    def test_none_clears_optional_fields(self):
+        rid = self._ok("exams", {"name": "x", "grade": 7.0})
+        r = self.c.put("/api/exams/%s" % rid, json={"grade": None})
+        self.assertEqual(r.status_code, 200)
+
+
+class ConflictTests(unittest.TestCase):
+    """PUT optimistic-concurrency: stale last_updated must 409 with current row."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        self.c = appmod.app.test_client()
+
+    def test_stale_note_update_409s_with_current_data(self):
+        nid = self.c.post("/api/notes", json={"title": "a", "body": "v1", "updated": 1000}).get_json()["id"]
+        r = self.c.put("/api/notes/%s" % nid, json={"body": "v2", "updated": 2000, "last_updated": 1000})
+        self.assertEqual(r.status_code, 200)
+        # Second writer still holds updated=1000 → conflict, row untouched
+        r = self.c.put("/api/notes/%s" % nid, json={"body": "v3", "updated": 3000, "last_updated": 1000})
+        self.assertEqual(r.status_code, 409)
+        body = r.get_json()
+        self.assertEqual(body["error"], "conflict")
+        self.assertEqual(body["current_data"]["body"], "v2")
+        rows = self.c.get("/api/state").get_json()["notes"]
+        self.assertEqual(rows[0]["body"], "v2")
+
+    def test_fresh_last_updated_wins(self):
+        nid = self.c.post("/api/notes", json={"title": "a", "body": "v1", "updated": 1000}).get_json()["id"]
+        r = self.c.put("/api/notes/%s" % nid, json={"body": "v2", "updated": 2000, "last_updated": 1000})
+        self.assertEqual(r.status_code, 200)
+        r = self.c.put("/api/notes/%s" % nid, json={"body": "v3", "updated": 3000, "last_updated": 2000})
+        self.assertEqual(r.status_code, 200)
+
+    def test_update_without_last_updated_skips_check(self):
+        nid = self.c.post("/api/notes", json={"title": "a", "body": "v1", "updated": 5000}).get_json()["id"]
+        r = self.c.put("/api/notes/%s" % nid, json={"body": "v2", "updated": 6000})
+        self.assertEqual(r.status_code, 200)
+
+    def test_tasks_conflict_too(self):
+        # tasks have no 'updated' column value by default → no conflict check
+        # unless one is set; the guarded path is notes/tasks with updated set.
+        tid = self.c.post("/api/tasks", json={"name": "t"}).get_json()["id"]
+        r = self.c.put("/api/tasks/%s" % tid, json={"name": "t2", "last_updated": 0})
+        self.assertEqual(r.status_code, 200)
+
+
+class RecurrenceTests(unittest.TestCase):
+    """scheduler.get_instances — the server-side recurrence expansion that
+    mirrors planner.js getInstances()."""
+
+    def setUp(self):
+        import scheduler
+        self.gi = scheduler.get_instances
+
+    def _e(self, **kw):
+        e = {"date": "2026-07-01", "recurrence": "none"}
+        e.update(kw)
+        return e
+
+    def test_non_recurring(self):
+        self.assertTrue(self.gi(self._e(), "2026-07-01"))
+        self.assertFalse(self.gi(self._e(), "2026-07-02"))
+        self.assertFalse(self.gi({"date": None}, "2026-07-01"))
+
+    def test_before_start_never_matches(self):
+        self.assertFalse(self.gi(self._e(recurrence="daily"), "2026-06-30"))
+
+    def test_daily_with_interval(self):
+        e = self._e(recurrence="daily", recurrence_interval=3)
+        self.assertTrue(self.gi(e, "2026-07-01"))
+        self.assertFalse(self.gi(e, "2026-07-02"))
+        self.assertTrue(self.gi(e, "2026-07-04"))
+
+    def test_weekly_default_day(self):
+        # 2026-07-01 is a Wednesday; without recurrence_days it repeats on Wed
+        e = self._e(recurrence="weekly")
+        self.assertTrue(self.gi(e, "2026-07-08"))
+        self.assertFalse(self.gi(e, "2026-07-09"))
+
+    def test_weekly_day_set_and_interval(self):
+        # JS day numbering: 1=Mon, 5=Fri; every 2 weeks
+        e = self._e(recurrence="weekly", recurrence_days="1,5", recurrence_interval=2)
+        self.assertTrue(self.gi(e, "2026-07-03"))   # Fri, week 0
+        self.assertFalse(self.gi(e, "2026-07-06"))  # Mon, week 1 (off-week)
+        self.assertTrue(self.gi(e, "2026-07-13"))   # Mon, week 2
+
+    def test_monthly_and_yearly(self):
+        m = self._e(recurrence="monthly")
+        self.assertTrue(self.gi(m, "2026-08-01"))
+        self.assertFalse(self.gi(m, "2026-08-02"))
+        y = self._e(recurrence="yearly", recurrence_interval=2)
+        self.assertTrue(self.gi(y, "2028-07-01"))
+        self.assertFalse(self.gi(y, "2027-07-01"))
+
+    def test_until_bound(self):
+        e = self._e(recurrence="daily", recurrence_until="2026-07-05")
+        self.assertTrue(self.gi(e, "2026-07-05"))
+        self.assertFalse(self.gi(e, "2026-07-06"))
+
+    def test_count_bound_and_exclusions_consume_slots(self):
+        e = self._e(recurrence="daily", recurrence_count=3)
+        self.assertTrue(self.gi(e, "2026-07-03"))
+        self.assertFalse(self.gi(e, "2026-07-04"))
+        # excluding an occurrence hides it but still consumes a COUNT slot
+        e2 = self._e(recurrence="daily", recurrence_count=3, excluded_dates="2026-07-02")
+        self.assertFalse(self.gi(e2, "2026-07-02"))
+        self.assertTrue(self.gi(e2, "2026-07-03"))
+        self.assertFalse(self.gi(e2, "2026-07-04"))
+
+    def test_garbage_inputs_dont_crash(self):
+        self.assertFalse(self.gi(self._e(date="garbage", recurrence="daily"), "2026-07-01"))
+        e = self._e(recurrence="daily", recurrence_interval="huh")
+        self.assertTrue(self.gi(e, "2026-07-02"))  # bad interval falls back to 1
+
+
+class SchedulerJobTests(unittest.TestCase):
+    """Scheduler jobs that touch the DB (run directly, no daemon thread)."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+
+    def test_purge_expired_sessions(self):
+        import scheduler
+        now = int(time.time())
+        with helpers.db(write=True) as con:
+            con.execute("DELETE FROM user_sessions")
+            con.execute("INSERT INTO user_sessions (id, active_at) VALUES (?,?)",
+                        ("dead", now - 31 * 86400))
+            con.execute("INSERT INTO user_sessions (id, active_at) VALUES (?,?)",
+                        ("alive", now))
+        purged = scheduler.purge_expired_sessions()
+        self.assertEqual(purged, 1)
+        with helpers.db() as con:
+            ids = [r["id"] for r in con.execute("SELECT id FROM user_sessions")]
+        self.assertEqual(ids, ["alive"])
 
 
 if __name__ == "__main__":

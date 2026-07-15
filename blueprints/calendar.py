@@ -208,23 +208,58 @@ def ics_export():
                 
             rec = e["recurrence"]
             if rec and rec != "none":
-                freq = None
-                if rec == "daily":
-                    freq = "DAILY"
-                elif rec == "weekly":
-                    freq = "WEEKLY"
-                elif rec == "monthly":
-                    freq = "MONTHLY"
-                
+                freq = {"daily": "DAILY", "weekly": "WEEKLY",
+                        "monthly": "MONTHLY", "yearly": "YEARLY"}.get(rec)
+
                 if freq:
                     rrule = f"RRULE:FREQ={freq}"
-                    if e["recurrence_until"]:
+                    try:
+                        interval = int(e["recurrence_interval"] or 1)
+                    except (TypeError, ValueError):
+                        interval = 1
+                    if interval > 1:
+                        rrule += f";INTERVAL={interval}"
+                    if rec == "weekly" and e["recurrence_days"]:
+                        # recurrence_days is JS getDay() CSV: 0=Sun … 6=Sat
+                        names = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
+                        byday = [names[int(x)] for x in str(e["recurrence_days"]).split(",")
+                                 if x.strip().isdigit() and 0 <= int(x) <= 6]
+                        if byday:
+                            rrule += ";BYDAY=" + ",".join(byday)
+                    count = None
+                    if e["recurrence_count"] not in (None, ""):
+                        try:
+                            count = int(e["recurrence_count"])
+                        except (TypeError, ValueError):
+                            count = None
+                    if count and count >= 1:
+                        rrule += f";COUNT={count}"
+                    elif e["recurrence_until"]:
                         until_d = e["recurrence_until"].replace("-", "")
                         if e["start"]:
                             rrule += f";UNTIL={until_d}T235959Z"
                         else:
                             rrule += f";UNTIL={until_d}"
                     lines.append(rrule)
+                    excl = [x.strip() for x in str(e["excluded_dates"] or "").split(",") if x.strip()]
+                    if excl:
+                        if e["start"]:
+                            # EXDATE must match DTSTART's form: same local start
+                            # time on the excluded day, converted like DTSTART.
+                            stamps = []
+                            for x in excl:
+                                try:
+                                    dt_x = datetime.strptime(f"{x} {e['start']}", "%Y-%m-%d %H:%M")
+                                    if tz:
+                                        dt_x = dt_x.replace(tzinfo=tz)
+                                    stamps.append(dt_x.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+                                except ValueError:
+                                    continue
+                            if stamps:
+                                lines.append("EXDATE:" + ",".join(stamps))
+                        else:
+                            lines.append("EXDATE;VALUE=DATE:" +
+                                         ",".join(x.replace("-", "") for x in excl))
             
             lines.append("END:VEVENT")
             
