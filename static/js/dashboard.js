@@ -7,6 +7,7 @@ import { streak } from './habits.js';
 import { weekTotals } from './workouts.js';
 import { getTaskCategories } from './settings.js';
 import { renderStudyTimerWidget } from './study_timer.js';
+import { renderTimerWidget } from './timers.js';
 
 let isEditMode = false;
 let currentLayout = [];
@@ -29,6 +30,8 @@ const WIDGET_REGISTRY = {
   quick_add:    { name: 'Quick Add',          render: renderQuickAddWidget,    toggleable: true },
   recent_files: { name: 'Recent Files',       render: renderRecentFilesWidget, toggleable: true },
   study_timer:  { name: 'Study Timer',        render: renderStudyTimerWidget,  toggleable: true },
+  timer:        { name: 'Timer',              render: renderTimerWidget,       toggleable: true },
+  usage:        { name: 'Your Library',       render: renderUsageWidget,       toggleable: true },
   quick_notes:  { name: 'Notepad',            render: renderQuickNotesWidget },
   analytics:    { name: 'Mini Chart',         render: renderAnalyticsWidget },
   custom_text:  { name: 'Custom Text',        render: renderCustomTextWidget },
@@ -340,6 +343,33 @@ function renderTasksWidget(id) {
   else html += '<div class="muted">All clear \u2728</div>';
   html += '</div>';
   return html;
+}
+
+// "Your library" counts (moved here from the old Analytics tab; optional widget).
+function renderUsageWidget(id) {
+  var wData = id ? (widgetsData[id] || {}) : {};
+  var title = wData.title || "Your library";
+  var openTasks = S.tasks.filter(function(t) { return !t.done; }).length;
+  var activeDays = new Set();
+  S.events.forEach(function(e) { if (e.date) activeDays.add(e.date); });
+  S.workouts.forEach(function(w) { if (w.date) activeDays.add(w.date); });
+  S.habit_log.forEach(function(l) { if (l.date) activeDays.add(l.date); });
+  (S.study_sessions || []).forEach(function(s) { if (s.date) activeDays.add(s.date); });
+  var counts = [
+    [openTasks, 'open tasks'],
+    [S.tasks.length - openTasks, 'tasks done'],
+    [(S.notes || []).length, 'notes'],
+    [S.events.length, 'events'],
+    [S.exams.length, 'exams'],
+    [(S.habits || []).length, 'habits'],
+    [(S.files || []).length, 'files'],
+    [activeDays.size, 'active days']
+  ];
+  var html = '<h3>' + esc(title) + '</h3><div class="wstats">';
+  counts.forEach(function(c) {
+    html += '<div class="stat"><div class="v">' + c[0] + '</div><div class="l">' + c[1] + '</div></div>';
+  });
+  return html + '</div>';
 }
 
 function renderShortcutsWidget(id) {

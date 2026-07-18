@@ -29,7 +29,7 @@ export function renderStudyTimerWidget(id) {
 
         <!-- Timer Label/Subject Input when idle -->
         <div x-show="timerState === 'idle'" class="miniform" style="margin-top:0;">
-          <input type="text" x-model="subject" placeholder="Subject (e.g. Math, Coding)" style="width:100%; padding:4px 8px; font-size:11px; height:26px;" />
+          <input type="text" x-model="subject" list="subjectList" placeholder="Subject (e.g. Math, Coding)" style="width:100%; padding:4px 8px; font-size:11px; height:26px;" />
         </div>
         <!-- Active subject label when running/paused -->
         <div x-show="timerState !== 'idle'" style="text-align:center; font-weight:600; font-size:12px; color:var(--text); padding: 4px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" x-text="subject || 'Study Session'"></div>

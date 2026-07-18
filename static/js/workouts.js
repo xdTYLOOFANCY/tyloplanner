@@ -1,8 +1,9 @@
 // TyloPlanner — workouts module.
 
 import { S, SET, safeRender } from './state.js';
-import { toISO, todayStr, esc, api, guardFocus } from './utils.js';
+import { toISO, todayStr, esc, api, guardFocus, MONTHS } from './utils.js';
 import { weekDates } from './utils.js';
+import { createChart, getPastMonths, getBarGradient, noGridOptions, registerChartRerender } from './charts.js';
 
 var WTYPES = { run: "🏃 Run", bike: "🚴 Bike", swim: "🏊 Swim", gym: "🏋\uFE0F Gym" };
 
@@ -96,6 +97,11 @@ export function renderWorkouts() {
   // Don't blow away a goal input the user is editing (live-sync re-render).
   if (guardFocus("wGoalsRow")) return;
 
+  // Default the log-session date to today, but never clobber a date the user
+  // picked (live-sync re-renders used to reset a backdate mid-entry).
+  var wd = document.getElementById("wDate");
+  if (wd && !wd.value) wd.value = todayStr();
+
   safeRender("workouts", () => {
     var t = weekTotals(0);
   document.getElementById("wStats").innerHTML =
@@ -136,5 +142,132 @@ export function renderWorkouts() {
   });
   document.getElementById("wList").innerHTML = html || '<div class="muted">No workouts logged yet.</div>';
   document.getElementById("stravaSyncBtn").style.display = S.strava.connected ? "inline-block" : "none";
+  renderWorkoutCharts();
   });
 }
+
+// ---- Monthly/weekly analytics charts (moved here from the old Analytics tab) ----
+
+let workoutsTimeRange = 12; // months shown, 'all' for all time.
+
+window.updateWorkoutsTimeRange = function(val) {
+  workoutsTimeRange = val === 'all' ? 'all' : parseInt(val, 10);
+  renderWorkoutCharts();
+};
+
+function renderWorkoutCharts() {
+  if (!S) return; // theme-changed can fire before state loads
+  var months;
+  if (workoutsTimeRange === 'all') {
+    var keys = new Set();
+    S.workouts.forEach(function(w) { keys.add((w.date || "").slice(0, 7)); });
+    var sorted = Array.from(keys).sort();
+    if (sorted.length) {
+      var startD = new Date(sorted[0] + "-01"), now = new Date();
+      var diff = (now.getFullYear() - startD.getFullYear()) * 12 + (now.getMonth() - startD.getMonth()) + 1;
+      months = getPastMonths(Math.max(diff, 1));
+    } else months = getPastMonths(1);
+  } else {
+    months = getPastMonths(workoutsTimeRange);
+  }
+
+  var sessions = {}, kmRun = {}, kmBike = {}, kmSwim = {};
+  months.forEach(function(m) { sessions[m.key] = 0; kmRun[m.key] = 0; kmBike[m.key] = 0; kmSwim[m.key] = 0; });
+  var totRunKm = 0, totBikeKm = 0, totSwimKm = 0, totMin = 0, totSessions = 0;
+  S.workouts.forEach(function(w) {
+    var k = (w.date || "").slice(0, 7);
+    totSessions++; totMin += w.dur || 0;
+    if (w.type === "run") totRunKm += w.dist || 0;
+    if (w.type === "bike") totBikeKm += w.dist || 0;
+    if (w.type === "swim") totSwimKm += w.dist || 0;
+    if (k in sessions) {
+      sessions[k]++;
+      if (w.type === "run") kmRun[k] += w.dist || 0;
+      if (w.type === "bike") kmBike[k] += w.dist || 0;
+      if (w.type === "swim") kmSwim[k] += w.dist || 0;
+    }
+  });
+
+  // All-time totals row
+  document.getElementById("wAllTime").innerHTML =
+    '<div class="stat"><div class="v">' + totSessions + '</div><div class="l">sessions</div></div>' +
+    '<div class="stat"><div class="v">' + Math.round(totRunKm) + '</div><div class="l">run km</div></div>' +
+    '<div class="stat"><div class="v">' + Math.round(totBikeKm) + '</div><div class="l">bike km</div></div>' +
+    '<div class="stat"><div class="v">' + (Math.round(totSwimKm * 10) / 10) + '</div><div class="l">swim km</div></div>' +
+    '<div class="stat"><div class="v">' + Math.round(totMin / 60) + '</div><div class="l">training hrs</div></div>';
+
+  var labels = months.map(function(m) { return m.label; });
+  const style = getComputedStyle(document.body);
+  const colorAccent = style.getPropertyValue('--accent').trim() || '#4f8cff';
+  const colorAccent2 = style.getPropertyValue('--accent2').trim() || '#7c5cff';
+  const colorGreen = style.getPropertyValue('--green').trim() || '#3ecf8e';
+  const colorOrange = style.getPropertyValue('--orange').trim() || '#f5a623';
+  const colorCyan = '#00f0ff'; // Neon cyan for running chart
+
+  const barCtxWorkouts = document.getElementById('chartWorkouts').getContext('2d');
+  createChart('chartWorkouts', 'bar', labels, [
+    {
+      label: 'Sessions',
+      data: months.map(function(m) { return sessions[m.key]; }),
+      backgroundColor: getBarGradient(barCtxWorkouts, colorAccent, colorAccent2),
+      borderRadius: 6,
+      borderSkipped: false,
+    }
+  ], noGridOptions());
+
+  const lineCtxDist = document.getElementById('chartDistance').getContext('2d');
+  createChart('chartDistance', 'line', labels, [
+    {
+      label: 'Run (km)',
+      data: months.map(function(m) { return kmRun[m.key]; }),
+      borderColor: colorCyan,
+      backgroundColor: getBarGradient(lineCtxDist, colorCyan + '44', colorCyan + '00'),
+      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
+    },
+    {
+      label: 'Bike (km)',
+      data: months.map(function(m) { return kmBike[m.key]; }),
+      borderColor: colorAccent2,
+      backgroundColor: getBarGradient(lineCtxDist, colorAccent2 + '44', colorAccent2 + '00'),
+      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
+    },
+    {
+      label: 'Swim (km)',
+      data: months.map(function(m) { return kmSwim[m.key]; }),
+      borderColor: colorGreen,
+      backgroundColor: getBarGradient(lineCtxDist, colorGreen + '44', colorGreen + '00'),
+      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
+    }
+  ], noGridOptions());
+
+  // Training load: hours per discipline, last 12 weeks
+  var weekKeys = [], weekLabels = [];
+  for (var off = -11; off <= 0; off++) {
+    var mon = weekDates(off)[0];
+    weekKeys.push(toISO(mon));
+    weekLabels.push(mon.getDate() + " " + MONTHS[mon.getMonth()]);
+  }
+  var load = { run: {}, bike: {}, swim: {}, gym: {} };
+  weekKeys.forEach(function(k) { load.run[k] = 0; load.bike[k] = 0; load.swim[k] = 0; load.gym[k] = 0; });
+  S.workouts.forEach(function(w) {
+    if (!w.date || !load[w.type]) return;
+    var d = new Date(w.date + "T00:00:00");
+    var mon2 = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+    var k = toISO(mon2);
+    if (k in load[w.type]) load[w.type][k] += (w.dur || 0) / 60;
+  });
+  var loadColors = { run: colorCyan, bike: colorAccent2, swim: colorGreen, gym: colorOrange };
+  var loadOptions = noGridOptions();
+  delete loadOptions.scales.y.ticks.stepSize;
+  createChart('chartTrainingLoad', 'line', weekLabels, ['run', 'bike', 'swim', 'gym'].map(function(ty) {
+    return {
+      label: ty.charAt(0).toUpperCase() + ty.slice(1),
+      data: weekKeys.map(function(k) { return Math.round(load[ty][k] * 10) / 10; }),
+      borderColor: loadColors[ty],
+      backgroundColor: loadColors[ty],
+      tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
+    };
+  }), loadOptions);
+}
+
+registerChartRerender(renderWorkoutCharts);

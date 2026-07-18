@@ -1,6 +1,7 @@
 // TyloPlanner — habits tracker module.
 
-import { S, habitSet, setHabitEntry, safeRender } from './state.js';
+import { S, habitSet, setHabitEntry, safeRender, syncSilent } from './state.js';
+import { createChart, getPastMonths, noGridOptions, registerChartRerender } from './charts.js';
 import { toISO, todayStr, parseISO, esc, api, DAYS } from './utils.js';
 import { weekDates } from './utils.js';
 import { askConfirm, askPrompt, showContextMenu } from './utils.js';
@@ -98,6 +99,9 @@ export async function toggleHabit(id, iso) {
   }));
 
   await api("POST", "/api/habits/" + id + "/toggle", { date: iso });
+  // Absorb our own version bump so the live-sync poll doesn't force a full
+  // re-render (dashboard grid rebuild = visible jerk) a few seconds later.
+  await syncSilent();
 }
 
 // ----- Streak calculation -----
@@ -362,6 +366,30 @@ function renderArchivedSection(refresh) {
 
 // ----- Main render -----
 
+// Monthly check-ins chart (moved here from the old Analytics tab).
+function renderCheckinsChart() {
+  if (!S) return; // theme-changed can fire before state loads
+  var months = getPastMonths(12), counts = {};
+  months.forEach(function(m) { counts[m.key] = 0; });
+  S.habit_log.forEach(function(l) {
+    var k = (l.date || "").slice(0, 7);
+    if (k in counts) counts[k]++;
+  });
+  var lineCtx = document.getElementById('chartHabits');
+  if (!lineCtx) return;
+  createChart('chartHabits', 'line', months.map(function(m) { return m.label; }), [
+    {
+      label: 'Check-ins',
+      data: months.map(function(m) { return counts[m.key]; }),
+      borderColor: '#ff5c5c',
+      backgroundColor: '#ff5c5c22',
+      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
+    }
+  ], noGridOptions());
+}
+
+registerChartRerender(renderCheckinsChart);
+
 export function renderHabits() {
   safeRender("habits", function() {
     var dates = weekDates(0), today = todayStr();
@@ -409,6 +437,7 @@ export function renderHabits() {
     document.getElementById("habitTable").innerHTML = html + (active.length ? "" : '<tr><td colspan="11" class="muted">No habits yet \u2014 add one above.</td></tr>');
 
     renderHeatmapCard();
+    renderCheckinsChart();
     renderArchivedSection(window._habitRefresh);
   });
 }
