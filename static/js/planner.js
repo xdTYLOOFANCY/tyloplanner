@@ -1,5 +1,5 @@
 import { S, SET, safeRender } from './state.js';
-import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce, askConfirm, showContextMenu } from './utils.js';
+import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce, askConfirm, showContextMenu, showUndoToast } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 import { priorityRank } from './tasks.js';
@@ -16,7 +16,7 @@ if (_isMobileViewport) {
     if (_pv) _pv.value = currentView;
   });
 }
-var draggingEventId = null, draggingOccDate = null, draggingOffsetY = 0, currentUndoAction = null, undoToastTimeout = null, dragPreviewEl = null;
+var draggingEventId = null, draggingOccDate = null, draggingOffsetY = 0, draggingOffsetX = 0, dragPreviewEl = null, dragGhostEl = null;
 // Occurrence date of the recurring instance currently being edited (null for a
 // non-recurring event or the whole series), so Save can ask "this / following /
 // all events" and apply the change to the right scope.
@@ -267,6 +267,20 @@ export function renderPlannerCalendarsPanel() {
     </div>`;
   });
   p.innerHTML = html;
+
+  // Populate the export / import & sync fields (these live in this modal now,
+  // so they can't rely on the settings tab having been rendered first).
+  var feedUrl = (S && S.feed_url) || "";
+  var urlEl = document.getElementById("icsUrl");
+  if (urlEl) urlEl.textContent = feedUrl;
+  var dl = document.getElementById("icsDownload");
+  if (dl && feedUrl) dl.href = feedUrl;
+  var urls = document.getElementById("calSyncUrls");
+  if (urls && document.activeElement !== urls) urls.value = SET.cal_sync_urls || "";
+  var hours = document.getElementById("calSyncHours");
+  if (hours && document.activeElement !== hours) hours.value = SET.cal_sync_hours || "";
+  var meta = document.getElementById("calSyncMeta");
+  if (meta) meta.textContent = SET.cal_last_sync ? ("Last sync: " + SET.cal_last_sync) : "";
 }
 
 export async function toggleCalendarType(typeId, isChecked) {
@@ -409,6 +423,14 @@ function isMobileViewport() {
     ? window.matchMedia('(max-width: 640px)').matches : false;
 }
 
+// ISO-8601 week number (week 1 contains the year's first Thursday).
+function isoWeek(d) {
+  var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); // shift to nearest Thursday
+  var yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
+  return Math.ceil(((t - yearStart) / 86400000 + 1) / 7);
+}
+
 export function renderPlanner() {
   if (isDragCreating) return;
   initPlannerContextMenu();
@@ -422,10 +444,12 @@ export function renderPlanner() {
     title = MONTHS[mDate.getMonth()] + " " + mDate.getFullYear();
   } else {
     title = (dateOffset === 0 ? "This " + (currentView === '1' ? "day" : (currentView === '7' ? "week" : currentView + " days")) + " · " : "") + fmtShort(dates[0]) + (dates.length > 1 ? " – " + fmtShort(dates[dates.length - 1]) : "") + " " + dates[0].getFullYear();
+    if (currentView === '7') title += " · Week " + isoWeek(dates[0]);
   }
   document.getElementById("weekLabel").textContent = title;
   var goToInput = document.getElementById("plannerGoToDate");
-  if (goToInput) goToInput.value = toISO(dates[0]);
+  // ponytail: always show today, not the view's first cell (Mon in week / month's leading day)
+  if (goToInput && document.activeElement !== goToInput) goToInput.value = todayStr();
 
   var today = todayStr();
   var allInstances = [];
@@ -615,7 +639,8 @@ export function renderPlanner() {
               if (eh >= 24) { eh = 23; em = 59; }
               var startStr = (sh < 10 ? '0'+sh : sh) + ':' + (sm < 10 ? '0'+sm : sm);
               var endStr = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
-              
+              setDragGhostTime(startStr, endStr);
+
               if (!dragPreviewEl) {
                 var sourceEl = document.querySelector('.event[data-id="' + draggingEventId + '"]');
                 dragPreviewEl = document.createElement('div');
@@ -793,13 +818,19 @@ export function renderPlanner() {
         var rect = el.getBoundingClientRect();
         var offsetY = ev.clientY - rect.top;
         draggingOffsetY = offsetY;
+        draggingOffsetX = ev.clientX - rect.left;
         ev.dataTransfer.setData("offsetY", offsetY);
-        
-        // Hide default drag ghost image
+
+        // Hide default drag ghost image — we render our own free-floating ghost.
         var img = new Image();
         img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         ev.dataTransfer.setDragImage(img, 0, 0);
-        
+        createDragGhost(el);
+        moveDragGhost(ev.clientX, ev.clientY);
+        // document-level dragover keeps the ghost following even over gaps
+        // (time axis, headers) where no column dragover fires.
+        document.addEventListener('dragover', ghostDragOverHandler);
+
         el.classList.add('dragging');
         var height = parseFloat(el.style.height) || el.offsetHeight;
         el.style.setProperty('--drag-height', height + 'px');
@@ -808,6 +839,9 @@ export function renderPlanner() {
       el.addEventListener("dragend", function(ev) {
         draggingEventId = null;
         draggingOffsetY = 0;
+        draggingOffsetX = 0;
+        document.removeEventListener('dragover', ghostDragOverHandler);
+        removeDragGhost();
         el.classList.remove('dragging');
         document.body.classList.remove('dragging-move-active');
         renderPlanner();
@@ -833,12 +867,15 @@ export function renderPlanner() {
           draggingEventId = eventId;
           draggingOccDate = el.getAttribute("data-occ");
           el.setPointerCapture(ev.pointerId);
-          
+
           var rect = el.getBoundingClientRect();
           draggingOffsetY = ev.clientY - rect.top;
-          
+          draggingOffsetX = ev.clientX - rect.left;
+          createDragGhost(el);
+          moveDragGhost(ev.clientX, ev.clientY);
+
           if (navigator.vibrate) navigator.vibrate(20);
-          
+
           el.classList.add('dragging');
           var height = parseFloat(el.style.height) || el.offsetHeight;
           el.style.setProperty('--drag-height', height + 'px');
@@ -888,6 +925,7 @@ export function renderPlanner() {
         
         if (isTouchDragging) {
           el.releasePointerCapture(ev.pointerId);
+          removeDragGhost();
           if (dragPreviewEl) {
             dragPreviewEl.remove();
             dragPreviewEl = null;
@@ -1643,6 +1681,10 @@ function renderReminderPills() {
       text = 'At start';
     } else if (offset < 60) {
       text = offset + 'm before';
+    } else if (offset % 10080 === 0) {
+      text = (offset / 10080) + 'w before';
+    } else if (offset % 1440 === 0) {
+      text = (offset / 1440) + 'd before';
     } else if (offset % 60 === 0) {
       text = (offset / 60) + 'h before';
     } else {
@@ -1770,7 +1812,7 @@ export function openAdd(iso, defaultStart, defaultEnd, allDay) {
   setEventColor('');
   document.getElementById('evModalDelBtn').style.display = 'none';
 
-  activeReminders = [];
+  activeReminders = [30]; // default 30-min-before reminder on new events
   renderReminderPills();
   resetReminderControls();
   updateDurationFromTimes();
@@ -2004,46 +2046,6 @@ export async function resetShortcutsToDefault() {
     });
   }
 }
-
-function showUndoToast(message, undoCallback) {
-  var existing = document.getElementById('undoToast');
-  if (existing) {
-    existing.remove();
-  }
-  if (undoToastTimeout) {
-    clearTimeout(undoToastTimeout);
-  }
-
-  currentUndoAction = undoCallback;
-
-  var toastEl = document.createElement("div");
-  toastEl.id = "undoToast";
-  toastEl.className = "toast";
-  toastEl.style.display = "flex";
-  toastEl.style.alignItems = "center";
-  toastEl.style.gap = "12px";
-  
-  toastEl.innerHTML = '<span>' + esc(message) + '</span>' +
-                      '<button class="btn small" style="padding:2px 8px; font-size:11px; background:var(--accent); color:#fff; border:none; border-radius:4px; cursor:pointer;" onclick="triggerUndo()">Undo</button>';
-                      
-  document.body.appendChild(toastEl);
-  
-  undoToastTimeout = setTimeout(function() {
-    toastEl.remove();
-    currentUndoAction = null;
-  }, 6000);
-}
-
-window.triggerUndo = function() {
-  if (currentUndoAction) {
-    currentUndoAction();
-    currentUndoAction = null;
-  }
-  var toastEl = document.getElementById('undoToast');
-  if (toastEl) {
-    toastEl.remove();
-  }
-};
 
 export function searchEvents() {
   var q = document.getElementById("plannerSearch").value.trim().toLowerCase();
@@ -2384,6 +2386,31 @@ function recurrenceLabel(e) {
 
 // Google Calendar-style right-click menu on events. Delegated on the tab so it
 // survives every re-render; set up once from renderPlanner().
+// Preset colors offered in the right-click menu; mirror the edit-modal swatches.
+// color:'' = default (use the event's type color).
+var EVENT_COLOR_PRESETS = [
+  { color: '', title: 'Default' },
+  { color: '#4f8cff', title: 'Blue' }, { color: '#a371f7', title: 'Purple' },
+  { color: '#f85149', title: 'Red' }, { color: '#ffa657', title: 'Orange' },
+  { color: '#3fb950', title: 'Green' }, { color: '#2dd4bf', title: 'Teal' },
+  { color: '#f778ba', title: 'Pink' }, { color: '#8b949e', title: 'Gray' }
+];
+
+// Quick color change straight from the context menu — skips the full edit modal.
+async function quickSetEventColor(id, hex) {
+  var e = S.events.find(function (x) { return x.id === id; });
+  if (!e) return;
+  e.color = hex || '';            // optimistic
+  renderPlanner();
+  renderDashboard();
+  try {
+    await api('PUT', '/api/events/' + id, { color: hex || '' });
+  } catch (err) {
+    console.error('Set color failed:', err);
+    if (plannerRefresh) await plannerRefresh();
+  }
+}
+
 function initPlannerContextMenu() {
   var tab = document.getElementById('tab-planner');
   if (!tab || tab.dataset.ctxInitialized) return;
@@ -2399,6 +2426,10 @@ function initPlannerContextMenu() {
     showContextMenu(ev, [
       { label: 'Edit', icon: '✏️', onClick: function () { editEvent(id, occ); } },
       { label: 'Duplicate', icon: '📋', onClick: function () { duplicateEvent(id); } },
+      { sep: true },
+      { swatches: EVENT_COLOR_PRESETS.map(function (c) {
+          return { color: c.color, title: c.title, onClick: function () { quickSetEventColor(id, c.color); } };
+        }) },
       { sep: true },
       { label: 'Delete', icon: '✕', danger: true, onClick: function () { deleteEventById(id, occ); } }
     ]);
@@ -2655,9 +2686,48 @@ function preventDefaultTouchMove(e) {
   e.preventDefault();
 }
 
+// Free-floating drag ghost: follows the cursor smoothly in both axes so the
+// event moves freely instead of snapping column-to-column. The in-column
+// .dragging-preview placeholder still shows the snapped landing slot + live
+// time; snapping to a day/time only commits on drop.
+function createDragGhost(sourceEl) {
+  removeDragGhost();
+  if (!sourceEl) return;
+  var g = document.createElement('div');
+  g.className = sourceEl.className + ' drag-ghost';
+  g.classList.remove('dragging', 'drag-source', 'dragging-preview');
+  g.style.position = 'fixed';
+  g.style.margin = '0';
+  g.style.width = sourceEl.offsetWidth + 'px';
+  g.style.height = sourceEl.offsetHeight + 'px';
+  g.style.pointerEvents = 'none';
+  g.style.zIndex = '9999';
+  g.style.left = '-9999px';
+  g.style.top = '-9999px';
+  g.innerHTML = sourceEl.innerHTML;
+  document.body.appendChild(g);
+  dragGhostEl = g;
+}
+function moveDragGhost(clientX, clientY) {
+  if (!dragGhostEl) return;
+  dragGhostEl.style.left = (clientX - draggingOffsetX) + 'px';
+  dragGhostEl.style.top = (clientY - draggingOffsetY) + 'px';
+}
+function setDragGhostTime(startStr, endStr) {
+  if (!dragGhostEl) return;
+  var t = dragGhostEl.querySelector('.event-time');
+  if (t) t.textContent = startStr + ' – ' + endStr;
+}
+function removeDragGhost() {
+  if (dragGhostEl) { dragGhostEl.remove(); dragGhostEl = null; }
+}
+function ghostDragOverHandler(ev) { moveDragGhost(ev.clientX, ev.clientY); }
+
 function updateTouchDrag(ev) {
   if (!isTouchDragging || !draggingEventId) return;
-  
+
+  moveDragGhost(ev.clientX, ev.clientY);
+
   var targetEl = document.elementFromPoint(ev.clientX, ev.clientY);
   if (!targetEl) return;
   
@@ -2684,7 +2754,8 @@ function updateTouchDrag(ev) {
           if (eh >= 24) { eh = 23; em = 59; }
           var startStr = (sh < 10 ? '0'+sh : sh) + ':' + (sm < 10 ? '0'+sm : sm);
           var endStr = (eh < 10 ? '0'+eh : eh) + ':' + (em < 10 ? '0'+em : em);
-          
+          setDragGhostTime(startStr, endStr);
+
           if (!dragPreviewEl) {
             var sourceEl = document.querySelector('.event[data-id="' + draggingEventId + '"]');
             dragPreviewEl = document.createElement('div');
@@ -2759,6 +2830,7 @@ function updateTouchDrag(ev) {
 }
 
 async function handleTouchDrop(ev) {
+  removeDragGhost();
   var targetEl = document.elementFromPoint(ev.clientX, ev.clientY);
   var col = targetEl ? targetEl.closest(currentView === 'month' ? ".month-cell" : ".day-col") : null;
   

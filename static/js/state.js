@@ -250,6 +250,20 @@ export async function refresh(renderAll) {
   renderAll();
 }
 
+// Absorb our own write without re-rendering: the optimistic DOM patch already
+// updated the visible UI, and a full renderAll rebuilds the dashboard grid
+// (visible jerk). This advances currentVersion past the write so the live-sync
+// poll doesn't treat it as a remote change, and marks every tab dirty so the
+// next tab switch renders canonical state.
+// ponytail: a remote write landing in the same poll window gets merged into S
+// but not rendered until the next version bump or tab switch — acceptable for
+// a single-user app; diff deltas against own writes if it ever matters.
+export async function syncSilent() {
+  await refresh(function() {
+    Object.keys(tabNeedsRender).forEach(function(t) { tabNeedsRender[t] = true; });
+  });
+}
+
 export const tabNeedsRender = {
   dashboard: true,
   analytics: true,

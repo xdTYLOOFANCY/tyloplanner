@@ -1,6 +1,6 @@
 // TyloPlanner — tasks (to-do) module.
 
-import { S, SET, safeRender } from './state.js';
+import { S, SET, safeRender, syncSilent } from './state.js';
 import { todayStr, esc, api, debounce } from './utils.js';
 import { getTaskCategories } from './settings.js';
 
@@ -124,7 +124,10 @@ export async function toggleTask(id, done, refresh) {
   }));
 
   await api("PUT", "/api/tasks/" + id, { done: done ? 1 : 0, completed_at: done ? todayStr() : null });
-  await refresh();
+  // No full refresh: the tylo:task-updated listeners already patched the DOM,
+  // and a renderAll rebuilds the dashboard grid (visible jerk). Silently
+  // absorb our own version bump so live sync doesn't re-render either.
+  await syncSilent();
 }
 
 export function dragTaskStart(e, id) {
