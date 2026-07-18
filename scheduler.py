@@ -209,6 +209,17 @@ def get_instances(e, target_date_str):
     return True
 
 
+def _fmt_offset(offset):
+    """Human-readable lead time for a reminder offset in minutes."""
+    if offset % 10080 == 0:
+        return f"{offset // 10080}w"
+    if offset % 1440 == 0:
+        return f"{offset // 1440}d"
+    if offset % 60 == 0:
+        return f"{offset // 60}h"
+    return f"{offset}m"
+
+
 def check_event_reminders(now):
     today_str = now.strftime("%Y-%m-%d")
     tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -257,11 +268,7 @@ def check_event_reminders(now):
                             loc_str = f" at {e['location']}" if e.get("location") else ""
                             msg = f"Starts at {e['start']}{loc_str}"
                             if offset > 0:
-                                if offset % 60 == 0:
-                                    hours = offset // 60
-                                    msg += f" (in {hours}h)"
-                                else:
-                                    msg += f" (in {offset}m)"
+                                msg += f" (in {_fmt_offset(offset)})"
                             send_notification(title, msg, "alarm_clock")
 
 
@@ -301,12 +308,8 @@ def check_task_reminders(now):
                 if not kv_get(kv_key):
                     kv_set(kv_key, "1")
                     msg = f"Due at {due_dt.strftime('%H:%M')}"
-                    if offset >= 1440 and offset % 1440 == 0:
-                        msg += f" (in {offset // 1440}d)"
-                    elif offset >= 60 and offset % 60 == 0:
-                        msg += f" (in {offset // 60}h)"
-                    elif offset > 0:
-                        msg += f" (in {offset}m)"
+                    if offset > 0:
+                        msg += f" (in {_fmt_offset(offset)})"
                     send_notification(f"Task due: {t['name']}", msg, "alarm_clock")
 
 
@@ -348,13 +351,30 @@ def purge_expired_sessions():
     return rowcount
 
 
+def check_timers():
+    """Fire phone push for any timer whose fire_at has passed, then delete it.
+    ponytail: per-minute tick, so the phone push can land up to ~59s late — the
+    exact-second alert is the browser's sound/notification when the tab is open;
+    the push is the away-from-desk backup. Add a sub-minute loop if that slips."""
+    nowts = int(time.time())
+    with db(write=True) as con:
+        due = [dict(r) for r in con.execute(
+            "SELECT id, label, push FROM timers WHERE fire_at <= ?", (nowts,)).fetchall()]
+        if due:
+            con.execute("DELETE FROM timers WHERE fire_at <= ?", (nowts,))
+    for t in due:
+        if t.get("push"):
+            submit_job(send_notification, "⏰ " + (t["label"] or "Timer"), "Timer done!", "alarm_clock")
+
+
 def scheduler_tick():
     now = local_now()
     today = now.strftime("%Y-%m-%d")
     hhmm = now.strftime("%H:%M")
-    
+
     check_event_reminders(now)
     check_task_reminders(now)
+    check_timers()
     if hhmm >= "03:00" and kv_get("done_db_optimize") != today:
         kv_set("done_db_optimize", today)
         submit_job(optimize_database)
