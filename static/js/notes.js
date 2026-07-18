@@ -152,19 +152,25 @@ var QUILL_TOOLBAR = [
   ["clean"]
 ];
 
-// Quill (209 KB) is loaded lazily the first time a note is opened, so it never
-// weighs on the initial page load (Notes is not the default tab).
+// Quill (209 KB) + the quill-table-up table module (216 KB) are loaded lazily
+// the first time a note is opened, so they never weigh on the initial page load
+// (Notes is not the default tab). table-up depends on window.Quill, so it loads
+// second.
 var quillLoadPromise = null;
+function loadScript(src) {
+  return new Promise(function(resolve, reject) {
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 function ensureQuill() {
-  if (window.Quill) return Promise.resolve();
+  if (window.Quill && window.TableUp) return Promise.resolve();
   if (!quillLoadPromise) {
-    quillLoadPromise = new Promise(function(resolve, reject) {
-      var s = document.createElement("script");
-      s.src = "js/quill.js";
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
+    quillLoadPromise = (window.Quill ? Promise.resolve() : loadScript("js/quill.js"))
+      .then(function() { return window.TableUp ? null : loadScript("js/quill-table-up.umd.js"); });
   }
   return quillLoadPromise;
 }
@@ -183,11 +189,31 @@ function initQuill() {
       whitelist: ["info", "warn", "success"]
     })
   }, true);
+  // quill-table-up: full-featured tables (drag-resize columns/rows, multi-line
+  // cells via Enter, merge/split, right-click menu). Replaces Quill's minimal
+  // built-in table module. See ensureQuill for lazy loading.
+  var TableUp = window.TableUp["default"];
+  window.Quill.register({ "modules/table-up": TableUp }, true);
   quill = new window.Quill(host, {
     theme: "snow",
     placeholder: "Write anything…",
     modules: {
-      table: true,
+      "table-up": {
+        // full: tables span the content width with proportional columns. This
+        // is the Docs/Notion-like default and, unlike fixed-pixel mode, is
+        // immune to the column widths being snapshotted from a transient editor
+        // width if a table is inserted mid-layout. Drag-resize still works
+        // (adjusts column proportions / row heights); the right-click menu's
+        // "Switch table width" toggles fixed-pixel mode when wanted.
+        full: true,
+        modules: [
+          { module: window.TableUp.TableResizeLine },   // drag column/row borders
+          { module: window.TableUp.TableResizeScale },  // drag corner to scale
+          { module: window.TableUp.TableAlign },        // align table left/center/right
+          { module: window.TableUp.TableSelection },    // cell selection (menu needs it)
+          { module: window.TableUp.TableMenuContextmenu } // right-click cell menu
+        ]
+      },
       toolbar: {
         container: QUILL_TOOLBAR,
         handlers: { image: quillImageHandler }
@@ -226,11 +252,9 @@ function initQuill() {
   quill.on("selection-change", function(range) {
     if (!range) {
       closeEditorPopup();
-      if (tableTools) tableTools.style.display = "none";
       return;
     }
     setTimeout(maybeTriggerEditorPopup, 0);
-    setTimeout(updateTableTools, 0);
     // Hide the image overlay if the selection is no longer on that image.
     if (imgTarget && !(range.length === 1 && range.index === imgTarget.index)) hideImgOverlay();
   });
@@ -306,7 +330,6 @@ function getEditorBody() {
 function setEditorBody(html) {
   if (!quill) return;
   closeEditorPopup();
-  if (tableTools) tableTools.style.display = "none";
   hideImgOverlay();
   suppressChange = true;
   try {
@@ -399,66 +422,14 @@ function toggleCallout(type) {
   quill.format("callout", cur === type ? false : type, "user");
 }
 
+// Insert a 3×3 table. quill-table-up handles all further editing (drag-resize,
+// multi-line cells, add/remove rows & columns and merge/split via the
+// right-click cell menu), so there's no custom floating toolbar to maintain.
 function insertTable() {
-  var t = quill.getModule("table");
+  var t = quill.getModule("table-up");
   if (!t) return;
-  var sel = quill.getSelection(true);
-  if (!sel) { quill.setSelection(quill.getLength() - 1, 0); }
+  if (!quill.getSelection()) quill.setSelection(quill.getLength() - 1, 0);
   t.insertTable(3, 3);
-  setTimeout(updateTableTools, 0);
-}
-
-// A small floating toolbar (add/remove rows & columns) shown while the caret is
-// inside a table.
-var tableTools = null;
-function buildTableTools() {
-  if (tableTools) return tableTools;
-  tableTools = document.createElement("div");
-  tableTools.className = "note-table-tools";
-  tableTools.style.display = "none";
-  var btns = [
-    ["+ Col", function(t) { t.insertColumnRight(); }],
-    ["+ Row", function(t) { t.insertRowBelow(); }],
-    ["− Col", function(t) { t.deleteColumn(); }],
-    ["− Row", function(t) { t.deleteRow(); }],
-    ["✕ Table", function(t) { t.deleteTable(); }]
-  ];
-  btns.forEach(function(spec) {
-    var b = document.createElement("button");
-    b.type = "button";
-    b.textContent = spec[0];
-    if (spec[0] === "✕ Table") b.className = "ttx";
-    b.addEventListener("mousedown", function(e) {
-      e.preventDefault();
-      var t = quill && quill.getModule("table");
-      if (!t) return;
-      try { spec[1](t); } catch (err) {}
-      setTimeout(updateTableTools, 0);
-    });
-    tableTools.appendChild(b);
-  });
-  document.body.appendChild(tableTools);
-  // Reposition while scrolling the canvas so the bar tracks its table.
-  window.addEventListener("scroll", function() {
-    if (tableTools && tableTools.style.display !== "none") updateTableTools();
-  }, true);
-  return tableTools;
-}
-
-function updateTableTools() {
-  if (!quill) return;
-  var bar = buildTableTools();
-  var t = quill.getModule("table");
-  var info = null;
-  try { info = t && t.getTable(); } catch (e) {}
-  var tableBlot = info && info[0];
-  var node = tableBlot && tableBlot.domNode;
-  if (!node) { bar.style.display = "none"; return; }
-  var rect = node.getBoundingClientRect();
-  bar.style.display = "flex";
-  bar.style.position = "fixed";
-  bar.style.left = Math.max(8, rect.left) + "px";
-  bar.style.top = Math.max(8, rect.top - 38) + "px";
 }
 
 // ---- Auto-linkify URLs (typed + pasted) ----
@@ -1582,8 +1553,8 @@ export function renderNotes() {
   if (layout) layout.classList.add("note-editing");
   document.body.classList.add("note-open");
 
-  // Load Quill on first use, then re-render once it's ready.
-  if (!window.Quill) {
+  // Load Quill + the table module on first use, then re-render once ready.
+  if (!window.Quill || !window.TableUp) {
     ensureQuill().then(function() { renderNotes(); }).catch(function() {});
     return;
   }
@@ -1890,60 +1861,53 @@ function triggerDownload(content, filename, contentType) {
   URL.revokeObjectURL(url);
 }
 
-export function toggleNoteDownloadMenu(e) {
-  if (e) e.stopPropagation();
-  var el = document.getElementById("noteDownloadDropdown");
-  if (el) {
-    el.classList.toggle("show");
+// Vendored Quill stylesheets, fetched once and inlined into exports so a
+// downloaded/printed note renders with Quill's OWN CSS — bullets, checklists,
+// alignment, fonts, sizes and tables come out exactly as in the editor.
+var _exportCssCache = null;
+async function exportQuillCss() {
+  if (_exportCssCache != null) return _exportCssCache;
+  var css = "";
+  var files = ["js/quill.snow.css", "js/quill-table-up.css"];
+  for (var i = 0; i < files.length; i++) {
+    try { var r = await fetch(files[i]); if (r.ok) css += await r.text() + "\n"; } catch (e) { /* skip */ }
   }
+  _exportCssCache = css;
+  return css;
 }
 
-// Global window event listener to close the dropdown when clicking outside
-window.addEventListener('click', function(e) {
-  var dropdown = document.getElementById("noteDownloadDropdown");
-  if (dropdown && !dropdown.contains(e.target)) {
-    dropdown.classList.remove("show");
-  }
-});
+// Print a standalone HTML doc via a hidden same-origin iframe. This prints ONLY
+// the note (not the app chrome), which is why it replaces window.print().
+function printHtmlDoc(html) {
+  var iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  // Off-screen but with real dimensions: a 0x0 iframe never lays out its
+  // document, so printing it yields a blank page. A4-ish size forces layout.
+  iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;";
+  iframe.onload = function() {
+    var win = iframe.contentWindow;
+    win.onafterprint = function() { iframe.remove(); };
+    try { win.focus(); win.print(); } catch (e) { iframe.remove(); return; }
+    // Fallback cleanup if onafterprint never fires (some browsers).
+    setTimeout(function() { if (iframe.parentNode) iframe.remove(); }, 60000);
+  };
+  document.body.appendChild(iframe);
+  iframe.srcdoc = html;
+}
 
-export async function downloadNoteAs(format) {
-  if (!currentNote) return;
-  var note = S.notes.find(function(n) { return n.id === currentNote; });
-  if (!note) return;
-  
+// Self-contained styled HTML document for a note. Body is wrapped in .ql-editor
+// and the inlined Quill CSS is appended, so rendering matches the editor.
+// opts: { theme: "light"|"dark", actions: bool }
+function buildNoteExportHtml(note, renderedHtml, quillCss, opts) {
+  opts = opts || {};
   var title = note.title || "Untitled";
-  var isHtmlNote = note.body_format === "html";
-
-  if (format === 'md') {
-    // HTML notes export their raw rich HTML; legacy notes stay Markdown.
-    triggerDownload(note.body || "", title + (isHtmlNote ? ".html" : ".md"),
-      isHtmlNote ? "text/html" : "text/markdown");
-    var dropdown = document.getElementById("noteDownloadDropdown");
-    if (dropdown) dropdown.classList.remove("show");
-    return;
-  }
-
-  if (format === 'print') {
-    var dropdown = document.getElementById("noteDownloadDropdown");
-    if (dropdown) dropdown.classList.remove("show");
-    window.print();
-    return;
-  }
-
-  if (format === 'html') {
-    var rawHtml = await inlineExportImages(noteBodyHtml(note));
-    // Replace wiki links with alert behavior in standalone mode
-    var renderedHtml = rawHtml.replace(/onclick="openNote\('([^']+)'\);return false;"/g, 'onclick="alert(\'This link points to another note inside TyloPlanner. Download as a Compiled Notebook to make links interactive.\');return false;"');
-
-    var theme = localStorage.getItem("tylo-theme") || "dark";
-    var updatedDate = new Date(note.updated || Date.now()).toLocaleDateString();
-    var plainText = notePlainText(note);
-    var wordCount = getWordCount(plainText);
-    var charCount = plainText.length;
-    
-    // Directory breadcrumbs omitted for single note downloads
-    
-    var htmlContent = `<!DOCTYPE html>
+  var theme = opts.theme || localStorage.getItem("tylo-theme") || "dark";
+  var updatedDate = new Date(note.updated || Date.now()).toLocaleDateString();
+  var plainText = notePlainText(note);
+  var wordCount = getWordCount(plainText);
+  var charCount = plainText.length;
+  var actions = opts.actions !== false;
+  return `<!DOCTYPE html>
 <html lang="en" data-theme="${theme}">
 <head>
   <meta charset="UTF-8">
@@ -1992,11 +1956,6 @@ export async function downloadNoteAs(format) {
       flex-wrap: wrap;
       gap: 16px;
     }
-    .breadcrumbs {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
     .title {
       font-size: 2em;
       font-weight: 700;
@@ -2010,13 +1969,8 @@ export async function downloadNoteAs(format) {
       gap: 12px;
       align-items: center;
     }
-    .meta-divider {
-      color: var(--border);
-    }
-    .actions {
-      display: flex;
-      gap: 8px;
-    }
+    .meta-divider { color: var(--border); }
+    .actions { display: flex; gap: 8px; }
     .btn {
       background: var(--panel2);
       color: var(--text);
@@ -2028,111 +1982,48 @@ export async function downloadNoteAs(format) {
       font-weight: 500;
       transition: all 0.2s;
     }
-    .btn:hover {
-      background: var(--border);
-    }
-    .markdown-body {
-      font-size: 15px;
-    }
+    .btn:hover { background: var(--border); }
+    /* Note body: rendered by Quill's own CSS (appended below). These add the
+       themed colours/spacing Quill's editor leaves to the app stylesheet. */
+    .markdown-body { font-size: 15px; color: var(--text); }
     .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
-      margin-top: 24px;
-      margin-bottom: 12px;
-      font-weight: 600;
-      line-height: 1.25;
+      margin-top: 24px; margin-bottom: 12px; font-weight: 600; line-height: 1.25;
     }
     .markdown-body h1 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
     .markdown-body h2 { font-size: 1.3em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
     .markdown-body h3 { font-size: 1.15em; }
     .markdown-body p { margin-top: 0; margin-bottom: 16px; }
-    .markdown-body ul, .markdown-body ol { padding-left: 24px; margin-top: 0; margin-bottom: 16px; }
-    .markdown-body li { margin-bottom: 6px; }
     .markdown-body code {
-      background: var(--panel2);
-      padding: 3px 6px;
-      border-radius: 4px;
-      font-family: var(--font-mono);
-      font-size: 85%;
+      background: var(--panel2); padding: 3px 6px; border-radius: 4px;
+      font-family: var(--font-mono); font-size: 85%;
     }
     .markdown-body pre {
-      background: var(--panel2);
-      padding: 16px;
-      border-radius: var(--radius);
-      overflow-x: auto;
-      margin-bottom: 16px;
-      border: 1px solid var(--border);
+      background: var(--panel2); padding: 16px; border-radius: var(--radius);
+      overflow-x: auto; margin-bottom: 16px; border: 1px solid var(--border);
     }
-    .markdown-body pre code {
-      background: transparent;
-      padding: 0;
-      border-radius: 0;
-      font-size: 90%;
-    }
+    .markdown-body pre code { background: transparent; padding: 0; border-radius: 0; font-size: 90%; }
     .markdown-body blockquote {
-      margin: 0 0 16px 0;
-      padding: 0 16px;
-      color: var(--muted);
-      border-left: 4px solid var(--border);
+      margin: 0 0 16px 0; padding: 0 16px; color: var(--muted); border-left: 4px solid var(--border);
     }
-    .markdown-body hr {
-      height: 1px;
-      border: none;
-      background: var(--border);
-      margin: 24px 0;
-    }
-    .markdown-body table {
-      width: auto;
-      max-width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 16px;
-      display: block;
-      overflow-x: auto;
-    }
-    .markdown-body th, .markdown-body td {
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      text-align: left;
-    }
-    .markdown-body th {
-      background: var(--panel2);
-    }
-    .markdown-body img {
-      max-width: 100%;
-      height: auto;
-      border-radius: 8px;
-      display: block;
-      margin: 8px 0;
-    }
+    .markdown-body hr { height: 1px; border: none; background: var(--border); margin: 24px 0; }
+    .markdown-body th { background: var(--panel2); }
+    .markdown-body img { max-width: 100%; height: auto; border-radius: 8px; }
     .markdown-body [class*="ql-callout-"] {
       position: relative; margin: 6px 0; padding: 10px 14px 10px 42px; border-radius: 8px;
     }
-    .markdown-body [class*="ql-callout-"]::before {
-      position: absolute; left: 13px; top: 9px;
-    }
+    .markdown-body [class*="ql-callout-"]::before { position: absolute; left: 13px; top: 9px; }
     .ql-callout-info { background: rgba(79, 140, 255, 0.10); border-left: 3px solid #4f8cff; }
     .ql-callout-info::before { content: "💡"; }
     .ql-callout-warn { background: rgba(245, 166, 35, 0.10); border-left: 3px solid #f5a623; }
     .ql-callout-warn::before { content: "⚠️"; }
     .ql-callout-success { background: rgba(62, 207, 142, 0.10); border-left: 3px solid #3ecf8e; }
     .ql-callout-success::before { content: "✅"; }
-    .note-link {
-      color: var(--accent);
-      text-decoration: none;
-    }
-    .note-link:hover {
-      text-decoration: underline;
-    }
-    .note-link-missing {
-      color: var(--muted);
-      text-decoration: underline dashed;
-      cursor: default;
-    }
+    .note-link { color: var(--accent); text-decoration: none; }
+    .note-link:hover { text-decoration: underline; }
+    .note-link-missing { color: var(--muted); text-decoration: underline dashed; cursor: default; }
     .footer {
-      margin-top: 50px;
-      border-top: 1px solid var(--border);
-      padding-top: 16px;
-      font-size: 12px;
-      color: var(--muted);
-      text-align: center;
+      margin-top: 50px; border-top: 1px solid var(--border); padding-top: 16px;
+      font-size: 12px; color: var(--muted); text-align: center;
     }
     @media (max-width: 600px) {
       body { padding: 10px; }
@@ -2144,6 +2035,10 @@ export async function downloadNoteAs(format) {
       .container { border: none !important; box-shadow: none !important; padding: 0; max-width: 100%; }
       .actions { display: none !important; }
     }
+    /* --- Vendored Quill CSS: makes the body render exactly like the editor --- */
+    ${quillCss}
+    /* Neutralise the editor's fixed height/scroll so it flows as a document. */
+    .markdown-body.ql-editor { height: auto; overflow: visible; padding: 0; }
   </style>
 </head>
 <body>
@@ -2159,12 +2054,12 @@ export async function downloadNoteAs(format) {
           <span>🔤 ${charCount} ${charCount === 1 ? 'char' : 'chars'}</span>
         </div>
       </div>
-      <div class="actions">
+      ${actions ? `<div class="actions">
         <button class="btn" onclick="toggleLocalTheme()">🌓 Theme</button>
         <button class="btn" onclick="window.print()">🖨️ Print</button>
-      </div>
+      </div>` : ''}
     </div>
-    <div class="markdown-body">
+    <div class="markdown-body ql-editor">
       ${renderedHtml}
     </div>
     <div class="footer">
@@ -2179,10 +2074,216 @@ export async function downloadNoteAs(format) {
   </script>
 </body>
 </html>`;
-    
-    triggerDownload(htmlContent, title + ".html", "text/html");
-    var dropdown = document.getElementById("noteDownloadDropdown");
-    if (dropdown) dropdown.classList.remove("show");
+}
+
+// Word (.doc) opens HTML; the classic trick is HTML + the msword MIME. But Word
+// ignores Quill's counter/pseudo-element bullets, so first normalise the rich
+// HTML: strip the ql-ui bullet spans, fold alignment/font/size classes into
+// inline styles Word understands, and rebuild lists as real <ul>/<ol>.
+var QL_CLASS_STYLE = {
+  "ql-align-center": "text-align:center", "ql-align-right": "text-align:right",
+  "ql-align-justify": "text-align:justify",
+  "ql-font-serif": "font-family:Georgia,'Times New Roman',serif",
+  "ql-font-monospace": "font-family:Consolas,Menlo,monospace",
+  "ql-size-small": "font-size:0.8em", "ql-size-large": "font-size:1.5em", "ql-size-huge": "font-size:2.5em"
+};
+// Callouts are class-only in the app; Word has no stylesheet, so bake the box
+// (border/background/padding) into inline styles and prepend the icon as text.
+var QL_CALLOUT_STYLE = {
+  info:    { icon: "💡", border: "#4f8cff", bg: "#eef4ff" },
+  warn:    { icon: "⚠️", border: "#f5a623", bg: "#fff7e9" },
+  success: { icon: "✅", border: "#3ecf8e", bg: "#eafaf3" }
+};
+function quillToSemanticHtml(html) {
+  var root = document.createElement("div");
+  root.innerHTML = html || "";
+  root.querySelectorAll("span.ql-ui").forEach(function(s) { s.remove(); });
+  root.querySelectorAll('[class*="ql-callout-"]').forEach(function(el) {
+    var m = /ql-callout-(\w+)/.exec(el.className || "");
+    var c = QL_CALLOUT_STYLE[m && m[1]];
+    if (!c) return;
+    el.style.cssText += ";border-left:4px solid " + c.border + ";background:" + c.bg +
+      ";padding:8px 12px;margin:8px 0;";
+    el.insertBefore(document.createTextNode(c.icon + "  "), el.firstChild);
+  });
+  root.querySelectorAll("[class]").forEach(function(el) {
+    var add = [];
+    el.classList.forEach(function(c) {
+      if (QL_CLASS_STYLE[c]) add.push(QL_CLASS_STYLE[c]);
+      var m = /^ql-indent-(\d+)$/.exec(c);
+      if (m && el.tagName !== "LI") add.push("margin-left:" + (m[1] * 2) + "em");
+    });
+    if (add.length) el.style.cssText += ";" + add.join(";");
+  });
+  root.querySelectorAll("ol, ul").forEach(rebuildQuillList);
+  return root.innerHTML;
+}
+// Quill stores every list as one <ol>/<ul> whose <li>s carry data-list (type)
+// and ql-indent-N (depth). Rebuild that flat run into real nested <ul>/<ol>.
+function rebuildQuillList(listEl) {
+  var lis = Array.prototype.filter.call(listEl.children, function(n) { return n.tagName === "LI"; });
+  if (!lis.some(function(li) { return li.hasAttribute("data-list"); })) return; // not a Quill list
+  var frag = document.createDocumentFragment();
+  var byLevel = []; // list element currently open at each indent level
+  lis.forEach(function(li) {
+    var m = /ql-indent-(\d+)/.exec(li.getAttribute("class") || "");
+    var level = m ? +m[1] : 0;
+    var type = li.getAttribute("data-list") || "bullet";
+    var tag = type === "ordered" ? "OL" : "UL";
+    var lst = byLevel[level];
+    if (!lst || lst.tagName !== tag) {
+      lst = document.createElement(tag);
+      byLevel.length = level;      // deeper levels are closed
+      byLevel[level] = lst;
+      if (level === 0) frag.appendChild(lst);
+      else {
+        var parent = byLevel[level - 1];
+        (parent && parent.lastElementChild ? parent.lastElementChild : (parent || frag)).appendChild(lst);
+      }
+    }
+    var newLi = document.createElement("li");
+    if (type === "checked" || type === "unchecked")
+      newLi.appendChild(document.createTextNode(type === "checked" ? "☑ " : "☐ "));
+    li.removeAttribute("data-list");
+    while (li.firstChild) newLi.appendChild(li.firstChild);
+    lst.appendChild(newLi);
+  });
+  listEl.replaceWith(frag);
+}
+
+// Note → Markdown. Walks the rendered HTML DOM (Quill's flat lists included).
+function noteToMarkdown(note) {
+  var root = document.createElement("div");
+  root.innerHTML = noteBodyHtml(note);
+  root.querySelectorAll("span.ql-ui").forEach(function(s) { s.remove(); });
+
+  function inline(node) {
+    var out = "";
+    node.childNodes.forEach(function(c) {
+      if (c.nodeType === 3) { out += c.nodeValue; return; }
+      if (c.nodeType !== 1) return;
+      var t = c.tagName.toLowerCase(), inner = inline(c);
+      if (t === "strong" || t === "b") out += "**" + inner + "**";
+      else if (t === "em" || t === "i") out += "*" + inner + "*";
+      else if (t === "s" || t === "del") out += "~~" + inner + "~~";
+      else if (t === "code") out += "`" + inner + "`";
+      else if (t === "a") out += "[" + inner + "](" + (c.getAttribute("href") || "") + ")";
+      else if (t === "br") out += "  \n";
+      else if (t === "img") out += "![" + (c.getAttribute("alt") || "") + "](" + (c.getAttribute("src") || "") + ")";
+      else out += inner; // u/span/sub/sup: keep text
+    });
+    return out;
+  }
+  function listMd(listEl) {
+    return Array.prototype.map.call(listEl.children, function(li) {
+      if (li.tagName !== "LI") return "";
+      var m = /ql-indent-(\d+)/.exec(li.getAttribute("class") || "");
+      var pad = "  ".repeat(m ? +m[1] : 0);
+      var dl = li.getAttribute("data-list");
+      var marker = dl === "ordered" ? "1. " : dl === "checked" ? "- [x] " : dl === "unchecked" ? "- [ ] " : "- ";
+      return pad + marker + inline(li).trim();
+    }).filter(Boolean).join("\n");
+  }
+  function tableMd(table) {
+    var rows = Array.prototype.slice.call(table.querySelectorAll("tr"));
+    if (!rows.length) return "";
+    var out = [];
+    rows.forEach(function(tr, i) {
+      var cells = Array.prototype.map.call(tr.children, function(td) {
+        return inline(td).trim().replace(/\|/g, "\\|").replace(/\n/g, " ");
+      });
+      out.push("| " + cells.join(" | ") + " |");
+      if (i === 0) out.push("| " + cells.map(function() { return "---"; }).join(" | ") + " |");
+    });
+    return out.join("\n");
+  }
+  var blocks = [];
+  function walk(node) {
+    node.childNodes.forEach(function(c) {
+      if (c.nodeType === 3) { var tt = c.nodeValue.trim(); if (tt) blocks.push(tt); return; }
+      if (c.nodeType !== 1) return;
+      var tag = c.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(tag)) blocks.push("#".repeat(+tag[1]) + " " + inline(c).trim());
+      else if (tag === "blockquote") blocks.push("> " + inline(c).trim());
+      else if (tag === "pre") blocks.push("```\n" + (c.textContent || "").replace(/\n+$/, "") + "\n```");
+      else if (tag === "hr") blocks.push("---");
+      else if (tag === "ul" || tag === "ol") blocks.push(listMd(c));
+      else if (tag === "table") blocks.push(tableMd(c));
+      else if (tag === "div") walk(c); // table wrappers / containers
+      else if (tag === "p") {
+        var m = /ql-callout-(\w+)/.exec(c.className || "");
+        var txt = inline(c).trim();
+        if (txt) blocks.push(m ? "> " + txt : txt);
+      }
+      else { var s = inline(c).trim(); if (s) blocks.push(s); }
+    });
+  }
+  walk(root);
+  return "# " + (note.title || "Untitled") + "\n\n" + blocks.join("\n\n").trim() + "\n";
+}
+
+function closeNoteDownloadMenu() {
+  var dropdown = document.getElementById("noteDownloadDropdown");
+  if (dropdown) dropdown.classList.remove("show");
+}
+
+export function toggleNoteDownloadMenu(e) {
+  if (e) e.stopPropagation();
+  var el = document.getElementById("noteDownloadDropdown");
+  if (el) {
+    el.classList.toggle("show");
+  }
+}
+
+// Global window event listener to close the dropdown when clicking outside
+window.addEventListener('click', function(e) {
+  var dropdown = document.getElementById("noteDownloadDropdown");
+  if (dropdown && !dropdown.contains(e.target)) {
+    dropdown.classList.remove("show");
+  }
+});
+
+export async function downloadNoteAs(format) {
+  if (!currentNote) return;
+  var note = S.notes.find(function(n) { return n.id === currentNote; });
+  if (!note) return;
+  closeNoteDownloadMenu();
+
+  var title = note.title || "Untitled";
+
+  if (format === 'md') {
+    triggerDownload(noteToMarkdown(note), title + ".md", "text/markdown");
+    return;
+  }
+
+  if (format === 'doc') {
+    var semantic = quillToSemanticHtml(await inlineExportImages(noteBodyHtml(note)));
+    var docHtml =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+      'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
+      'xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">' +
+      '<title>' + esc(title) + '</title></head><body>' +
+      '<h1>' + esc(title) + '</h1>' + semantic + '</body></html>';
+    // Leading BOM so Word reads it as UTF-8.
+    triggerDownload("\ufeff" + docHtml, title + ".doc", "application/msword");
+    return;
+  }
+
+  // html + print share one faithful, self-contained document. Wiki links become
+  // inert (they only work inside TyloPlanner or a Compiled Notebook).
+  var rawHtml = await inlineExportImages(noteBodyHtml(note));
+  var renderedHtml = rawHtml.replace(/onclick="openNote\('([^']+)'\);return false;"/g,
+    'onclick="alert(\'This link points to another note inside TyloPlanner. Download as a Compiled Notebook to make links interactive.\');return false;"');
+  var quillCss = await exportQuillCss();
+
+  if (format === 'print') {
+    // Force a light (paper) theme and drop the action buttons for print/PDF.
+    printHtmlDoc(buildNoteExportHtml(note, renderedHtml, quillCss, { theme: "light", actions: false }));
+    return;
+  }
+
+  if (format === 'html') {
+    triggerDownload(buildNoteExportHtml(note, renderedHtml, quillCss, {}), title + ".html", "text/html");
   }
 }
 
