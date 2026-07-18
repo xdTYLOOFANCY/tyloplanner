@@ -34,9 +34,10 @@ AUTH_PASSWORD=dev python app.py    # with login
 ```
 
 The server is plain Flask behind waitress; there is no hot reload — restart
-after backend changes. Frontend changes only need a browser refresh (force
-refresh if the service worker cached an old asset, or bump `CACHE` in
-`static/sw.js`).
+after backend changes. Frontend changes are picked up automatically: on
+startup `get_asset_version()` (`helpers.py`) hashes `static/` and stamps the
+version into `sw.js` and the `index.html` asset query strings, so the service
+worker serves fresh assets after a restart — you never bump `CACHE` by hand.
 
 ## Tests
 
@@ -61,8 +62,8 @@ add an endpoint or table, add a case here.
 
 All endpoints return JSON and require a session cookie when auth is enabled
 (401 otherwise). CRUD is generic over the tables
-`events, exams, habits, workouts, tasks, notes, study_sessions, playlists,
-playlist_tracks`:
+`events, exams, habits, workouts, tasks, notes, note_folders, study_sessions,
+playlists, playlist_tracks, files, folders, shortcuts`:
 
 | Method & path | Purpose |
 |---|---|
