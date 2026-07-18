@@ -8,6 +8,7 @@ import { weekTotals } from './workouts.js';
 import { getTaskCategories } from './settings.js';
 import { renderStudyTimerWidget } from './study_timer.js';
 import { renderTimerWidget } from './timers.js';
+import { getInstances } from './planner.js';
 
 let isEditMode = false;
 let currentLayout = [];
@@ -162,8 +163,12 @@ function parseTime(t) {
 
 function renderTodayPlanListHTML(id) {
   var today = todayStr();
-  var evs = S.events.filter(function(e) { return e.date === today; })
-    .sort(function(a, b) { return (a.start || "").localeCompare(b.start || ""); });
+  // Expand recurrence + multi-day spans (reuses the planner's logic) so today's
+  // occurrences of weekly/daily/monthly and in-progress multi-day events show up,
+  // not just events literally dated today.
+  var evs = [];
+  S.events.forEach(function(e) { evs = evs.concat(getInstances(e, today, today)); });
+  evs.sort(function(a, b) { return (a.start || "").localeCompare(b.start || ""); });
     
   if (!evs.length) {
     return '<div class="muted">Nothing planned today.</div>';

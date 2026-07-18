@@ -109,7 +109,7 @@ function eventColorStyle(e) {
 // recurrence type (daily/weekly/monthly/yearly), interval ("every N"), weekly
 // multi-day (recurrence_days), end-by-date (recurrence_until) or end-after-N
 // (recurrence_count), and single-occurrence exclusions (excluded_dates).
-function getInstances(e, startIso, endIso) {
+export function getInstances(e, startIso, endIso) {
   var out = [];
   if (!e.date) return out;
 

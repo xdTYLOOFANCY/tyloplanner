@@ -2,6 +2,14 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.39.1 — 2026-07-18
+
+- **Fixed: the dashboard's *Today's Plan* now shows recurring and multi-day
+  events.** It previously listed only events literally dated today, so weekly
+  ward rounds, daily recurring events and in-progress multi-day events never
+  appeared. It now expands today's occurrences using the same recurrence logic
+  as the planner.
+
 ## 1.39.0 — 2026-07-18
 
 - **Changed: the Analytics tab is now a Study Tracker.** The tab moved from
