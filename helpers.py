@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.28.1"
+VERSION = "1.39.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -47,7 +47,7 @@ TABLES = {
     "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
     "folders":  ["name", "parent_id", "icon"],
     "shortcuts":["name", "url", "icon"],
-    "study_sessions": ["subject", "date", "duration", "completed"],
+    "study_sessions": ["subject", "date", "duration", "completed", "note"],
     "playlists": ["name", "created", "updated"],
     "playlist_tracks": ["playlist_id", "file_id", "position", "added"],
 }
@@ -350,22 +350,32 @@ _SANITIZE_ALLOWED = {
     "ul": {"class"}, "ol": {"class"}, "li": {"class", "data-list"},
     "blockquote": {"class"}, "pre": {"class", "spellcheck"}, "code": {"class"},
     "div": {"class", "style"},
-    # tables (Quill's table module + reasonable pasted-table support)
-    "table": {"class"}, "thead": {"class"}, "tbody": {"class"}, "tfoot": {"class"},
-    "tr": {"class", "data-row"}, "colgroup": {"class"}, "col": {"span", "width", "class"},
-    "td": {"class", "data-row", "rowspan", "colspan"},
-    "th": {"class", "data-row", "rowspan", "colspan", "scope"},
+    # tables (quill-table-up + reasonable pasted-table support). style carries
+    # table/cell geometry (width, height, border, background); inert data-*
+    # attributes (cell ids, colspan/rowspan) are allowed generically below.
+    "table": {"class", "style", "cellpadding", "cellspacing"},
+    "thead": {"class"}, "tbody": {"class"}, "tfoot": {"class"}, "caption": {"class", "style"},
+    "tr": {"class", "style", "data-row"}, "colgroup": {"class"},
+    "col": {"span", "width", "class", "style"},
+    "td": {"class", "style", "data-row", "rowspan", "colspan"},
+    "th": {"class", "style", "data-row", "rowspan", "colspan", "scope"},
     "a": {"href", "title", "target", "rel", "class"},
     "img": {"src", "alt", "width", "height", "class", "style"},
     "sub": set(), "sup": set(), "hr": set(),
 }
-_SANITIZE_VOID = {"br", "hr", "img"}
+_SANITIZE_VOID = {"br", "hr", "img", "col"}
+# these tags may carry inert data-* attributes; quill-table-up stores cell ids
+# and span/geometry metadata there. Allowed only for table-structure tags.
+_SANITIZE_DATA_TAGS = {"table", "thead", "tbody", "tfoot", "tr", "td", "th",
+                       "col", "colgroup", "caption", "div"}
 # tags whose *content* is dropped entirely, not just the tag
 _SANITIZE_DROP_CONTENT = {
     "script", "style", "iframe", "object", "embed", "noscript",
     "template", "svg", "math", "link", "meta", "base", "form",
 }
-_SANITIZE_SAFE_STYLE = {"color", "background-color", "background", "text-align"}
+_SANITIZE_SAFE_STYLE = {"color", "background-color", "background", "text-align",
+                        "width", "height", "margin", "margin-left", "margin-right",
+                        "border", "border-color"}
 
 
 class _HTMLSanitizer(_HTMLParser):
@@ -411,7 +421,8 @@ class _HTMLSanitizer(_HTMLParser):
         parts = []
         for k, val in attrs:
             k = (k or "").lower()
-            if k.startswith("on") or k not in allowed:
+            is_data = k.startswith("data-") and tag in _SANITIZE_DATA_TAGS
+            if k.startswith("on") or (k not in allowed and not is_data):
                 continue
             if val is None:
                 parts.append(" " + k)
@@ -565,6 +576,8 @@ SETTING_DEFAULTS = {
     "goal_bike_km": "",
     "goal_swim_km": "",
     "goal_gym_sessions": "",
+    "timer_hide": "0",     # no-distraction: hide the running-timer chips from nav
+    "timer_push": "0",     # also push timer completion to phone (ntfy/web push)
 }
 
 
@@ -605,6 +618,18 @@ def totp_enabled():
 
 
 # ---------------- notifications (ntfy) ----------------
+def ntfy_header(v):
+    """HTTP headers are latin-1 only, so titles like "⏰ Timer" or
+    "Your day — TyloPlanner" made requests raise and the push silently die.
+    ntfy decodes RFC 2047, so non-latin-1 values get base64-encoded."""
+    try:
+        v.encode("latin-1")
+        return v
+    except UnicodeEncodeError:
+        import base64
+        return "=?UTF-8?B?" + base64.b64encode(v.encode("utf-8")).decode() + "?="
+
+
 def ntfy_send(title, msg, tags=""):
     topic = setting("ntfy_topic")
     if not topic:
@@ -612,7 +637,7 @@ def ntfy_send(title, msg, tags=""):
     server = setting("ntfy_server").rstrip("/")
     try:
         r = requests.post(server + "/" + topic, data=msg.encode("utf-8"),
-                          headers={"Title": title, "Tags": tags}, timeout=10)
+                          headers={"Title": ntfy_header(title), "Tags": ntfy_header(tags)}, timeout=10)
         return r.status_code < 300
     except Exception as e:
         print("ntfy error:", e)

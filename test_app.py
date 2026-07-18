@@ -272,11 +272,34 @@ class CrudTests(unittest.TestCase):
         # HTML comments are dropped entirely
         self.assertNotIn("secret", s("<!-- secret --><p>x</p>"))
         # tables are preserved (structure + data-row) but cell XSS is stripped
-        tbl = s('<table><tbody><tr><td data-row="r1">A1</td></tr></tbody></table>')
-        self.assertIn("<table>", tbl)
+        tbl = s('<table class="c"><tbody><tr><td data-row="r1">A1</td></tr></tbody></table>')
+        self.assertIn("<table", tbl)
         self.assertIn('data-row="r1"', tbl)
         self.assertIn("A1", tbl)
         self.assertNotIn("onerror", s('<table><tr><td><img src=x onerror=hack()>c</td></tr></table>').lower())
+        # quill-table-up geometry survives: col widths, table width style, cell
+        # data-* metadata and multi-line cell content are all preserved so a
+        # resized/multi-line table round-trips through save.
+        qtu = s(
+            '<div class="ql-table-wrapper" data-table-id="t1" contenteditable="false">'
+            '<table class="ql-table" data-table-id="t1" style="margin-right: auto; width: 300px">'
+            '<colgroup><col width="200px" data-col-id="c1"><col width="100px" data-col-id="c2"></colgroup>'
+            '<tbody><tr class="ql-table-row" data-row-id="r1">'
+            '<td data-col-id="c1" rowspan="2" colspan="1">'
+            '<div class="ql-table-cell-inner" data-rowspan="2" data-colspan="1"><p>x</p><p>y</p></div>'
+            '</td></tr></tbody></table></div>')
+        self.assertIn('col width="200px"', qtu)     # column resize persists
+        self.assertIn("width: 300px", qtu)          # table width persists
+        self.assertIn('data-col-id="c1"', qtu)      # cell id metadata persists
+        self.assertIn('rowspan="2"', qtu)           # merged-cell span persists
+        self.assertIn("<p>x</p><p>y</p>", qtu)      # multi-line cell persists
+        self.assertNotIn("contenteditable", qtu)    # runtime-only attr dropped
+        # data-* is allowed only on table tags, not arbitrary elements
+        self.assertNotIn("data-evil", s('<p data-evil="1">x</p>'))
+        # script/handlers inside the new cell format are still stripped
+        self.assertNotIn("onerror", s(
+            '<td data-col-id="c1"><div class="ql-table-cell-inner">'
+            '<img src=x onerror=hack()></div></td>').lower())
 
     def test_note_revision_created_and_restored(self):
         nid = self.c.post("/api/notes", json={
@@ -460,7 +483,8 @@ class CrudTests(unittest.TestCase):
             "subject": "Chemistry",
             "date": "2026-06-17",
             "duration": 50.0,
-            "completed": 1
+            "completed": 1,
+            "note": "Redox reactions, ch. 4"
         })
         self.assertEqual(r.status_code, 200)
         session_id = r.get_json()["id"]
@@ -473,6 +497,7 @@ class CrudTests(unittest.TestCase):
         self.assertEqual(sessions[0]["subject"], "Chemistry")
         self.assertEqual(sessions[0]["duration"], 50.0)
         self.assertEqual(sessions[0]["completed"], 1)
+        self.assertEqual(sessions[0]["note"], "Redox reactions, ch. 4")
 
         # 2. Update study session subject and duration
         r = self.c.put("/api/study_sessions/%s" % session_id, json={
@@ -1566,6 +1591,20 @@ class NotificationTests(unittest.TestCase):
         with helpers.db() as con:
             rows = [dict(row) for row in con.execute("SELECT * FROM push_subscriptions")]
         self.assertEqual(len(rows), 0)
+
+    def test_ntfy_header_encoding(self):
+        # HTTP headers are latin-1 only; emoji/em-dash titles ("⏰ Timer",
+        # "Your day — TyloPlanner") must be RFC 2047-encoded or requests raises
+        # and the push silently dies (the 1.31.1 timer-push bug).
+        from email.header import decode_header
+        self.assertEqual(helpers.ntfy_header("Timer"), "Timer")
+        self.assertEqual(helpers.ntfy_header("alarm_clock"), "alarm_clock")
+        for title in ("⏰ repro", "Your day — TyloPlanner"):
+            enc = helpers.ntfy_header(title)
+            self.assertTrue(enc.startswith("=?UTF-8?B?"))
+            enc.encode("latin-1")  # must be header-safe
+            decoded, charset = decode_header(enc)[0]
+            self.assertEqual(decoded.decode(charset), title)
 
     @unittest.mock.patch("pywebpush.webpush")
     def test_notify_test_endpoint(self, mock_webpush):

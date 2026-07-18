@@ -2,10 +2,14 @@
 
 ## Calendar
 
+Everything below lives in one place: the **⚙️ Calendars** popup in the Planner
+header (which also holds the per-calendar show/hide toggles and colors). The
+application time zone stays in **Settings → Time zone**.
+
 ### Export — subscribe from your calendar app
 
 Your planner events and exams are published as an iCal feed. Copy the secret
-feed URL from **Settings → Calendar export**, then:
+feed URL from **⚙️ Calendars → Export & subscribe**, then:
 
 - All timed events are automatically converted to UTC and exported with the `Z` suffix, ensuring consistent timezone rendering across all devices. All-day events remain date-only.
 - Event metadata including `LOCATION`, `DESCRIPTION`, and recurrence rules (`RRULE` with `UNTIL` limits) are fully exported using standard ICS attributes.
@@ -17,7 +21,7 @@ feed URL from **Settings → Calendar export**, then:
 
 ### Import — one-off
 
-**Settings → Calendar import**: upload an `.ics` file, or paste any iCal URL
+**⚙️ Calendars → Import & sync**: upload an `.ics` file, or paste any iCal URL
 (e.g. Google Calendar's "secret address in iCal format" from its settings
 page). Imported events show with an orange marker in the planner and can be
 removed in one click with *Remove all imported events*.
@@ -30,7 +34,7 @@ Exams and deadlines added in the **Exams & grades** tab are automatically synchr
 
 ### Auto-sync — keep timetables up to date
 
-**Settings → Calendar auto-sync**: paste one or more iCal URLs (one per
+**⚙️ Calendars → Import & sync**: paste one or more iCal URLs (one per
 line — university timetable, shared family calendar, …) and choose an
 interval. A background worker re-imports them automatically, deduplicating
 against what's already there. *Sync now* forces an immediate run.

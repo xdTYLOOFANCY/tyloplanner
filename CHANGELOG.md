@@ -2,6 +2,230 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.39.0 — 2026-07-18
+
+- **Changed: the Analytics tab is now a Study Tracker.** The tab moved from
+  *Overview* into *Academic & life* (next to the Planner) and focuses on
+  studying: log sessions manually with a
+  subject, minutes and a free-text *"what was studied?"* note (new `note`
+  column on `study_sessions`), see range-scoped stat cards (hours studied /
+  planned, sessions, study days), a *Planned vs Actual* monthly chart, a new
+  **Hours by Subject** chart, and the full study log with notes.
+- **Moved: workout charts live on the Workouts tab.** *Workout Sessions*,
+  *Distance (km)* and *Training Load* charts plus the all-time totals row and
+  the time-range selector moved into a new *All-time & trends* card on the
+  Workouts tab.
+- **Moved: habit check-ins chart lives on the Habits tab** (last 12 months,
+  below the heatmap).
+- **Moved: "Everything at a Glance" counts became an optional dashboard
+  widget.** Enable **Your Library** from the dashboard customizer to see
+  open/done tasks, notes, events, exams, habits, files and active-day counts.
+- **Removed: the grades table on the old Analytics tab** — it duplicated the
+  Exams & grades tab.
+- **Added: subject autocomplete.** The study log form and the dashboard study
+  timer suggest previously used subjects while you type (native datalist), and
+  the *Hours by Subject* chart groups subjects case-insensitively — "Anatomy"
+  and "anatomy" count as one.
+- Internal: chart helpers extracted to a shared `static/js/charts.js` module.
+
+## 1.38.0 — 2026-07-18
+
+- **Changed: calendar export, import & sync moved into the Planner.** The
+  *Calendar — export* and *Calendar — import & sync* cards are gone from
+  Settings; their feed URL / .ics download, file import, auto-sync URLs, and
+  "remove imported events" now live in the redesigned **⚙️ Calendars** popup in
+  the Planner header, alongside the existing per-calendar show/color controls.
+  The one popup is now the single place to manage everything calendar-related.
+  The application time-zone setting stays in Settings (its own *Time zone* card).
+
+## 1.37.1 — 2026-07-18
+
+- **Added: search button in the mobile header.** The always-visible mobile top
+  bar now has a search (⌕) button next to the *+* quick-add, opening the command
+  palette. Previously the palette was only reachable on mobile via the keyboard
+  shortcut.
+
+## 1.37.0 — 2026-07-18
+
+- **Added: 1 day / 1 week event reminders, plus a default 30-min reminder.**
+  The event reminder picker now offers *1 day before* and *1 week before*
+  alongside the existing minute/hour options, and new events start with a
+  *30 minutes before* reminder already set (removable like any other).
+  Reminder pills and notification text now read in days/weeks (`1d`, `1w`)
+  where appropriate.
+
+## 1.36.0 — 2026-07-18
+
+- **Added: log study sessions by hand.** The Analytics tab's *Recent Study
+  Sessions* card now has a quick-add row — type a subject, pick a date (defaults
+  to today) and the minutes studied, hit Log. You no longer need the Pomodoro /
+  stopwatch widget to record study time, the same way workouts can be logged
+  manually. Sessions still count toward the study-hours totals and charts.
+
+## 1.35.0 — 2026-07-18
+
+- **Added: Markdown (.md) and Word (.doc) note exports.** The note Export menu
+  now offers four formats. **Markdown** produces clean `.md` with headings,
+  bold/italic/strike, links, bullet/numbered/checklist lists (nesting preserved),
+  callouts (as blockquotes), code blocks and GFM tables. **Word (.doc)** opens
+  directly in Microsoft Word / Google Docs, with alignment, fonts, sizes, colors,
+  real bullet/numbered lists and tables carried over.
+- **Improved: Print / PDF now prints the exact note, not the app.** Print/PDF
+  (and the Styled HTML export) now render the note with the editor's own
+  stylesheet, so bullets, checkboxes, text alignment, fonts, sizes, callouts and
+  tables come out **exactly as you see them while writing**. Printing renders the
+  note in an isolated document (forced to a light "paper" theme) instead of the
+  live page, so the sidebar and app chrome no longer leak into the printout.
+
+## 1.34.0 — 2026-07-18
+
+- **Improved: full-featured tables in Notes.** Tables now support the two things
+  the old built-in editor couldn't: **drag-resize columns and rows** (grab a
+  border and pull — no longer sized only by their text), and **multi-line cells**
+  (press Enter for a new line inside a cell instead of jumping to the next one).
+  Right-click any cell for the full menu — insert/delete rows & columns, merge
+  and split cells, set background and border colors, and align the whole table.
+  Existing tables upgrade automatically the first time you open the note; nothing
+  to migrate. Powered by the vendored `quill-table-up` module (loaded lazily with
+  the notes editor, so it adds nothing to initial page load). The old floating
+  add/remove toolbar is replaced by the richer right-click menu.
+
+## 1.32.7 — 2026-07-18
+
+- **Added: "Everything at a Glance" content counts on the Analytics tab.** A new
+  grid of stat cards at the bottom of the tab shows how much you've built up
+  across the app — open/done tasks, notes, calendar events, exams, habits
+  tracked, files, playlists, and active days (distinct days with any logged
+  activity). All computed live from existing data; no tracking added.
+
+## 1.32.5 — 2026-07-18
+
+- **Fixed: date selectors now default to today.** The planner's "Jump to date"
+  box showed the first cell of the current view — Monday in week view, the
+  month grid's leading day in month view — instead of the actual date. It now
+  always shows today. The Log-session date on the Workouts tab likewise stays
+  pinned to today (it previously only set today at page boot and could go stale
+  across midnight), so same-day sessions need no date picking.
+
+## 1.32.4 — 2026-07-17
+
+- **Added: quick event colors from the right-click menu.** Right-clicking a
+  planner event now shows a row of color swatches between Duplicate and Delete,
+  so you can recolor an event (or reset it to its type color with the ✕ swatch)
+  in one click without opening the full edit dialog.
+
+## 1.32.3 — 2026-07-17
+
+- **Fixed: the music player was fiddly and half-hidden on phones.** The bar's
+  buttons and progress slider were laptop-sized and sat right at the screen
+  edge, so on an iPhone the seek bar disappeared behind the home-indicator
+  swipe area. The mobile player now uses large, Spotify/Apple-Music-style
+  controls (a prominent play button, comfortably spaced skip/shuffle/repeat
+  buttons, and a thicker progress bar) and lifts itself above the phone's
+  gesture bar with safe-area padding so nothing is blocked.
+
+## 1.32.2 — 2026-07-17
+
+- **Fixed: the command palette hid behind the mobile keyboard.** On phones the
+  palette opened as a bottom sheet, so once you typed and the result list
+  shrank to a row or two, it slid down behind the on-screen keyboard and looked
+  like it had vanished. The palette now anchors to the top of the screen, so
+  the input and results stay visible above the keyboard.
+
+## 1.32.1 — 2026-07-16
+
+- **Fixed: checking off a habit or to-do jerked the dashboard.** Ticking a
+  checkbox forced a full page re-render — immediately for to-dos, and a few
+  seconds later for habits when live sync mistook the app's own save for a
+  remote change. The checkbox now updates in place and the save is absorbed
+  silently, so the dashboard no longer rebuilds and jumps.
+
+## 1.32.0 — 2026-07-16
+
+- **Cleaner planner toolbar.** The date range now sits on its own title line,
+  with every control — view switcher, ‹ Today ›, jump-to-date, Shortcuts,
+  Tasks, Calendars, quick-add and search — together on one row below it.
+- **Week numbers.** In week view the title shows the ISO week of the year,
+  e.g. "Mon 13 Jul – Sun 19 Jul 2026 · Week 29".
+- **Planner scrolling stays in the planner.** Scrolling the time grid no
+  longer spills over into scrolling the page once the grid reaches its top or
+  bottom.
+
+## 1.31.2 — 2026-07-16
+
+- **Fixed: month view columns blew out with long event titles.** Days with
+  long event names (e.g. lecture codes) stretched their weekday column far
+  past its share, pushing Fri/Sat/Sun off the right edge and putting dates
+  under the wrong weekday header. Columns are now always exactly one-seventh
+  wide and long titles ellipsize, like Google Calendar.
+
+## 1.31.1 — 2026-07-16
+
+- **Fixed: ntfy pushes with emoji or special characters in the title never
+  arrived.** Timer-done pushes ("⏰ …"), the daily agenda ("Your day — …"),
+  and reminders for events/tasks with non-ASCII names were silently dropped —
+  HTTP headers only allow latin-1, so the send failed before it left the
+  server. Titles are now RFC 2047-encoded, which ntfy decodes natively.
+  Native Web Push was never affected.
+
+## 1.31.0 — 2026-07-15
+
+- **Undo a delete.** Deleting a task, exam, workout, study session, or shortcut
+  now shows a **"… deleted · Undo"** toast for a few seconds — one click brings
+  it back. (Deleting a calendar event was already undoable; the same behaviour
+  now covers the rest.)
+- **Create things straight from the command palette.** Open search
+  (`Ctrl`/`Cmd`+`K`) and type `task buy milk` to add a to-do, `note Ideas` to
+  start a note, or `event dentist tue 3pm` to open a pre-filled calendar event
+  (dates/times parsed like the planner's quick-add). Press `Enter` to create.
+- **Help is a keystroke away.** Type `?` in the palette to see everything it can
+  do — calculator, timers, quick-add, QR — with one click to try each. Pressing
+  `?` anywhere else opens a keyboard-shortcuts cheat-sheet.
+
+## 1.30.0 — 2026-07-15
+
+- **Calculator in the command palette.** Open search (`Ctrl`/`Cmd`+`K`) and
+  start with `=` to do quick maths, unit conversions, and time-zone lookups
+  without leaving the app — the answer shows at the top and `Enter` copies it.
+  Handles arithmetic (`= 20% of $250`, `= (8 + 4) * 3`, `= 2^10`), units across
+  length/mass/area/volume/data/temperature and CSS (`= 5 km in miles`,
+  `= 12pt in px`, `= 100 c in f`), and time zones via your browser's own clock
+  data — no online lookup (`= 2:30pm HKT in Berlin`, `= time in Tokyo`). Typing
+  a valid expression without the `=` also surfaces the answer above your search
+  results. Everything runs offline; nothing is sent anywhere.
+
+## 1.29.2 — 2026-07-15
+
+- **Timers now follow you across devices.** A running timer is kept on the
+  server, so if you start one on your laptop and then close the tab or shut the
+  laptop down, it keeps counting — open TyloPlanner on your phone or another tab
+  and the timer is still there. When it finishes it still sounds and notifies on
+  whatever screen is open, and (with **Push notification** on) alarms your phone
+  even if nothing is open. Timers created offline sync up once you reconnect.
+
+## 1.29.1 — 2026-07-15
+
+- **Timer dashboard widget.** Add a **Timer** card to your dashboard (Customize
+  → add widget) to set a timer by picking hours / minutes / seconds and an
+  optional name — like the timer on your phone, no typing a command needed. It
+  lists your running timers and has a ⚙ button to open timer settings.
+- **Timer settings polish.** Renamed the options to **Hide running timers** and
+  **Push notification**, switched them to the app's checkmark style, and made
+  the dot next to a running timer a steady colour instead of pulsing. Running
+  timers no longer peek out of a collapsed sidebar.
+
+## 1.29.0 — 2026-07-15
+
+- **Natural-language timers.** Open the command palette (Ctrl/Cmd+K) and type
+  something like `timer 25m focus`, `timer 2h laundry`, or `timer 1h30m brew`
+  to start a countdown. Running timers show as chips below the date in the
+  sidebar (or the top bar), each cancellable with a click, and finish with a
+  sound + a desktop notification. Pick **Timer settings** from the palette to
+  turn on **No-distraction mode** (hides the chips from the nav — you can still
+  cancel timers from the settings dialog) or **Push to phone when done**, which
+  also fires the alarm to your phone via ntfy / web push so it reaches you even
+  with the tab closed.
+
 ## 1.28.1 — 2026-07-15
 
 - **Fixed find-in-note (Ctrl/Cmd+F).** Typing in the "Find in note" box no

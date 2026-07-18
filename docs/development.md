@@ -86,6 +86,8 @@ are no dedicated endpoints; the generic CRUD + settings API cover it.
 | `GET /api/push/public-key` | Get the VAPID public key for Web Push. |
 | `POST /api/push/subscribe` | Register browser subscription for Web Push. |
 | `POST /api/push/unsubscribe` | Unsubscribe browser subscription from Web Push. |
+| `GET /api/timers` | List running timers (`fire_at` in the future) so any device can pick up a timer started elsewhere. |
+| `POST /api/timer` · `DELETE /api/timer/<id>` | Create / cancel a timer. The `timers` table is the source of truth (a timer survives the tab closing and syncs across devices on load); the browser mirrors it in localStorage for the live countdown + offline use. `push=1` rows also get a phone push from the scheduler when they fire. Not in `TABLES`. |
 | `POST /api/backup/now` · `POST /api/restore` | Manual backup / restore (JSON payload). |
 | `GET /api/backups` | List all available automatic nightly backups. |
 | `POST /api/backups/<filename>/restore` | Restore database data from an automatic nightly backup. |
@@ -124,8 +126,9 @@ Example: a water-intake tracker.
    and export it. Import it in `static/app.js`, then call it from `renderAll()`. Use the existing `api()` helper for requests.
 3. Generic CRUD endpoints already work for your new table — no backend
    routes needed unless you want custom logic.
-4. Want it in the analytics tab? Aggregate in `renderAnalytics()` and use
-   the `barChart()` helper.
+4. Want charts? Use the shared helpers in `static/js/charts.js`
+   (`createChart()`, `getPastMonths()`, `noGridOptions()`) and register your
+   render with `registerChartRerender()` so theme switches redraw it.
 
 ## The background scheduler
 
@@ -288,7 +291,10 @@ can't leak upward.
   (set via `setEventColor`) holds an optional hex `color` (column from migration
   015, validated by the `color` rule in `api.py`); the renderer applies it as an
   inline `background-color … !important` via `eventColorStyle()` (re-validated
-  client-side). The toolbar `#plannerQuickAdd` runs `parseQuickAdd()` — a
+  client-side). The same `color` field can be changed without opening the modal
+  via the right-click context menu (`initPlannerContextMenu`), whose swatch row
+  (`EVENT_COLOR_PRESETS` → `quickSetEventColor()`, a partial `PUT /api/events/<id>`)
+  mirrors the modal presets. The toolbar `#plannerQuickAdd` runs `parseQuickAdd()` — a
   dependency-free heuristic parser for dates/times/durations/locations — and
   `quickAddOpen()` pre-fills the Add-Event modal for confirmation.
 - **Notes editor.** Notes use a vendored Quill WYSIWYG editor (one instance,
@@ -308,12 +314,45 @@ can't leak upward.
   custom Quill keyboard bindings in `initQuill()`; lists come from Quill 2's
   built-in "list autofill" binding — don't re-add them. Callouts are a block
   `ClassAttributor` (`ql-callout-info|warn|success`, styled in CSS only; the
-  server sanitizer allows `class` on `<p>`, covered by a test). The outline
+  server sanitizer allows `class` on `<p>`, covered by a test). Tables use the
+  vendored **`quill-table-up`** module (`static/js/quill-table-up.umd.js` +
+  `.css`, lazy-loaded alongside Quill in `ensureQuill()`), registered and
+  configured in `initQuill()` with `TableResizeLine`/`TableResizeScale` (drag
+  border/corner resize), `TableSelection` + `TableMenuContextmenu` (right-click
+  cell menu: insert/delete rows & columns, merge/split, colors), and
+  `TableAlign`. It replaces Quill 2's minimal built-in table module (which had
+  single-line cells and no resize); `insertTable()` seeds a 3×3, everything else
+  is the module's own UI. The module serializes tables as `<div.ql-table-wrapper>`
+  → `<table>` (width in `style`) → `<colgroup><col width>` (column widths) →
+  `<td>` → `<div.ql-table-cell-inner>` (multi-line cell body), with structure in
+  `data-*` attributes. `sanitize_note_html()` allowlists those inert `data-*`
+  attrs (only on table-structure tags) plus geometry styles (width/height/margin/
+  border) so resize + merges + multi-line survive save→reload; `contenteditable`
+  is dropped (re-added at render). The module's popups are re-themed for dark
+  mode via `.table-up-*` overrides in `style.css`. Old built-in-format tables
+  (`<td data-row>`) auto-upgrade on load via `clipboard.convert`. The outline
   sidebar (`#noteOutline`, static HTML + `renderNoteOutline()`) rebuilds from
   `quill.root` headings on load and user edits — never from live sync.
   Cmd/Ctrl+F / Cmd/Ctrl+S are hijacked only while the Notes tab shows an open
   note. Debounced saves flow through `doSaveNote()`; `forceSaveNote()` is the
   flush path.
+- **Note exports** (`downloadNoteAs(format)` in `notes.js`, Export menu). Four
+  formats. `html` and `print` share `buildNoteExportHtml()`, which wraps the note
+  body in `.ql-editor` and appends the vendored Quill stylesheets (fetched once,
+  cached, via `exportQuillCss()`) — so the export renders with Quill's own CSS
+  and matches the editor pixel-for-pixel (bullets, checkboxes, alignment, fonts,
+  sizes, tables). `print` builds a light-themed, button-less doc and prints it in
+  a hidden iframe (`printHtmlDoc()`), so only the note prints, never app chrome.
+  `md` (`noteToMarkdown()`) walks the rendered DOM to Markdown (Quill's flat
+  `data-list` + `ql-indent` lists → nested markdown lists; callouts → blockquotes;
+  GFM tables). `doc` (`quillToSemanticHtml()`) normalizes the rich HTML for Word:
+  strips `.ql-ui` bullet spans, folds `ql-align/font/size/indent` classes into
+  inline styles, and rebuilds Quill's flat lists into real nested `<ul>/<ol>`
+  (`rebuildQuillList()`), then serves it as `application/msword` (`.doc`). Images
+  are inlined as `data:` URIs first (`inlineExportImages()`) so exports are
+  self-contained. True OOXML `.docx` is intentionally not built (would need a zip
+  library — out of scope of the no-new-deps rule); the `.doc` HTML opens and edits
+  fine in Word and Google Docs.
 - **Note tags & templates.** Notes carry a comma-separated `notes.tags` column
   (migration 024); the global tag list lives in the `note_tags` setting — the
   exact pattern exam tags use (migration 019), including the chip bar, the
@@ -326,5 +365,30 @@ can't leak upward.
 - **Touch & iOS.** Aim for ≥44px tap targets (there's a blanket rule in the
   mobile block). Inputs that can receive focus should be ≥16px font to avoid
   iOS auto-zoom. Respect the safe area with `env(safe-area-inset-bottom)`.
+  The persistent music player bar is fixed to `bottom: 0`, so its mobile block
+  (`@media (max-width: 640px)`) sizes its own enlarged controls (46px buttons,
+  58px play, 6px seek) and adds `padding-bottom: env(safe-area-inset-bottom)` so
+  the seek row clears the iPhone home indicator — keep both when editing it.
 - **Verify both widths.** After any UI change, check it at ~375px *and* at
   desktop width before calling it done.
+- **Command palette (`static/js/palette.js`).** `Ctrl`/`Cmd`+`K` search over
+  everything, plus two inline mini-parsers special-cased at the top of
+  `search()`: `timer 25m focus` (`parseTimer` in `timers.js`) and the
+  calculator (`calc()` in `static/js/calc.js`). `calc()` is pure and
+  DOM-free — arithmetic (recursive descent, no `eval`), unit conversion
+  (cross-table ratio lookup + a temperature special-case), and time-zone
+  conversion via native `Intl`/`toLocaleString` against a curated
+  abbreviation/city→IANA map (no tz library). A leading `=` forces it and shows
+  only the result; a bare valid expression is prepended above search hits;
+  anything `calc()` can't compute returns `null` and falls through to search.
+  `Enter` copies the result. Covered by `node test_calc.mjs`. Deliberately out
+  of scope: live currency rates and free-form word-operator NLP.
+  Also special-cased in `search()`: quick-create verbs `task …` / `note …` /
+  `event …` (event reuses the planner's `quickAddOpen`/`parseQuickAdd` NL date
+  parser and opens a pre-filled modal), and `?` which lists the palette's
+  capabilities as `fill` rows that seed the input. Pressing `?` outside any
+  input/dialog opens the keyboard cheat-sheet (`showShortcutsHelp`).
+- **Undo toast (`showUndoToast`/`triggerUndo` in `utils.js`).** Shared 6-second
+  Undo toast used by planner drag/resize/delete and by the generic `delRow()`,
+  which snapshots the row before deleting and re-`POST`s it on undo (a fresh id
+  is assigned, so id-linked children aren't restored).

@@ -49,7 +49,10 @@ with no bundler: `static/app.js` is the orchestrator — it pulls global state
 incremental live sync with `?since_version=`), delegates rendering to feature
 modules in `static/js/` (`planner`, `notes`, `tasks`, `exams`, `habits`,
 `workouts`, `study_timer`, `files`, `dashboard`, `analytics`, `settings`, …),
-and wires up the global functions the HTML calls. Offline support lives in
+and wires up the global functions the HTML calls. The command palette
+(`static/js/palette.js`, Ctrl/Cmd+K) special-cases inline mini-parsers before
+search: natural-language timers (`static/js/timers.js`) and a calculator
+(`static/js/calc.js`, pure/DOM-free, tested via `node test_calc.mjs`). Offline support lives in
 `static/sw.js` (asset cache) + `static/js/offline.js` (IndexedDB
 `tyloplanner_offline`: `state_cache` + an `api_queue` replayed on reconnect).
 User settings live in the `kv` table with a `set_` prefix.
@@ -59,7 +62,8 @@ User settings live in the `kv` table with a `set_` prefix.
 - **No new dependencies** without strong justification; keep the stack
   Flask + stdlib + the eight packages in `requirements.txt` (vendored
   frontend libs `chart.umd.js` / `marked.min.js` / `quill.js` +
-  `quill.snow.css` live in `static/js/` — prebuilt, no bundler).
+  `quill.snow.css` / `quill-table-up.umd.js` + `quill-table-up.css` live in
+  `static/js/` — prebuilt, no bundler).
 - **Frontend stays vanilla JS**, using ES modules in `static/js/` without any
   bundler or framework. `static/app.js` wires everything together for the HTML
   templates.
@@ -92,8 +96,9 @@ writable column/table, add it to the `TABLES` whitelist so the generic CRUD
 API accepts it. Current tables: `events`, `exams`, `habits`, `workouts`,
 `tasks`, `notes`, `note_folders`, `note_revisions` (per-note version history,
 not in `TABLES`/state — served by dedicated endpoints), `files`, `folders`,
-`shortcuts`, `study_sessions`, `playlists`, `playlist_tracks`, plus the `kv`
-store and FTS5 search tables.
+`shortcuts`, `study_sessions`, `playlists`, `playlist_tracks`, `timers`
+(cross-device timers, not in `TABLES`/state — served by `/api/timer[s]`), plus
+the `kv` store and FTS5 search tables.
 
 ## Adding a feature
 
@@ -131,9 +136,10 @@ feature"):
   never the repo root. Delete any probe files you created before finishing.
 - When verifying UI in the browser preview: take a `preview_snapshot` before
   clicking anything, and switch tabs by clicking the stable selector
-  `#tabs button[data-tab="<name>"]` — don't guess selectors. Verify layout at
-  desktop (1280×800) and mobile (375×812) widths; the mobile layout uses
-  `#bottomNav` and must not regress. Use `/verify-ui` for the full checklist.
+  `#tabs button[data-tab="<name>"]` — the sidebar layout hides these buttons
+  visually but JS `.click()` still works; don't guess selectors. Verify layout
+  at desktop (1280×800) and mobile (375×812) widths. Use `/verify-ui` for the
+  full checklist.
 
 ## refer to user  
 

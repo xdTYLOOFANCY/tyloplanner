@@ -41,6 +41,33 @@ export function toast(msg) {
   document.body.appendChild(t); setTimeout(function() { t.remove(); }, 2500);
 }
 
+// A toast with an Undo button (6s). Shared by planner drag/delete and the
+// generic delRow() below. Only one is shown at a time.
+var _undoAction = null, _undoTimeout = null;
+export function showUndoToast(message, undoCallback) {
+  var existing = document.getElementById("undoToast");
+  if (existing) existing.remove();
+  if (_undoTimeout) clearTimeout(_undoTimeout);
+  _undoAction = undoCallback;
+
+  var el = document.createElement("div");
+  el.id = "undoToast";
+  el.className = "toast";
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.gap = "12px";
+  el.innerHTML = "<span>" + esc(message) + "</span>" +
+    '<button class="btn small" style="padding:2px 8px; font-size:11px; background:var(--accent); color:#fff; border:none; border-radius:4px; cursor:pointer;" onclick="triggerUndo()">Undo</button>';
+  document.body.appendChild(el);
+
+  _undoTimeout = setTimeout(function() { el.remove(); _undoAction = null; }, 6000);
+}
+window.triggerUndo = function() {
+  if (_undoAction) { _undoAction(); _undoAction = null; }
+  var el = document.getElementById("undoToast");
+  if (el) el.remove();
+};
+
 // ---------- dialogs (modal replacements for confirm()/prompt()) ----------
 function openAskDialog(bodyHtml, wire) {
   var dlg = document.createElement("dialog");
@@ -127,7 +154,8 @@ function closeContextMenu() {
 }
 
 // Right-click menu at the event's cursor position.
-// items: [{label, icon, danger, onClick}] or {sep:true}
+// items: [{label, icon, danger, onClick}], {sep:true}, or
+// {swatches:[{color, title, onClick}]} (a row of color dots; color:'' = default)
 export function showContextMenu(ev, items) {
   ev.preventDefault();
   ev.stopPropagation();
@@ -139,6 +167,21 @@ export function showContextMenu(ev, items) {
       var s = document.createElement("div");
       s.className = "ctx-sep";
       m.appendChild(s);
+      return;
+    }
+    if (it.swatches) {
+      var row = document.createElement("div");
+      row.className = "ctx-swatches";
+      it.swatches.forEach(function(sw) {
+        var d = document.createElement("button");
+        d.className = "ctx-swatch" + (sw.color ? "" : " ctx-swatch-default");
+        d.title = sw.title || sw.color || "Default";
+        if (sw.color) d.style.background = sw.color;
+        else d.textContent = "✕";
+        d.addEventListener("click", function() { closeContextMenu(); sw.onClick(); });
+        row.appendChild(d);
+      });
+      m.appendChild(row);
       return;
     }
     var b = document.createElement("button");
@@ -369,9 +412,24 @@ export async function api(method, path, body) {
 }
 
 // ---------- shared actions ----------
+var UNDO_LABELS = {
+  tasks: "Task", notes: "Note", events: "Event", exams: "Exam",
+  workouts: "Workout", study_sessions: "Session", shortcuts: "Shortcut"
+};
 export async function delRow(table, id, refresh) {
+  var row = (S[table] || []).find(function(r) { return r.id === id; });
+  var snapshot = row ? Object.assign({}, row) : null;
   await api("DELETE", "/api/" + table + "/" + id);
   await refresh();
+  if (snapshot) {
+    delete snapshot.id;   // POST assigns a fresh id on restore
+    // ponytail: undo re-creates the row with a new id, so child rows keyed to
+    // the old id (task time-blocks, note revisions) aren't restored. Fine here.
+    showUndoToast((UNDO_LABELS[table] || "Item") + " deleted", async function() {
+      try { await api("POST", "/api/" + table, snapshot); await refresh(); }
+      catch (e) { console.error("Undo delete failed:", e); }
+    });
+  }
 }
 
 /**

@@ -20,7 +20,7 @@ import {
   toggleItem as _toggleItem,
   showDashboardEventDetails
 } from './js/dashboard.js';
-import { renderAnalytics } from './js/analytics.js';
+import { renderAnalytics, populateSubjectList, addStudySession as _addStudySession } from './js/analytics.js';
 import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor, togglePlannerTaskTray } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, saveGradeTarget as _saveGradeTarget, whatIfDialog as _examWhatIf, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu } from './js/exams.js';
 import { addHabit as _addHabit, archiveHabit as _archiveHabit, restoreHabit as _restoreHabit, permanentDeleteHabit as _permanentDeleteHabit, renameHabit as _renameHabit, editHabitFrequency as _editHabitFreq, habitMenu as _habitMenu, toggleHabit as _toggleHabit, toggleHeatmap as _toggleHeatmap, dragHabitStart as _dragHabitStart, dragHabitOver as _dragHabitOver, dragHabitEnd as _dragHabitEnd, dropHabit as _dropHabit, renderHabits } from './js/habits.js';
@@ -73,6 +73,7 @@ import './js/study_timer.js';
 import { renderMusic } from './js/music.js'; // binds its own window.* handlers
 import { initSwipeGestures } from './js/swipe.js';
 import { initPalette, openPalette } from './js/palette.js';
+import { initTimers, openTimerConfig, startTimerFromWidget } from './js/timers.js';
 
 function getActiveTab() {
   const activeBtn = document.querySelector("#tabs button.active");
@@ -103,6 +104,10 @@ function renderAll() {
   Object.keys(tabNeedsRender).forEach(function(t) {
     tabNeedsRender[t] = true;
   });
+
+  // Keep the subject autocomplete fresh for whichever tab uses it (study form,
+  // dashboard timer widget) — cheap and change-guarded.
+  populateSubjectList();
   
   // Render only the active tab immediately
   const activeTab = getActiveTab();
@@ -142,6 +147,7 @@ window.dragHabitOver = function(ev) { _dragHabitOver(ev); };
 window.dragHabitEnd = function(ev) { _dragHabitEnd(ev); };
 window.dropHabit = function(ev, id) { _dropHabit(ev, id, R); };
 window.addWorkout = function() { _addWorkout(R); };
+window.addStudySession = function() { _addStudySession(R); };
 window.saveWorkoutGoal = function(key, val) { _saveWorkoutGoal(key, val, R); };
 window.addTask = function() { _addTask(R); };
 window.toggleTask = function(id, done) { _toggleTask(id, done, R); };
@@ -449,7 +455,10 @@ if (window.innerWidth <= 640) {
 
 initSwipeGestures();
 initPalette();
+initTimers();
 window.openCommandPalette = openPalette;
+window.openTimerConfig = openTimerConfig;
+window.startTimerFromWidget = startTimerFromWidget;
 
 function showPwaUpdateBanner(worker) {
   var banner = document.getElementById("update-banner");

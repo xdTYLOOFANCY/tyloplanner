@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#0f1115">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="js/quill.snow.css">
+<link rel="stylesheet" href="js/quill-table-up.css">
 <link rel="stylesheet" href="js/gridstack.min.css">
 <link rel="stylesheet" href="style.css?v=85">
 <!-- marked + chart are deferred so they don't block HTML parsing; quill.js is
@@ -45,11 +46,12 @@
     <img src="logo.svg" alt="" class="headlogo">
     <h1>TyloPlanner</h1>
     <span class="date header-desktop-only" id="headerDate"></span>
+    <span id="headerTimers" class="header-timers"></span>
   </div>
   <nav id="tabs" class="nav-tabs">
     <button data-tab="dashboard" class="active">Dashboard</button>
-    <button data-tab="analytics">Analytics</button>
     <button data-tab="planner">Planner</button>
+    <button data-tab="analytics">Study</button>
     <button data-tab="exams">Exams &amp; grades</button>
     <button data-tab="habits">Habits</button>
     <button data-tab="workouts">Workouts</button>
@@ -64,6 +66,9 @@
     <button class="btn ghost small" onclick="toggleTheme()" title="Toggle theme">☀ ☾</button>
     <a class="btn ghost small header-desktop-only" id="logoutBtn" href="/logout" style="text-decoration:none" onclick="return confirm('Are you sure you want to log out?')">Log out</a>
   </div>
+  <button class="drawer-btn" id="headerSearchBtn" aria-label="Search" onclick="openCommandPalette()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+  </button>
   <button class="drawer-btn" id="quickAddBtn" aria-label="Quick add" aria-expanded="false" aria-controls="quickAddMenu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
   </button>
@@ -93,6 +98,7 @@
     <img src="logo.svg" alt="" class="headlogo">
     <span class="sidebar-brand-name">TyloPlanner</span>
     <div class="sidebar-date" id="sidebarDate"></div>
+    <div id="sidebarTimers" class="sidebar-timers" aria-live="polite"></div>
     <button class="sidebar-collapse" id="sidebarCollapse" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
@@ -104,16 +110,16 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         <span class="sidebar-label">Dashboard</span>
       </button>
-      <button data-tab="analytics">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="10"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="13"/><line x1="20" y1="20" x2="20" y2="7"/></svg>
-        <span class="sidebar-label">Analytics</span>
-      </button>
     </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">Academic &amp; life</div>
       <button data-tab="planner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         <span class="sidebar-label">Planner</span>
+      </button>
+      <button data-tab="analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h6z"/></svg>
+        <span class="sidebar-label">Study</span>
       </button>
       <button data-tab="exams">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5"/></svg>
@@ -175,9 +181,10 @@
     <div class="dashboard-grid" id="dashCards"></div>
   </section>
 
+  <!-- ponytail: section id stays "analytics" (nav state, TABS, module wiring) — this is the Study tab. -->
   <section id="tab-analytics">
     <div class="analytics-header">
-      <h2 class="pagetitle" style="margin: 0;">Analytics Overview</h2>
+      <h2 class="pagetitle" style="margin: 0;">Study Tracker</h2>
       <select id="analyticsTimeRange" onchange="window.updateAnalyticsTimeRange(this.value)" class="analytics-time-select">
         <option value="6">Last 6 Months</option>
         <option value="12" selected>Last 12 Months</option>
@@ -185,33 +192,20 @@
       </select>
     </div>
 
-    <!-- Bento Box Grid -->
-    <div class="analytics-bento-grid">
-      
-      <!-- Top Row: All-time Totals -->
-      <div style="grid-column: span 12; display: flex; align-items: center; margin-bottom: -8px;">
-        <h3 style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0; font-weight: 600;">All-time Totals</h3>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Log a study session</h3>
+      <div class="formrow">
+        <input id="ssSubject" list="subjectList" placeholder="Subject (e.g. Anatomy)" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')addStudySession()">
+        <datalist id="subjectList"></datalist>
+        <input id="ssDate" type="date" onkeydown="if(event.key==='Enter')addStudySession()">
+        <input id="ssDur" type="number" min="0" step="0.5" placeholder="Minutes" style="width:100px" onkeydown="if(event.key==='Enter')addStudySession()">
+        <input id="ssNote" placeholder="What was studied? (optional)" style="flex:2;min-width:160px" onkeydown="if(event.key==='Enter')addStudySession()">
+        <button class="btn" onclick="addStudySession()">Log</button>
       </div>
-      <div class="analytics-totals-grid" id="aTotalsGrid"></div>
+    </div>
 
-      <!-- Middle Row: Charts -->
-      <div class="bento-item chart-item">
-        <div class="chart-header">
-          <h3>Workout Sessions</h3>
-        </div>
-        <div class="chart-container">
-          <canvas id="chartWorkouts"></canvas>
-        </div>
-      </div>
-      
-      <div class="bento-item chart-item">
-        <div class="chart-header">
-          <h3>Distance (km)</h3>
-        </div>
-        <div class="chart-container">
-          <canvas id="chartDistance"></canvas>
-        </div>
-      </div>
+    <div class="analytics-bento-grid">
+      <div class="analytics-totals-grid" id="aTotalsGrid"></div>
 
       <div class="bento-item chart-item">
         <div class="chart-header">
@@ -224,38 +218,24 @@
 
       <div class="bento-item chart-item">
         <div class="chart-header">
-          <h3>Habit Check-ins</h3>
+          <h3>Hours by Subject</h3>
         </div>
         <div class="chart-container">
-          <canvas id="chartHabits"></canvas>
+          <canvas id="chartSubjects"></canvas>
         </div>
       </div>
 
-      <div class="bento-item chart-item" style="grid-column: span 12">
-        <div class="chart-header">
-          <h3>Training Load (hours/week, last 12 weeks)</h3>
-        </div>
-        <div class="chart-container">
-          <canvas id="chartTrainingLoad"></canvas>
-        </div>
-      </div>
-
-      <!-- Bottom Row: Tables -->
-      <div class="bento-item table-item">
-        <h3>Grades</h3>
-        <div id="aGrades" class="bento-table-wrapper"></div>
-      </div>
-      
-      <div class="bento-item table-item">
-        <h3>Recent Study Sessions</h3>
+      <div class="bento-item table-item" style="grid-column: span 12">
+        <h3>Study Log</h3>
         <div id="aStudySessionsList" class="bento-table-wrapper"></div>
       </div>
-      
     </div>
   </section>
 
   <section id="tab-planner">
     <div class="weeknav">
+      <span class="label" id="weekLabel" title="Jump to date" onclick="var g=document.getElementById('plannerGoToDate'); if(g&&g.showPicker){try{g.showPicker()}catch(e){}}"></span>
+      <div class="weeknav-controls">
       <select id="plannerView" class="btn ghost" onchange="changePlannerView(this.value)">
         <option value="1">Day</option>
         <option value="3">3 Days</option>
@@ -269,7 +249,6 @@
         <button class="btn ghost icon" onclick="moveWeek(1)" aria-label="Next">&#8250;</button>
         <input type="date" id="plannerGoToDate" class="goto-date" onchange="goToDate(this.value)" aria-label="Go to date" title="Jump to date">
       </div>
-      <span class="label" id="weekLabel" title="Jump to date" onclick="var g=document.getElementById('plannerGoToDate'); if(g&&g.showPicker){try{g.showPicker()}catch(e){}}"></span>
       <div class="weeknav-actions">
         <button class="btn ghost header-desktop-only" onclick="window.dispatchEvent(new CustomEvent('open-shortcuts-modal'))">⌨️ Shortcuts</button>
         <button class="btn ghost" id="plannerTaskTrayBtn" onclick="togglePlannerTaskTray()" title="Drag tasks onto the calendar to time-block them">📋 Tasks</button>
@@ -279,6 +258,7 @@
           <input id="plannerSearch" placeholder="🔍  Search events…" oninput="searchEvents()" onfocus="searchEvents()" onblur="hideSearchSoon()" onkeydown="handlePlannerSearchKeydown(event)">
           <div id="plannerSearchResults" class="search-results"></div>
         </div>
+      </div>
       </div>
     </div>
     <div class="planner-task-tray" id="plannerTaskTray" style="display:none"></div>
@@ -322,6 +302,10 @@
       <div style="overflow-x:auto"><table class="habits" id="habitTable"></table></div>
     </div>
     <div id="habitHeatmap"></div>
+    <div class="card chart-item" style="min-height:240px;display:flex;flex-direction:column">
+      <h3 style="margin-bottom:12px">Check-ins (last 12 months)</h3>
+      <div class="chart-container"><canvas id="chartHabits"></canvas></div>
+    </div>
     <div id="habitArchived"></div>
   </section>
 
@@ -349,6 +333,31 @@
       <div class="formrow" id="wGoalsRow" style="margin-top:12px;align-items:center"></div>
     </div>
     <div class="card"><h3>Personal records</h3><div class="wstats" id="wPRs"></div></div>
+    <div class="card">
+      <div class="analytics-header" style="margin-bottom:12px">
+        <h3 style="margin:0">All-time &amp; trends</h3>
+        <select id="workoutsTimeRange" onchange="window.updateWorkoutsTimeRange(this.value)" class="analytics-time-select">
+          <option value="6">Last 6 Months</option>
+          <option value="12" selected>Last 12 Months</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
+      <div class="wstats" id="wAllTime" style="margin-bottom:16px"></div>
+      <div class="analytics-bento-grid" style="margin-bottom:0">
+        <div class="bento-item chart-item">
+          <div class="chart-header"><h3>Workout Sessions</h3></div>
+          <div class="chart-container"><canvas id="chartWorkouts"></canvas></div>
+        </div>
+        <div class="bento-item chart-item">
+          <div class="chart-header"><h3>Distance (km)</h3></div>
+          <div class="chart-container"><canvas id="chartDistance"></canvas></div>
+        </div>
+        <div class="bento-item chart-item" style="grid-column: span 12">
+          <div class="chart-header"><h3>Training Load (hours/week, last 12 weeks)</h3></div>
+          <div class="chart-container"><canvas id="chartTrainingLoad"></canvas></div>
+        </div>
+      </div>
+    </div>
     <div class="card"><h3>History</h3><div id="wList"></div></div>
   </section>
 
@@ -408,6 +417,8 @@
               <button class="btn small ghost" style="padding:4px 8px;font-size:12px;display:flex;align-items:center;gap:4px;" onclick="toggleNoteDownloadMenu(event)" title="Export note" aria-label="Export note">📥 Export</button>
               <div class="dropdown-content" id="noteDownloadMenu">
                 <a href="#" onclick="downloadNoteAs('html'); return false;">📄 Styled HTML (.html)</a>
+                <a href="#" onclick="downloadNoteAs('md'); return false;">⬇️ Markdown (.md)</a>
+                <a href="#" onclick="downloadNoteAs('doc'); return false;">📝 Word (.doc)</a>
                 <a href="#" onclick="downloadNoteAs('print'); return false;">🖨️ Print / PDF</a>
               </div>
             </div>
@@ -521,49 +532,14 @@
 
   <section id="tab-settings">
     <div class="card">
-      <h3>📅 Calendar — export</h3>
-      <p style="font-size:14px;margin-bottom:8px">Subscribe to your TyloPlanner agenda + exams from Google/Apple/Outlook Calendar with this feed URL (it contains a secret key — treat it like a password):</p>
-      <p><code class="url" id="icsUrl"></code> <button class="btn ghost small" onclick="copyIcs()">Copy</button>
-      <a class="btn ghost small" id="icsDownload" href="/calendar.ics" download style="text-decoration:none">Download .ics</a></p>
-      <p class="muted" style="margin-top:8px">Note: external calendar apps can only reach this URL if your server is reachable from the internet.</p>
-    </div>
-    <div class="card">
-      <h3>📅 Calendar — import &amp; sync</h3>
-      <p style="font-size:14px;margin-bottom:14px">Import a local calendar file or paste calendar feed URLs to automatically sync them in the background.</p>
-      
-      <div class="formrow">
-        <input type="file" id="icsFile" accept=".ics">
-        <button class="btn" onclick="importIcsFile()">Import file</button>
-      </div>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
-
-      <p style="font-size:14px;margin-bottom:8px"><b>Auto-sync URLs</b> (one URL per line, e.g. your university timetable or Google Calendar secret address):</p>
-      <textarea id="calSyncUrls" rows="3" style="width:100%" placeholder="https://…/timetable.ics&#10;https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
-      
-      <div class="formrow" style="margin-top:8px">
-        <label class="muted">Sync every</label> <input id="calSyncHours" type="number" min="1" style="width:70px"> <label class="muted">hours</label>
-        <button class="btn" onclick="saveCalSync()">Save</button>
-        <button class="btn ghost" onclick="calSyncNow()">Sync now</button>
-        <span class="muted" id="calSyncMeta"></span>
-      </div>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
-
-      <p style="font-size:14px;margin-bottom:8px"><b>Application Time Zone</b>. If blank, uses the server's local time zone.</p>
+      <h3>🕑 Time zone</h3>
+      <p style="font-size:14px;margin-bottom:8px"><b>Application Time Zone</b>. If blank, uses the server's local time zone. Calendar export, import &amp; sync now live under <b>⚙️ Calendars</b> in the Planner.</p>
       <div class="formrow">
         <select id="appTimezone" style="flex:1;min-width:180px;padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
           <option value="">-- Server Default --</option>
         </select>
         <button class="btn" onclick="saveAppTimezone()">Save timezone</button>
         <button class="btn ghost" onclick="autoSetTimezone()">Auto detect</button>
-      </div>
-
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
-
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span class="muted" style="font-size:13px">Remove all events imported from files or sync URLs:</span>
-        <button class="btn danger small" onclick="clearIcs()">Remove imported events</button>
       </div>
     </div>
     <div class="card">
@@ -955,6 +931,8 @@
                 <option value="30">30m before</option>
                 <option value="60">1h before</option>
                 <option value="120">2h before</option>
+                <option value="1440">1 day before</option>
+                <option value="10080">1 week before</option>
                 <option value="custom">Custom...</option>
               </select>
               
@@ -1130,12 +1108,48 @@
 </footer>
 
   <dialog id="plannerCalendarsModal" class="modal">
-    <div class="modal-content" style="max-width: 400px; width: 90%;">
+    <div class="modal-content" style="max-width: 560px; width: 92%; max-height: 85vh; overflow-y: auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h3 style="margin:0;font-size:16px;">Customize Calendars</h3>
+        <h3 style="margin:0;font-size:16px;">📅 Calendars</h3>
         <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:16px;line-height:1;padding:4px 8px;" aria-label="Close">✕</button>
       </div>
-      <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:12px;"></div>
+
+      <div class="cal-modal-section">
+        <div class="cal-modal-section-title">Show &amp; color</div>
+        <p class="muted" style="font-size:13px;margin:0 0 12px">Toggle which calendars appear and pick their colors.</p>
+        <div id="plannerCalendarsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+
+      <div class="cal-modal-section">
+        <div class="cal-modal-section-title">Export &amp; subscribe</div>
+        <p class="muted" style="font-size:13px;margin:0 0 10px">Subscribe to your agenda + exams from Google/Apple/Outlook with this feed URL (it holds a secret key — treat it like a password), or download a one-off snapshot.</p>
+        <p style="margin:0 0 10px"><code class="url" id="icsUrl"></code></p>
+        <div class="formrow">
+          <button class="btn ghost small" onclick="copyIcs()">Copy feed URL</button>
+          <a class="btn ghost small" id="icsDownload" href="/calendar.ics" download style="text-decoration:none">Download .ics</a>
+        </div>
+        <p class="muted" style="font-size:12px;margin:8px 0 0">External calendar apps can only reach this URL if your server is reachable from the internet.</p>
+      </div>
+
+      <div class="cal-modal-section">
+        <div class="cal-modal-section-title">Import &amp; sync</div>
+        <p class="muted" style="font-size:13px;margin:0 0 12px">Import a local calendar file, or paste feed URLs to auto-sync them in the background.</p>
+        <div class="formrow">
+          <input type="file" id="icsFile" accept=".ics">
+          <button class="btn small" onclick="importIcsFile()">Import file</button>
+        </div>
+        <p style="font-size:13px;margin:14px 0 6px"><b>Auto-sync URLs</b> — one per line (e.g. your university timetable or a Google Calendar secret address):</p>
+        <textarea id="calSyncUrls" rows="3" style="width:100%" placeholder="https://…/timetable.ics&#10;https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
+        <div class="formrow" style="margin-top:8px;align-items:center">
+          <label class="muted">Sync every</label> <input id="calSyncHours" type="number" min="1" style="width:70px"> <label class="muted">hours</label>
+          <button class="btn small" onclick="saveCalSync()">Save</button>
+          <button class="btn ghost small" onclick="calSyncNow()">Sync now</button>
+        </div>
+        <p class="muted" id="calSyncMeta" style="font-size:12px;margin:8px 0 0"></p>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px">
+          <button class="btn danger small" onclick="clearIcs()">Remove imported events</button>
+        </div>
+      </div>
     </div>
   </dialog>
 </body>
