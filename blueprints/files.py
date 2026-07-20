@@ -104,12 +104,15 @@ def delete_folder(fid):
 def move_files():
     data = request.get_json(force=True) or {}
     file_ids = data.get("file_ids", [])
+    if (not isinstance(file_ids, list) or not file_ids or len(file_ids) > 500
+            or not all(isinstance(i, str) for i in file_ids)):
+        return jsonify({"error": "file_ids must be a non-empty list of ids (max 500)"}), 400
     folder_id = data.get("folder_id")
     if folder_id == "":
         folder_id = None
-    if not file_ids:
-        return jsonify({"error": "no file ids provided"}), 400
-    
+    if folder_id is not None and not isinstance(folder_id, str):
+        return jsonify({"error": "folder_id must be a string or null"}), 400
+
     with db(write=True) as con:
         placeholders = ",".join("?" for _ in file_ids)
         con.execute(

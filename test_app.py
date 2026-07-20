@@ -642,6 +642,43 @@ class GuardAuthEnabledTests(unittest.TestCase):
     def test_login_page_reachable(self):
         self.assertEqual(self.c.get("/login").status_code, 200)
 
+    # ---- OAuth init guard: linking a provider mutates stored auth config, so
+    # it must require an authenticated session once setup is complete. /api/oauth
+    # is exempt from the global guard (login must start pre-session), so the
+    # check lives in oauth_init. ----
+    def test_oauth_init_link_unauthenticated_rejected(self):
+        r = self.c.post("/api/oauth/init",
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        json={"provider": "github", "action": "link",
+                              "client_id": "attacker", "client_secret": "secret"})
+        self.assertEqual(r.status_code, 401)
+        # Nothing attacker-supplied got persisted.
+        self.assertIsNone(helpers.kv_get("oauth_github_client_id"))
+
+    def test_oauth_init_link_authenticated_allowed(self):
+        with self.c.session_transaction() as sess:
+            sess["auth"] = True
+            sess["session_id"] = "sess_link"
+        with helpers.db(write=True) as con:
+            con.execute("INSERT INTO user_sessions (id, user_agent, ip_address, active_at) "
+                        "VALUES ('sess_link', 'test', '127.0.0.1', ?)", (int(time.time()),))
+        r = self.c.post("/api/oauth/init",
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        json={"provider": "github", "action": "link",
+                              "client_id": "cid", "client_secret": "csecret"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("github.com/login/oauth/authorize", r.get_json()["url"])
+
+    def test_oauth_init_login_still_works_unauthenticated(self):
+        # The login page starts OAuth *login* before a session exists — the link
+        # guard must not break that path.
+        helpers.kv_set("oauth_github_client_id", "configured_id")
+        r = self.c.post("/api/oauth/init",
+                        headers={"X-Requested-With": "XMLHttpRequest"},
+                        json={"provider": "github", "action": "login"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("client_id=configured_id", r.get_json()["url"])
+
     # ---- calendar feed (key-protected, no cookies) ----
     def test_calendar_feed_requires_key(self):
         self.assertEqual(self.c.get("/calendar.ics").status_code, 403)

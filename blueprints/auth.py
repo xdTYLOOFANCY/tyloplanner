@@ -407,6 +407,13 @@ def oauth_init():
 
     client_id = helpers.kv_get(f"oauth_{provider}_client_id")
     if action == "link":
+        # Linking writes attacker-controllable OAuth config into kv and adds a
+        # login method, so it requires an authenticated session — except during
+        # first-run setup, where there is no account yet and linking is one way
+        # the owner bootstraps auth. /api/oauth is exempt from the global guard
+        # (the login page must start a login pre-session), so gate link here.
+        if helpers.is_auth_setup_complete() and not session.get("auth"):
+            return jsonify({"error": "unauthorized"}), 401
         client_id = data.get("client_id")
         client_secret = data.get("client_secret")
         if not client_id or not client_secret:
