@@ -2,7 +2,7 @@
 
 import { S, habitSet, setHabitEntry, safeRender, syncSilent } from './state.js';
 import { createChart, getPastMonths, noGridOptions, registerChartRerender } from './charts.js';
-import { toISO, todayStr, parseISO, esc, api, DAYS } from './utils.js';
+import { toISO, todayStr, parseISO, esc, api, DAYS, MONTHS } from './utils.js';
 import { weekDates } from './utils.js';
 import { askConfirm, askPrompt, showContextMenu } from './utils.js';
 
@@ -102,6 +102,24 @@ export async function toggleHabit(id, iso) {
   // Absorb our own version bump so the live-sync poll doesn't force a full
   // re-render (dashboard grid rebuild = visible jerk) a few seconds later.
   await syncSilent();
+}
+
+// ----- Week navigation -----
+
+var _weekOff = 0; // 0 = current week, negative = past weeks
+
+export function habitWeekNav(delta) {
+  _weekOff = Math.min(0, _weekOff + delta);
+  renderHabits();
+}
+
+function weekLabel(dates) {
+  var a = dates[0], b = dates[6];
+  var range = a.getDate() + (a.getMonth() !== b.getMonth() ? ' ' + MONTHS[a.getMonth()] : '')
+    + ' – ' + b.getDate() + ' ' + MONTHS[b.getMonth()];
+  if (_weekOff === 0) return 'This week';
+  if (_weekOff === -1) return 'Last week · ' + range;
+  return range;
 }
 
 // ----- Streak calculation -----
@@ -392,12 +410,18 @@ registerChartRerender(renderCheckinsChart);
 
 export function renderHabits() {
   safeRender("habits", function() {
-    var dates = weekDates(0), today = todayStr();
+    var dates = weekDates(_weekOff), today = todayStr();
     var active = S.habits.filter(function(h) { return !h.archived; });
     active.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
 
+    var label = document.getElementById("habitWeekLabel");
+    if (label) label.textContent = weekLabel(dates);
+    var fwd = document.getElementById("habitWeekFwd");
+    if (fwd) fwd.disabled = _weekOff === 0;
+
     var html = '<tr><th style="width:30px"></th><th>Habit</th>';
-    for (var i = 0; i < 7; i++) html += '<th' + (toISO(dates[i]) === today ? ' style="color:var(--accent)"' : '') + '>' + DAYS[i] + '</th>';
+    // Past weeks show day-of-month so it's clear which days you're ticking off
+    for (var i = 0; i < 7; i++) html += '<th' + (toISO(dates[i]) === today ? ' style="color:var(--accent)"' : '') + '>' + DAYS[i] + (_weekOff !== 0 ? ' ' + dates[i].getDate() : '') + '</th>';
     html += '<th>Streak</th><th style="width:36px"></th></tr>';
 
     active.forEach(function(h) {

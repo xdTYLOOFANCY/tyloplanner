@@ -23,7 +23,7 @@ import {
 import { renderAnalytics, populateSubjectList, addStudySession as _addStudySession } from './js/analytics.js';
 import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor, togglePlannerTaskTray } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, saveGradeTarget as _saveGradeTarget, whatIfDialog as _examWhatIf, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu } from './js/exams.js';
-import { addHabit as _addHabit, archiveHabit as _archiveHabit, restoreHabit as _restoreHabit, permanentDeleteHabit as _permanentDeleteHabit, renameHabit as _renameHabit, editHabitFrequency as _editHabitFreq, habitMenu as _habitMenu, toggleHabit as _toggleHabit, toggleHeatmap as _toggleHeatmap, dragHabitStart as _dragHabitStart, dragHabitOver as _dragHabitOver, dragHabitEnd as _dragHabitEnd, dropHabit as _dropHabit, renderHabits } from './js/habits.js';
+import { addHabit as _addHabit, archiveHabit as _archiveHabit, restoreHabit as _restoreHabit, permanentDeleteHabit as _permanentDeleteHabit, renameHabit as _renameHabit, editHabitFrequency as _editHabitFreq, habitMenu as _habitMenu, toggleHabit as _toggleHabit, toggleHeatmap as _toggleHeatmap, habitWeekNav as _habitWeekNav, dragHabitStart as _dragHabitStart, dragHabitOver as _dragHabitOver, dragHabitEnd as _dragHabitEnd, dropHabit as _dropHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts, saveWorkoutGoal as _saveWorkoutGoal } from './js/workouts.js';
 import {
   addTask as _addTask, toggleTask as _toggleTask, renderTasks, addSubtask as _addSubtask,
@@ -142,6 +142,7 @@ window.permanentDeleteHabit = function(id) { _permanentDeleteHabit(id, R); };
 window.habitMenu = function(ev, id) { _habitMenu(ev, id, R); };
 window.toggleHabit = function(id, iso) { _toggleHabit(id, iso); };
 window.toggleHeatmap = function(id) { _toggleHeatmap(id); };
+window.habitWeekNav = function(d) { _habitWeekNav(d); };
 window.dragHabitStart = function(ev, id) { _dragHabitStart(ev, id); };
 window.dragHabitOver = function(ev) { _dragHabitOver(ev); };
 window.dragHabitEnd = function(ev) { _dragHabitEnd(ev); };

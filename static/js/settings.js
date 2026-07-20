@@ -50,8 +50,12 @@ export function renderSettings(refresh) {
   renderNotifySettings();
   renderSecurity();
   if (SET) {
-    setVal("appThemeStyle", SET.app_theme_style || "default");
-    setVal("accentColor", SET.accent_color);
+    var localStyle = null;
+    try { localStyle = localStorage.getItem("tylo-theme-style"); } catch (e) {}
+    setVal("appThemeStyle", localStyle || SET.app_theme_style || "default");
+    // No custom accent saved → show the active theme's accent in the picker.
+    setVal("accentColor", SET.accent_color ||
+      getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4f8cff");
     setVal("navLayout", SET.nav_layout || "topbar");
   }
   applyThemeStyleFromSettings(SET);
@@ -105,11 +109,13 @@ export async function toggleTabPersistence(refresh) {
 
 export async function saveAppThemeStyle(refresh) {
   var value = document.getElementById("appThemeStyle").value;
+  // Apply + persist for this device first (instant preview, localStorage),
+  // then store server-side only as the default for devices without a choice.
+  applyThemeStyle(value);
+  toast("Theme applied on this device");
   await api("POST", "/api/settings", {
     app_theme_style: value
   });
-  applyThemeStyle(value);
-  toast("Theme style saved");
   await refresh();
 }
 
@@ -134,12 +140,13 @@ export async function saveAccentColor(refresh) {
 }
 
 export async function resetAccentColor(refresh) {
-  var value = "#4f8cff";
+  // Clear the custom accent entirely so the active theme's own accent shows
+  // (resetting to a hardcoded blue looked wrong on claude/glow/nord/paper).
+  applyAccentFromSettings(null);
   await api("POST", "/api/settings", {
-    accent_color: value
+    accent_color: ""
   });
-  applyAccent(value);
-  toast("Accent color reset");
+  toast("Accent now follows the theme");
   await refresh();
 }
 

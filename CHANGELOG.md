@@ -2,6 +2,81 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.41.0 — 2026-07-20
+
+- **Three new themes: OLED Black, Nord, and Paper.** OLED Black is pure
+  black for OLED screens (great as a phone theme), Nord is the calm
+  blue-gray palette from nordtheme.com, and Paper is a warm parchment look
+  with serif headings and flat, shadowless cards. All three support dark
+  and light mode.
+- **Themes are now per device.** The App Theme Style is saved on each
+  device, so your phone and desktop can run different themes (e.g. OLED
+  Black on your phone, Claude on your desktop). The synced setting only
+  acts as the starting default for new devices.
+- **Theme switching is instant.** Picking a style from the dropdown applies
+  it immediately — no more separate "Save style" button.
+- **No more theme flash on page load.** The chosen theme style and
+  dark/light mode are applied before first paint; previously every page
+  load briefly showed the stock blue theme before snapping to yours.
+- **"Use theme accent" reset.** Resetting the accent color now hands
+  control back to the active theme's own accent (Claude's orange, Glow's
+  cyan, …) instead of forcing the stock blue. Custom accents now also
+  recolor themed glows and tints correctly on every theme.
+
+## 1.40.1 — 2026-07-20
+
+- **Theme audit: all six app themes fixed and made consistent.**
+  - *Glow (Neon):* dashboard widgets align again — the theme was overriding
+    the positioning of every grid widget, scattering the layout. Modals,
+    dropdowns, toasts, the sidebar, and the dashboard customizer drawer now
+    get the same frosted-glass blur as cards (they were see-through before),
+    and scrollbars match the neon accent.
+  - *Glass:* cards no longer grow a phantom scroll area, modal bottom-sheets
+    scroll again on mobile, and the sidebar/top nav/dropdowns/toasts are now
+    glass too. The page background gets a soft ambient color wash so the
+    blur is actually visible.
+  - *Cyberpunk:* the sidebar, dropdown menus, toasts, and customizer drawer
+    now follow the black/square terminal aesthetic instead of staying on the
+    default blue-gray palette; sidebar items use the monospace font.
+  - *Material:* inputs, buttons, and list items are consistently rounded and
+    the active nav tab gets the accent-tinted pill treatment.
+  - *Claude / Default:* unchanged.
+
+## 1.40.0 — 2026-07-20
+
+- **Habits: check off past weeks.** The habits table now has ‹ › week
+  navigation, so forgetting to tick a habit before the week rolled over no
+  longer leaves a permanent gap — go back to any previous week and check the
+  day you actually did it. Past weeks show day-of-month in the column headers;
+  streaks and the consistency heatmap update as soon as a gap is filled.
+
+## 1.39.3 — 2026-07-20
+
+- **Security: block unauthenticated OAuth provider linking.** The
+  `/api/oauth/init` "link" action — which stores an OAuth client id/secret and
+  registers a sign-in method — could be called without being logged in on an
+  already-set-up instance, letting a network attacker add their own account as
+  a valid login. Linking now requires an authenticated session (first-run setup,
+  where there is no account yet, is unchanged). Only reachable if your instance
+  is exposed beyond localhost.
+- **Hardening: `/api/files/move` now validates its input** (non-empty list of
+  string ids, max 500, string-or-null folder), matching `/api/notes/move`.
+
+## 1.39.2 — 2026-07-19
+
+- **Fixed: the first-run account setup screen now actually exists.** Fresh
+  installs without `AUTH_PASSWORD` have been redirected to `/setup` since
+  account creation moved into the app, but the page itself
+  (`static/setup.html` + `static/js/setup.js`) was missing, so new installs
+  hit a 500 error. The first visit now shows a *Welcome to TyloPlanner*
+  screen to pick a username and password (min. 4 characters, stored hashed
+  in the database) and signs you in directly. Setting `AUTH_PASSWORD` in
+  `.env` still works as before and skips the screen.
+- **Docs: install guide and README rewritten around in-browser account
+  setup.** No more generating or editing passwords in `.env`;
+  `.env.example` no longer pre-fills a placeholder password (which would
+  have silently skipped the setup screen).
+
 ## 1.39.1 — 2026-07-18
 
 - **Fixed: the dashboard's *Today's Plan* now shows recurring and multi-day

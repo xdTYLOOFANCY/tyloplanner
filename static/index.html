@@ -31,6 +31,11 @@
   document.documentElement.setAttribute("data-nav-layout", l);
   document.body.setAttribute("data-nav-layout", l);
   if (localStorage.getItem("tylo-sidebar-collapsed") === "1") document.body.classList.add("sidebar-collapsed");
+  /* Same for dark/light and the theme style (both per-device), so users on a
+     non-default theme never see the stock blue theme flash in. */
+  document.documentElement.setAttribute("data-theme", localStorage.getItem("tylo-theme") === "light" ? "light" : "dark");
+  var ts = localStorage.getItem("tylo-theme-style");
+  if (ts) document.documentElement.setAttribute("data-theme-style", ts);
 }catch(e){}})();
 </script>
 <div id="offline-banner" class="offline-banner" style="display: none;"></div>
@@ -298,6 +303,11 @@
           <option value="1">1×/week</option>
         </select>
         <button class="btn" onclick="addHabit()">Add habit</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:10px 0 4px">
+        <button class="btn ghost small" onclick="habitWeekNav(-1)" title="Previous week">‹</button>
+        <span id="habitWeekLabel" class="muted" style="font-size:13px;min-width:80px;text-align:center">This week</span>
+        <button class="btn ghost small" id="habitWeekFwd" onclick="habitWeekNav(1)" title="Next week" disabled>›</button>
       </div>
       <div style="overflow-x:auto"><table class="habits" id="habitTable"></table></div>
     </div>
@@ -583,16 +593,19 @@
       <div style="margin-bottom:16px;">
         <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">App Theme Style</label>
         <div style="display:flex;gap:8px;">
-          <select id="appThemeStyle" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
+          <select id="appThemeStyle" onchange="saveAppThemeStyle()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
             <option value="default">Default</option>
             <option value="glass">Glass</option>
             <option value="cyberpunk">Cyberpunk</option>
             <option value="material">Material</option>
             <option value="glow">Glow (Neon/Glass)</option>
             <option value="claude">Claude</option>
+            <option value="oled">OLED Black</option>
+            <option value="nord">Nord</option>
+            <option value="paper">Paper</option>
           </select>
-          <button class="btn" onclick="saveAppThemeStyle()">Save style</button>
         </div>
+        <p class="muted" style="font-size:12px;margin-top:6px">Applies instantly and is saved per device — your phone and desktop can each use a different theme.</p>
       </div>
       <div style="margin-bottom:16px;">
         <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Navigation layout</label>
@@ -610,7 +623,7 @@
       <div class="formrow">
         <input type="color" id="accentColor" style="width:60px;height:36px;padding:0;border:none;background:none;cursor:pointer">
         <button class="btn" onclick="saveAccentColor()">Save accent color</button>
-        <button class="btn ghost" onclick="resetAccentColor()">Reset</button>
+        <button class="btn ghost" onclick="resetAccentColor()">Use theme accent</button>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
       <div style="display:flex;align-items:center;justify-content:space-between">

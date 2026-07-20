@@ -18,6 +18,11 @@ export function applyAccent(hexColor) {
   var g = parseInt(hexColor.slice(3, 5), 16) / 255;
   var b = parseInt(hexColor.slice(5, 7), 16) / 255;
 
+  // Themes paint glows/tints with rgba(var(--accent-rgb), …) — keep it in
+  // sync or a custom accent leaves them on the theme's original color.
+  document.documentElement.style.setProperty('--accent-rgb',
+    Math.round(r * 255) + ', ' + Math.round(g * 255) + ', ' + Math.round(b * 255));
+
   var max = Math.max(r, g, b), min = Math.min(r, g, b);
   var h, s, l = (max + min) / 2;
 
@@ -69,17 +74,31 @@ export function applyAccent(hexColor) {
 export function applyAccentFromSettings(set) {
   if (set && set.accent_color) {
     applyAccent(set.accent_color);
+  } else {
+    // No custom accent saved: drop the inline overrides so the active
+    // theme's own accent shows (also un-sticks other devices after a reset).
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--accent2');
+    document.documentElement.style.removeProperty('--accent-rgb');
   }
 }
 
 export function applyThemeStyle(style) {
-  document.documentElement.setAttribute("data-theme-style", style || "default");
+  var v = style || "default";
+  document.documentElement.setAttribute("data-theme-style", v);
+  // Cache for the pre-paint boot script in index.html (avoids theme flash),
+  // and as this device's own choice — theme style is per-device.
+  try { localStorage.setItem("tylo-theme-style", v); } catch (e) {}
   window.dispatchEvent(new CustomEvent("theme-changed"));
 }
 
 export function applyThemeStyleFromSettings(set) {
-  var style = (set && set.app_theme_style) ? set.app_theme_style : "default";
-  applyThemeStyle(style);
+  // Per-device: a theme picked on this device (localStorage) wins over the
+  // synced server setting, so phone and desktop can each run their own theme.
+  // The server value is only the default for devices that never chose one.
+  var local = null;
+  try { local = localStorage.getItem("tylo-theme-style"); } catch (e) {}
+  applyThemeStyle(local || (set && set.app_theme_style) || "default");
 }
 
 export function applyNavLayout(layout) {

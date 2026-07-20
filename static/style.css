@@ -2309,40 +2309,81 @@ body.dark .drop-overlay {
 }
 
 /* Glassmorphism Theme */
+/* Accent tint lives in the background layers (never position/overflow
+   overrides — those fight gridstack's absolutely-positioned dashboard
+   widgets and made oversized ::before layers scrollable inside cards). */
 [data-theme-style="glass"] .card {
-  background: rgba(24, 27, 34, 0.55) !important;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(var(--accent-rgb), 0.07), transparent 65%),
+    rgba(24, 27, 34, 0.55) !important;
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
-  position: relative;
-  overflow: hidden;
 }
 
 [data-theme="light"][data-theme-style="glass"] .card {
-  background: rgba(255, 255, 255, 0.6) !important;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(var(--accent-rgb), 0.05), transparent 65%),
+    rgba(255, 255, 255, 0.6) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06) !important;
 }
 
-[data-theme-style="glass"] .card::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.07) 0%, transparent 60%);
-  pointer-events: none;
-  z-index: 0;
+/* Soft ambient color behind everything so the glass blur has something to
+   refract — a flat background made the theme look identical to default. */
+[data-theme-style="glass"] body {
+  background:
+    radial-gradient(1100px circle at 12% -8%, rgba(var(--accent-rgb), 0.16), transparent 55%),
+    radial-gradient(900px circle at 105% 15%, color-mix(in srgb, var(--accent2) 13%, transparent), transparent 55%),
+    var(--bg);
 }
 
-[data-theme-style="glass"] .card > * {
-  position: relative;
-  z-index: 1;
+[data-theme-style="glass"] .sidebar,
+[data-theme-style="glass"] .top-nav-container,
+[data-theme-style="glass"] .dropdown-content,
+[data-theme-style="glass"] .toast,
+[data-theme-style="glass"] .customizer-drawer,
+[data-theme-style="glass"] .planner-search .search-results {
+  background: rgba(24, 27, 34, 0.6);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+
+[data-theme="light"][data-theme-style="glass"] .sidebar,
+[data-theme="light"][data-theme-style="glass"] .top-nav-container,
+[data-theme="light"][data-theme-style="glass"] .dropdown-content,
+[data-theme="light"][data-theme-style="glass"] .toast,
+[data-theme="light"][data-theme-style="glass"] .customizer-drawer,
+[data-theme="light"][data-theme-style="glass"] .planner-search .search-results {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* Minimalist Cyberpunk Theme */
+/* Surface tokens go black/square so var-driven chrome the per-element rules
+   below don't reach (sidebar, dropdowns, toasts, customizer drawer) matches. */
+[data-theme-style="cyberpunk"] {
+  --panel: #000000;
+  --panel2: #0d0d0d;
+  --border: #262626;
+  --radius: 0px;
+}
+
+[data-theme="light"][data-theme-style="cyberpunk"] {
+  --panel: #ffffff;
+  --panel2: #f0f2f5;
+  --border: #d5d9e0;
+}
+
+[data-theme-style="cyberpunk"] .sidebar button[data-tab],
+[data-theme-style="cyberpunk"] .sidebar-action,
+[data-theme-style="cyberpunk"] .sidebar-group-label,
+[data-theme-style="cyberpunk"] .sidebar-brand-name {
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  border-radius: 0;
+  letter-spacing: 0.04em;
+}
+
 [data-theme-style="cyberpunk"] .card {
   background: #000000 !important;
   border: 1px solid var(--accent) !important;
@@ -2689,6 +2730,23 @@ body.dark .drop-overlay {
   font-weight: 700;
 }
 
+[data-theme-style="material"] .btn,
+[data-theme-style="material"] input,
+[data-theme-style="material"] select,
+[data-theme-style="material"] textarea {
+  border-radius: 10px;
+}
+
+[data-theme-style="material"] .list-item {
+  border-radius: 12px;
+}
+
+[data-theme-style="material"] .nav-tabs button.active,
+[data-theme-style="material"] .sidebar button[data-tab].active {
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent);
+}
+
 /* Customize drawer: fixed panel sliding in from the right; on phones it
    becomes a full-width bottom sheet. All edits autosave — no footer buttons. */
 .customizer-drawer {
@@ -2931,38 +2989,24 @@ body.dark .drop-overlay {
 
 /* Modals Theming to match dashboard themes */
 
-/* Glassmorphism theme style for modals */
+/* Glassmorphism theme style for modals (accent tint as a background layer —
+   a position/overflow override here broke mobile bottom-sheet scrolling) */
 [data-theme-style="glass"] .modal-content {
-  background: rgba(24, 27, 34, 0.75) !important;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(var(--accent-rgb), 0.08), transparent 65%),
+    rgba(24, 27, 34, 0.75) !important;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4) !important;
-  position: relative;
-  overflow: hidden;
 }
 
 [data-theme="light"][data-theme-style="glass"] .modal-content {
-  background: rgba(255, 255, 255, 0.85) !important;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(var(--accent-rgb), 0.05), transparent 65%),
+    rgba(255, 255, 255, 0.85) !important;
   border: 1px solid rgba(255, 255, 255, 0.5) !important;
   box-shadow: 0 20px 50px rgba(31, 38, 135, 0.12) !important;
-}
-
-[data-theme-style="glass"] .modal-content::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(var(--accent-rgb), 0.08) 0%, transparent 60%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-[data-theme-style="glass"] .modal-content > * {
-  position: relative;
-  z-index: 1;
 }
 
 [data-theme-style="glass"] .modal-content input,
@@ -3559,6 +3603,9 @@ body.dark .drop-overlay {
   --orange: #ffb800;
   --red: #ff3366;
   --radius: 16px;
+  --scrollbar-thumb: rgba(0, 240, 255, 0.25);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: var(--accent);
 }
 
 [data-theme="light"][data-theme-style="glow"] {
@@ -3574,6 +3621,9 @@ body.dark .drop-overlay {
   --green: #00c066;
   --orange: #e69d00;
   --red: #e02452;
+  --scrollbar-thumb: rgba(0, 136, 255, 0.3);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: var(--accent);
 }
 
 [data-theme="light"][data-theme-style="glow"] .top-nav-container {
@@ -3626,12 +3676,13 @@ body.dark .drop-overlay {
   box-shadow: 0 0 8px rgba(224, 36, 82, 0.3);
 }
 
-[data-theme="light"][data-theme-style="glow"] .card:first-child::before {
-  background: radial-gradient(circle at bottom right, rgba(0, 136, 255, 0.1), transparent 60%),
-              radial-gradient(circle at top left, rgba(217, 0, 108, 0.08), transparent 60%);
-}
-
+/* Ambient corner glows live in the background layers (never position/overflow
+   overrides — those broke gridstack's absolutely-positioned dashboard widgets). */
 [data-theme-style="glow"] .card {
+  background:
+    radial-gradient(circle at bottom right, rgba(var(--accent-rgb), 0.10), transparent 55%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--accent2) 9%, transparent), transparent 55%),
+    var(--panel);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
@@ -3705,24 +3756,27 @@ body.dark .drop-overlay {
   box-shadow: 0 0 10px rgba(255, 51, 102, 0.5);
 }
 
-/* Welcome Card ambient glow */
-[data-theme-style="glow"] .card:first-child {
-  position: relative;
-  overflow: hidden;
+/* Floating surfaces: --panel/--panel2 are translucent in glow, so anything
+   that overlays other content needs the same frosted blur the cards get —
+   otherwise modals/dropdowns/toasts are see-through and unreadable. */
+[data-theme-style="glow"] .modal-content,
+[data-theme-style="glow"] .dropdown-content,
+[data-theme-style="glow"] .toast,
+[data-theme-style="glow"] .customizer-drawer,
+[data-theme-style="glow"] .planner-search .search-results,
+[data-theme-style="glow"] .sidebar {
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
-[data-theme-style="glow"] .card:first-child::before {
-  content: '';
-  position: absolute;
-  top: -50%; left: -50%;
-  width: 200%; height: 200%;
-  background: radial-gradient(circle at bottom right, rgba(0, 240, 255, 0.15), transparent 60%),
-              radial-gradient(circle at top left, rgba(255, 0, 127, 0.1), transparent 60%);
-  pointer-events: none;
-  z-index: 0;
+
+[data-theme-style="glow"] .modal-content {
+  background: rgba(15, 18, 25, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
-[data-theme-style="glow"] .card:first-child > * {
-  position: relative;
-  z-index: 1;
+
+[data-theme="light"][data-theme-style="glow"] .modal-content {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 /* Analytics Bento Box Grid */
@@ -4471,6 +4525,135 @@ main { view-transition-name: main-content; }
   background: #fdf9f6;
   border-color: #d97757;
   color: #1a1917;
+}
+
+/* =========================================
+   OLED Black Theme
+   Pure #000 background for OLED displays: near-black panels, hairline
+   borders, no shadows (invisible on true black anyway). Accent inherited.
+   ========================================= */
+
+[data-theme-style="oled"] {
+  --bg: #000000;
+  --panel: #0a0a0a;
+  --panel2: #161616;
+  --border: #222222;
+  --text: #e8e8e8;
+  --muted: #7d7d7d;
+  --scrollbar-thumb: #2a2a2a;
+  --scrollbar-track: transparent;
+}
+
+[data-theme-style="oled"] .card {
+  box-shadow: none;
+}
+
+/* Light mode: flat pure white, mirroring the flat black */
+[data-theme="light"][data-theme-style="oled"] {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel2: #f4f4f4;
+  --border: #e2e2e2;
+  --text: #111111;
+  --muted: #737373;
+  --scrollbar-thumb: #d4d4d4;
+}
+
+/* =========================================
+   Nord Theme
+   The Nord palette (nordtheme.com): polar-night surfaces with frost
+   accents in dark mode, snow-storm surfaces in light mode.
+   ========================================= */
+
+[data-theme-style="nord"] {
+  --bg: #2e3440;
+  --panel: #3b4252;
+  --panel2: #434c5e;
+  --border: #4c566a;
+  --text: #eceff4;
+  --muted: #94a3bc;
+  --accent: #88c0d0;
+  --accent2: #81a1c1;
+  --accent-rgb: 136, 192, 208;
+  --green: #a3be8c;
+  --orange: #d08770;
+  --red: #bf616a;
+  --radius: 10px;
+  --scrollbar-thumb: #4c566a;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: #88c0d0;
+}
+
+[data-theme="light"][data-theme-style="nord"] {
+  --bg: #eceff4;
+  --panel: #ffffff;
+  --panel2: #e5e9f0;
+  --border: #d8dee9;
+  --text: #2e3440;
+  --muted: #616e88;
+  --accent: #5e81ac;
+  --accent2: #81a1c1;
+  --accent-rgb: 94, 129, 172;
+  --green: #7d9d5f;
+  --orange: #c17a45;
+  --red: #bf616a;
+  --scrollbar-thumb: #d8dee9;
+  --scrollbar-thumb-hover: #5e81ac;
+}
+
+/* =========================================
+   Paper Theme
+   Ink on paper: warm parchment surfaces, serif headings, flat cards with
+   plain borders instead of shadows. Dark mode is warm ink-on-slate.
+   ========================================= */
+
+[data-theme-style="paper"] {
+  --bg: #211e19;
+  --panel: #2a2620;
+  --panel2: #332e27;
+  --border: #403a2f;
+  --text: #e9e2d2;
+  --muted: #a19680;
+  --accent: #c9a86a;
+  --accent2: #a67c52;
+  --accent-rgb: 201, 168, 106;
+  --green: #7d9d72;
+  --orange: #c98f4e;
+  --red: #c05b45;
+  --radius: 8px;
+  --scrollbar-thumb: #403a2f;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb-hover: #c9a86a;
+}
+
+[data-theme="light"][data-theme-style="paper"] {
+  --bg: #f4efe4;
+  --panel: #fdfaf2;
+  --panel2: #ece5d5;
+  --border: #ddd3bd;
+  --text: #3a3325;
+  --muted: #857b66;
+  --accent: #8a6d3b;
+  --accent2: #6e5631;
+  --accent-rgb: 138, 109, 59;
+  --green: #5f7d54;
+  --orange: #b07c3a;
+  --red: #a84b32;
+  --scrollbar-thumb: #d8cdb4;
+  --scrollbar-thumb-hover: #8a6d3b;
+}
+
+[data-theme-style="paper"] .card h3,
+[data-theme-style="paper"] h2.pagetitle,
+[data-theme-style="paper"] .nav-brand h1,
+[data-theme-style="paper"] .sidebar-brand-name,
+[data-theme-style="paper"] .modal-content h2,
+[data-theme-style="paper"] .modal-content h3 {
+  font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+}
+
+[data-theme-style="paper"] .card {
+  box-shadow: none;
 }
 
 /* 4 ── High-contrast accessibility override */

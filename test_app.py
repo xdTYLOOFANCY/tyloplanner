@@ -996,7 +996,8 @@ class SettingsTests(unittest.TestCase):
         r = self.c.get("/api/settings")
         self.assertEqual(r.status_code, 200)
         j = r.get_json()
-        self.assertEqual(j["accent_color"], "#4f8cff")
+        # Empty = no custom accent (the active theme's accent applies).
+        self.assertEqual(j["accent_color"], "")
         self.assertEqual(j["persist_active_tab"], "1")
 
     def test_settings_update(self):

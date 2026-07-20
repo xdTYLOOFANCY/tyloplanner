@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.39.1"
+VERSION = "1.41.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -549,7 +549,9 @@ SETTING_DEFAULTS = {
     "notify_exam_days": "7,3,1",
     "cal_sync_urls": "",
     "cal_sync_hours": "6",
-    "accent_color": "#4f8cff",
+    # Empty = no custom accent: the frontend then uses the active theme's own
+    # accent. (A hex default here would force stock blue over every theme.)
+    "accent_color": "",
     "show_shortcuts": "1",
     "show_shortcuts_mobile": "0",
     "shortcut_order": "",
