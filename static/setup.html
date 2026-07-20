@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome — TyloPlanner</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1115">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="loginwrap">
+  <form class="card loginbox" id="formSetup">
+    <img src="logo.svg" alt="TyloPlanner" class="loginlogo">
+    <h1 class="logintitle">Welcome to TyloPlanner</h1>
+    <p class="muted" style="margin-bottom:18px">Create your account to get started</p>
+    <div id="setupError" class="loginerror" style="display:none"></div>
+    <input name="username" placeholder="Username" autocomplete="username" autofocus>
+    <input name="password" type="password" placeholder="Password (min. 4 characters)" autocomplete="new-password">
+    <input name="password2" type="password" placeholder="Repeat password" autocomplete="new-password">
+    <button class="btn" type="submit">Create account</button>
+    <p class="muted" style="font-size:11px;margin-top:16px;text-align:center">
+      Stored only in your own database. Change it any time under
+      <b>Settings&nbsp;→&nbsp;Security</b>.
+    </p>
+  </form>
+</div>
+<script src="js/setup.js"></script>
+</body>
+</html>

@@ -930,7 +930,7 @@ def get_rendered_file(filename):
     
     version = get_asset_version()
     
-    if filename in ("index.html", "login.html"):
+    if filename in ("index.html", "login.html", "setup.html"):
         pattern = r'(href|src)="((?!https?://|//)[^"]+\.(?:css|js))(?:\?v=[^"]*)?"'
         content = re.sub(pattern, rf'\1="\2?v={version}"', content)
     elif filename == "sw.js":

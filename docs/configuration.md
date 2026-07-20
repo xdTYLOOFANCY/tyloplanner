@@ -8,8 +8,8 @@ the app under **Settings** and stored in the database.
 
 | Variable | Default | Description |
 |---|---|---|
-| `AUTH_USERNAME` | `admin` | Login username. |
-| `AUTH_PASSWORD` | *(empty)* | Login password. **If empty, the app runs without a login screen** — fine on a private laptop, dangerous anywhere else. |
+| `AUTH_USERNAME` | `admin` | Optional. Only used together with `AUTH_PASSWORD` (see below); normally you pick your username on the in-app setup screen. |
+| `AUTH_PASSWORD` | *(empty)* | Optional. Normally left empty: **the first visit shows a setup screen** where you create your account in the browser. If set, it is imported as your account on first run and the setup screen is skipped (legacy behavior). |
 | `SECRET_KEY` | auto-generated | Key used to sign session cookies. Generated and stored in the database on first run; set it explicitly only if you want sessions to survive a database reset. |
 | `APP_URL` | `http://localhost:8000` | Public URL of your instance. Used to build the calendar feed URL and the Strava OAuth redirect — set it to your real address when hosting on a server or domain. |
 | `PORT` | `8000` | Port the server listens on. |
@@ -22,7 +22,7 @@ Apply changes with `docker compose up -d --build`.
 ## Authentication
 
 - **Password Hashing:** Passwords are hashed using the strong `scrypt` algorithm and stored in the database.
-- **Initial Setup:** The environment variable `AUTH_PASSWORD` serves as the initial password setup (bootstrapped into the database on first run).
+- **Initial Setup:** on a fresh install, the first visit redirects to a `/setup` screen where you pick a username and password in the browser; you're signed in immediately after. Alternatively, `AUTH_USERNAME`/`AUTH_PASSWORD` in `.env` are bootstrapped into the database on first run and skip that screen.
 - **Password Management:** You can change your password directly in the application under **Settings → Security** using the "Change Password" form. Once changed, the password stored in the database is used instead of the environment variable.
   - **Emergency Password Reset:** If you are locked out, you can reset your password directly from the host terminal:
     ```bash

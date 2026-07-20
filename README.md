@@ -57,18 +57,15 @@ Requires [Docker](https://docs.docker.com/engine/install/) with the compose plug
 git clone https://github.com/xdTYLOOFANCY/tyloplanner.git
 cd tyloplanner
 cp .env.example .env
-nano .env                   # set AUTH_PASSWORD to your own password here
 docker compose up -d --build
 ```
 
-Open **http://localhost:8000** and sign in:
+Open **http://localhost:8000** — the first visit shows a **setup screen**
+where you create your account (username + password, stored hashed in your
+own database). Change either later under **Settings → Security**.
 
-- **Username:** `admin` (that's the `AUTH_USERNAME` default in `.env`)
-- **Password:** whatever you set as `AUTH_PASSWORD` in `.env`
-
-Forgot what you set? Your credentials are always visible with
-`grep AUTH_ .env`. To change them, edit `.env` and run
-`docker compose up -d --build` again.
+Forgot your password? Reset it from the terminal:
+`docker compose exec tyloplanner python app.py --reset-password "new-password"`.
 
 Installing on a real server? The **[install guide](docs/install.md)** has a
 one-command setup for Ubuntu, plus HTTPS and VPN options.
