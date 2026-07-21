@@ -465,7 +465,11 @@ applyTheme();
 
 // Restore active tab. When the last tab isn't being persisted, fall back to the
 // user's chosen landing tab (mirrored from the server setting).
-var savedTab = localStorage.getItem("active_tab") || localStorage.getItem("tylo-default-tab");
+// Pop-out player window (/?player=1) always boots straight into Music; the rest
+// of the chrome is hidden by .player-mode, so no other tab is reachable.
+var playerMode = document.body.classList.contains("player-mode");
+if (playerMode) document.title = "Music — TyloPlanner";
+var savedTab = playerMode ? "music" : (localStorage.getItem("active_tab") || localStorage.getItem("tylo-default-tab"));
 if (savedTab) {
   var btn = document.querySelector("#tabs button[data-tab='" + savedTab + "']");
   if (btn) {

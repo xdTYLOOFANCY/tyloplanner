@@ -376,6 +376,33 @@ can't leak upward.
   (`@media (max-width: 640px)`) sizes its own enlarged controls (46px buttons,
   58px play, 6px seek) and adds `padding-bottom: env(safe-area-inset-bottom)` so
   the seek row clears the iPhone home indicator — keep both when editing it.
+- **Music tab layout (`static/js/music.js`).** A Spotify-style three-pane
+  `.music-shell`: `#musicSidebar` (Your Library — Songs / Recently added /
+  playlists), `#musicMain` (a colored `#musicHero` + `#musicTracklist`), and
+  `#musicQueue` (Now playing + Next up). A single `view` object
+  (`{kind:'songs'|'recent'|'playlist', id?}`) drives what the main pane shows;
+  there are no more Library/Playlists/Queue sub-tabs. Below 1000px the queue
+  folds into a right drawer and below 720px the sidebar folds into a left
+  drawer, both toggled by buttons in the sub-bar (`.queue-toggle` /
+  `.lib-toggle`) with a shared `.music-scrim`; the same DOM just reflows via CSS.
+  The search box and sort `<select>` are **static** in the sub-bar (index.html),
+  never re-rendered — `musicSearchInput`/`musicSetSort` repaint only the hero +
+  track list, so live-sync's `renderMusic()` can never eat a keystroke or a
+  mid-drag reorder (guarded by the `dragging` flag). The queue "Next up" rows
+  carry a **local** `data-idx` for the drag handler but bake the **absolute**
+  queue index into their `onclick`; keep that split or reorder/jump desync.
+  Per-playlist hero colors come from a hash of the playlist id (`hashHue`).
+- **Pop-out music window.** The "Pop out" button in the Music tab (in the
+  library sidebar head) opens the same app at `/?player=1`; the inline boot
+  script adds `body.player-mode`, which strips the chrome down to just the
+  Music tab + player bar (see `.player-mode` in `style.css`), and `app.js`
+  forces the Music tab active.
+  Because each browser tab owns a separate `<audio>` element, the pop-out
+  *takes over* playback rather than mirroring it — a `BroadcastChannel`
+  (`tylo-music`, in `music.js`) carries the hand-off: the main window pauses,
+  hides its bar, and shows a "playing in the pop-out" hint; "Bring it back
+  here" ships the state back and closes the pop-out. Presence is rediscovered
+  via a `ping`/`player-open` exchange, so a reloaded main window still yields.
 - **Verify both widths.** After any UI change, check it at ~375px *and* at
   desktop width before calling it done.
 - **Command palette (`static/js/palette.js`).** `Ctrl`/`Cmd`+`K` search over

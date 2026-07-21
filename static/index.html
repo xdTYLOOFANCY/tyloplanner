@@ -40,6 +40,9 @@
   document.documentElement.setAttribute("data-theme", localStorage.getItem("tylo-theme") === "light" ? "light" : "dark");
   var ts = localStorage.getItem("tylo-theme-style");
   if (ts) document.documentElement.setAttribute("data-theme-style", ts);
+  /* Dedicated pop-out music window: /?player=1 strips the app chrome down to
+     just the player (see .player-mode in style.css + popOutPlayer in music.js). */
+  if (new URLSearchParams(location.search).get("player") === "1") document.body.classList.add("player-mode");
 }catch(e){}})();
 </script>
 <div id="offline-banner" class="offline-banner" style="display: none;"></div>
@@ -515,23 +518,67 @@
   </section>
 
   <section id="tab-music">
-    <div class="music-layout">
-      <div class="card music-card">
-        <div class="music-header">
-          <div class="music-tabs">
-            <button class="music-tab active" data-mtab="library" onclick="switchMusicTab('library')">Library</button>
-            <button class="music-tab" data-mtab="playlists" onclick="switchMusicTab('playlists')">Playlists</button>
-            <button class="music-tab" data-mtab="queue" onclick="switchMusicTab('queue')">Queue</button>
-          </div>
-          <div class="music-search-container">
-            <span class="search-icon">🔍</span>
-            <input id="musicSearch" placeholder="Search music…" oninput="musicSearchInput()">
+    <div class="music-shell" id="musicShell">
+      <!-- Left: Your Library -->
+      <aside class="music-sidebar" id="musicSidebar">
+        <div class="music-sidebar-head">
+          <span class="msb-title">Your Library</span>
+          <div class="msb-head-actions">
+            <button class="msb-add music-popout-btn" onclick="popOutPlayer()" title="Open the player in its own window" aria-label="Pop out player">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+            </button>
+            <button class="msb-add" onclick="musicNewPlaylist()" title="New playlist" aria-label="New playlist">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
           </div>
         </div>
-        <div id="musicLibrary"></div>
-        <div id="musicPlaylists" style="display:none"></div>
-        <div id="musicQueue" style="display:none"></div>
+        <nav class="music-nav" id="musicNav"></nav>
+        <div id="musicStorageInfo" class="music-storage muted"></div>
+      </aside>
+
+      <!-- Center: hero + track list -->
+      <div class="music-main" id="musicMain">
+        <div id="musicPopoutHint" class="music-popout-hint" style="display:none">
+          <span>🎧 Playing in the pop-out player window.</span>
+          <button class="btn ghost small" onclick="reclaimPlayer()">Bring it back here</button>
+        </div>
+        <div id="musicHero" class="music-hero"></div>
+        <div class="music-subbar">
+          <button class="msb-drawer-btn lib-toggle" onclick="musicToggleLibrary()" title="Your Library" aria-label="Show library">☰</button>
+          <div class="music-search-container">
+            <span class="search-icon">🔍</span>
+            <input id="musicSearch" placeholder="Search…" oninput="musicSearchInput()">
+          </div>
+          <span class="subbar-spacer"></span>
+          <span id="musicSortWrap" class="music-sort">
+            <label class="muted" for="musicSort">Sort</label>
+            <select id="musicSort" onchange="musicSetSort(this.value)">
+              <option value="title">Title</option>
+              <option value="artist">Artist</option>
+              <option value="date">Date added</option>
+              <option value="duration">Duration</option>
+            </select>
+          </span>
+          <button class="msb-drawer-btn queue-toggle" onclick="musicToggleQueue()" title="Queue" aria-label="Show queue">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="16" y2="6"/><line x1="3" y1="12" x2="16" y2="12"/><line x1="3" y1="18" x2="12" y2="18"/><path d="M18 12l4 2.5-4 2.5z" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
+        <div class="mtracklist-wrap">
+          <div id="mtracklistHead" class="mtracklist-head">
+            <div class="mth-idx">#</div><div class="mth-art"></div><div>Title</div>
+            <div class="mth-album">Album</div><div class="mth-off"></div>
+            <div class="mth-dur">⏱</div><div class="mth-menu"></div>
+          </div>
+          <div id="musicTracklist" class="mtracklist"></div>
+        </div>
       </div>
+
+      <!-- Right: Queue -->
+      <aside class="music-queue" id="musicQueue">
+        <div id="musicQueuePanel"></div>
+      </aside>
+
+      <div class="music-scrim" id="musicScrim" onclick="musicCloseDrawers()"></div>
     </div>
   </section>
 

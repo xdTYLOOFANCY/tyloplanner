@@ -2,6 +2,37 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.45.0 — 2026-07-21
+
+- **The Music tab is redesigned around a Spotify-style three-pane layout.** The
+  old Library / Playlists / Queue tabs — which all looked the same — are gone.
+  In their place: a **Your Library** sidebar on the left (Songs, Recently
+  added, and your playlists, each with cover art and track counts), a **content
+  pane** in the middle with a big colored header (cover, title, song count +
+  total time, and a large Play button), and a **Queue** panel on the right.
+- **See what's up next, always.** The Queue panel shows **Now playing** (with an
+  animated equalizer on the current track) and **Next up**, labeled with where
+  it's playing from. **Drag to reorder** what's coming up, or **Clear** the rest
+  of the queue. Right-click any song for **Play next** / **Add to queue**.
+- **A real library, not a flat list.** Each playlist gets its own colored header
+  so they no longer blur together, the track list has proper Title / Album /
+  duration columns with hover-to-play row numbers, and **Sort** and **Search**
+  live above the list. Playlists keep your own drag order.
+- **Works everywhere it did before.** On phones the sidebar and queue slide in as
+  drawers (tap ☰ or the queue icon); the **Pop out** player window, offline
+  downloads, lock-screen controls, and the bottom player bar all carry over
+  unchanged.
+
+## 1.44.0 — 2026-07-21
+
+- **Pop out the music player into its own window.** A new **Pop out** button in
+  the Music tab opens a dedicated, distraction-free music window — just the
+  library, playlists, queue, and player, with the rest of the app stripped
+  away. Whatever's playing hands over to the pop-out automatically, and the
+  main app pauses and hides its bottom player bar so Notes and everything else
+  stay clean. A hint in the Music tab shows when playback lives in the pop-out;
+  **Bring it back here** returns it to the main window and closes the pop-out.
+
 ## 1.43.0 — 2026-07-21
 
 - **The Files tab is redesigned from scratch, Drive-style.** A left rail now
