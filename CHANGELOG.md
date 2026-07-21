@@ -2,6 +2,14 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.42.2 — 2026-07-21
+
+- **Clearer Workouts trend charts.** The **Distance (km)** and **Training
+  Load** charts are now clean multi-line graphs: each series is a solid,
+  distinctly coloured line with a visible dot on every data point, straight
+  segments, and horizontal gridlines only — no more overlapping shaded areas
+  muddying the disciplines together. Hover any point to read its exact value.
+
 ## 1.42.1 — 2026-07-21
 
 - **Easier Google/GitHub OAuth setup.** When you click **Link** for Google or

@@ -3,7 +3,7 @@
 import { S, SET, safeRender } from './state.js';
 import { toISO, todayStr, esc, api, guardFocus, MONTHS } from './utils.js';
 import { weekDates } from './utils.js';
-import { createChart, getPastMonths, getBarGradient, noGridOptions, registerChartRerender } from './charts.js';
+import { createChart, getPastMonths, getBarGradient, noGridOptions, lineSeries, lineChartOptions, registerChartRerender } from './charts.js';
 
 var WTYPES = { run: "🏃 Run", bike: "🚴 Bike", swim: "🏊 Swim", gym: "🏋\uFE0F Gym" };
 
@@ -215,30 +215,11 @@ function renderWorkoutCharts() {
     }
   ], noGridOptions());
 
-  const lineCtxDist = document.getElementById('chartDistance').getContext('2d');
   createChart('chartDistance', 'line', labels, [
-    {
-      label: 'Run (km)',
-      data: months.map(function(m) { return kmRun[m.key]; }),
-      borderColor: colorCyan,
-      backgroundColor: getBarGradient(lineCtxDist, colorCyan + '44', colorCyan + '00'),
-      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
-    },
-    {
-      label: 'Bike (km)',
-      data: months.map(function(m) { return kmBike[m.key]; }),
-      borderColor: colorAccent2,
-      backgroundColor: getBarGradient(lineCtxDist, colorAccent2 + '44', colorAccent2 + '00'),
-      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
-    },
-    {
-      label: 'Swim (km)',
-      data: months.map(function(m) { return kmSwim[m.key]; }),
-      borderColor: colorGreen,
-      backgroundColor: getBarGradient(lineCtxDist, colorGreen + '44', colorGreen + '00'),
-      fill: true, tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
-    }
-  ], noGridOptions());
+    lineSeries('Run (km)', months.map(function(m) { return kmRun[m.key]; }), colorCyan),
+    lineSeries('Bike (km)', months.map(function(m) { return kmBike[m.key]; }), colorAccent2),
+    lineSeries('Swim (km)', months.map(function(m) { return kmSwim[m.key]; }), colorGreen)
+  ], lineChartOptions());
 
   // Training load: hours per discipline, last 12 weeks
   var weekKeys = [], weekLabels = [];
@@ -257,17 +238,13 @@ function renderWorkoutCharts() {
     if (k in load[w.type]) load[w.type][k] += (w.dur || 0) / 60;
   });
   var loadColors = { run: colorCyan, bike: colorAccent2, swim: colorGreen, gym: colorOrange };
-  var loadOptions = noGridOptions();
-  delete loadOptions.scales.y.ticks.stepSize;
   createChart('chartTrainingLoad', 'line', weekLabels, ['run', 'bike', 'swim', 'gym'].map(function(ty) {
-    return {
-      label: ty.charAt(0).toUpperCase() + ty.slice(1),
-      data: weekKeys.map(function(k) { return Math.round(load[ty][k] * 10) / 10; }),
-      borderColor: loadColors[ty],
-      backgroundColor: loadColors[ty],
-      tension: 0.4, pointRadius: 0, pointHoverRadius: 6, borderWidth: 2
-    };
-  }), loadOptions);
+    return lineSeries(
+      ty.charAt(0).toUpperCase() + ty.slice(1),
+      weekKeys.map(function(k) { return Math.round(load[ty][k] * 10) / 10; }),
+      loadColors[ty]
+    );
+  }), lineChartOptions());
 }
 
 registerChartRerender(renderWorkoutCharts);

@@ -45,6 +45,32 @@ export function noGridOptions() {
   };
 }
 
+// Multi-series line: straight segments, solid always-visible dots, no fill.
+// Reads cleaner than overlapping filled areas — one dot per value, hover for the number.
+export function lineSeries(label, data, color) {
+  return {
+    label: label,
+    data: data,
+    borderColor: color,
+    backgroundColor: color,
+    pointBackgroundColor: color,
+    fill: false, tension: 0, pointRadius: 4, pointHoverRadius: 7, borderWidth: 2.5
+  };
+}
+
+// Options for lineSeries charts: horizontal gridlines only, auto y-step.
+export function lineChartOptions() {
+  const style = getComputedStyle(document.body);
+  const textColor = style.getPropertyValue('--text').trim();
+  const gridColor = style.getPropertyValue('--border').trim();
+  return {
+    scales: {
+      x: { grid: { display: false }, ticks: { color: textColor } },
+      y: { grid: { color: gridColor, drawBorder: false }, ticks: { color: textColor }, beginAtZero: true }
+    }
+  };
+}
+
 export function createChart(canvasId, type, labels, datasets, options = {}) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
