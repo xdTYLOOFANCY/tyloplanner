@@ -2,6 +2,15 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.42.0 — 2026-07-21
+
+- **Four new Appearance preferences.** In Settings → Appearance you can now
+  set the interface **Density** (Compact / Comfortable / Spacious — scales
+  the whole UI, saved per device), whether the **week starts on Monday or
+  Sunday** (applies to the planner and habits grids), your **Landing tab**
+  (which tab opens on load, used when "persist active tab" is off), and
+  whether the desktop **sidebar starts collapsed** by default on new devices.
+
 ## 1.41.0 — 2026-07-20
 
 - **Three new themes: OLED Black, Nord, and Paper.** OLED Black is pure

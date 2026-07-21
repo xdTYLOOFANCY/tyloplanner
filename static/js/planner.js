@@ -1,5 +1,5 @@
 import { S, SET, safeRender } from './state.js';
-import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, isInputFocused, debounce, askConfirm, showContextMenu, showUndoToast } from './utils.js';
+import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, weekDayLabels, isInputFocused, debounce, askConfirm, showContextMenu, showUndoToast } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 import { priorityRank } from './tasks.js';
@@ -469,7 +469,8 @@ export function renderPlanner() {
   var html = "";
   if (currentView === 'month') {
     html += '<div class="month-header">';
-    for(var i = 0; i < 7; i++) html += '<div class="month-header-cell">' + DAYS[i] + '</div>';
+    var _wdl = weekDayLabels();
+    for(var i = 0; i < 7; i++) html += '<div class="month-header-cell">' + _wdl[i] + '</div>';
     html += '</div><div class="month-grid">';
     var exactMonthDate = new Date(); exactMonthDate.setMonth(exactMonthDate.getMonth() + dateOffset);
     var exactMonth = exactMonthDate.getMonth();

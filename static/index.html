@@ -30,7 +30,11 @@
   var l = localStorage.getItem("tylo-nav-layout") === "sidebar" ? "sidebar" : "topbar";
   document.documentElement.setAttribute("data-nav-layout", l);
   document.body.setAttribute("data-nav-layout", l);
-  if (localStorage.getItem("tylo-sidebar-collapsed") === "1") document.body.classList.add("sidebar-collapsed");
+  var sc = localStorage.getItem("tylo-sidebar-collapsed");
+  if (sc === null) sc = localStorage.getItem("tylo-sidebar-collapsed-default"); // server default for new devices
+  if (sc === "1") document.body.classList.add("sidebar-collapsed");
+  var dens = localStorage.getItem("tylo-density");
+  if (dens && dens !== "comfortable") document.documentElement.setAttribute("data-density", dens);
   /* Same for dark/light and the theme style (both per-device), so users on a
      non-default theme never see the stock blue theme flash in. */
   document.documentElement.setAttribute("data-theme", localStorage.getItem("tylo-theme") === "light" ? "light" : "dark");
@@ -617,6 +621,43 @@
           <button class="btn" onclick="saveNavLayout()">Save layout</button>
         </div>
         <p class="muted" style="font-size:12px;margin-top:6px">Desktop only — mobile always uses the slide-out drawer.</p>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Density</label>
+        <select id="uiDensity" onchange="saveDensity()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
+          <option value="compact">Compact</option>
+          <option value="comfortable">Comfortable</option>
+          <option value="spacious">Spacious</option>
+        </select>
+        <p class="muted" style="font-size:12px;margin-top:6px">Scales the whole interface. Applies instantly and is saved per device.</p>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Week starts on</label>
+        <select id="weekStart" onchange="saveWeekStart()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
+          <option value="monday">Monday</option>
+          <option value="sunday">Sunday</option>
+        </select>
+        <p class="muted" style="font-size:12px;margin-top:6px">Affects the planner and habits week grids.</p>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Landing tab</label>
+        <select id="defaultTab" onchange="saveDefaultTab()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
+          <option value="">Dashboard (default)</option>
+          <option value="planner">Planner</option>
+          <option value="tasks">Tasks</option>
+          <option value="notes">Notes</option>
+          <option value="exams">Exams</option>
+          <option value="habits">Habits</option>
+          <option value="workouts">Workouts</option>
+          <option value="analytics">Analytics</option>
+          <option value="files">Files</option>
+          <option value="music">Music</option>
+        </select>
+        <p class="muted" style="font-size:12px;margin-top:6px">The tab opened on load — only used when "persist active tab" is off.</p>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <label for="sidebarCollapsedToggle" class="muted" style="cursor:pointer;font-size:14px">Start with sidebar collapsed</label>
+        <input type="checkbox" id="sidebarCollapsedToggle" class="ios-toggle" onchange="saveSidebarCollapsedDefault()">
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
       <p style="font-size:14px;margin-bottom:10px">Customize the theme accent color:</p>

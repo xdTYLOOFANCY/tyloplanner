@@ -113,3 +113,15 @@ export function applyNavLayoutFromSettings(set) {
   applyNavLayout(set && set.nav_layout === "sidebar" ? "sidebar" : "topbar");
 }
 
+export function applyDensity(density) {
+  var v = (density === "compact" || density === "spacious") ? density : "comfortable";
+  if (v === "comfortable") document.documentElement.removeAttribute("data-density");
+  else document.documentElement.setAttribute("data-density", v);
+  // Cache for the pre-paint boot script in index.html (avoids a resize flash).
+  try { localStorage.setItem("tylo-density", v); } catch (e) {}
+}
+
+export function applyDensityFromSettings(set) {
+  applyDensity(set && set.ui_density);
+}
+

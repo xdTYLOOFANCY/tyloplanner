@@ -560,6 +560,10 @@ SETTING_DEFAULTS = {
     "task_categories": "School,Work,Personal",
     "app_theme_style": "default",
     "nav_layout": "topbar",
+    "ui_density": "comfortable",   # compact | comfortable | spacious (CSS zoom)
+    "week_start": "monday",        # monday | sunday
+    "default_tab": "",             # tab to open when not persisting the last tab
+    "sidebar_default_collapsed": "0",  # default rail state for new devices
     "dashboard_style": "glass",
     "dashboard_desktop_layout": "",
     "dashboard_mobile_layout": "",

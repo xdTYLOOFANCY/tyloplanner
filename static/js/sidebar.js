@@ -54,7 +54,11 @@ document.addEventListener("DOMContentLoaded", () => {
       else b.removeAttribute("title");
     });
   };
-  setCollapsed(localStorage.getItem(KEY) === "1");
+  // Per-device choice wins; otherwise fall back to the server default mirror
+  // (matches the pre-paint boot script in index.html).
+  var stored = localStorage.getItem(KEY);
+  if (stored === null) stored = localStorage.getItem("tylo-sidebar-collapsed-default");
+  setCollapsed(stored === "1");
   const toggle = () => {
     const c = !document.body.classList.contains("sidebar-collapsed");
     setCollapsed(c);

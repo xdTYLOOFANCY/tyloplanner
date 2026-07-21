@@ -2,7 +2,7 @@
 
 import { S, SET, safeRender } from './state.js';
 import { esc, api, toast, debounce } from './utils.js';
-import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings, applyNavLayout, applyNavLayoutFromSettings } from './theme.js';
+import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings, applyNavLayout, applyNavLayoutFromSettings, applyDensity, applyDensityFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
 
 
@@ -57,13 +57,24 @@ export function renderSettings(refresh) {
     setVal("accentColor", SET.accent_color ||
       getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4f8cff");
     setVal("navLayout", SET.nav_layout || "topbar");
+    setVal("uiDensity", SET.ui_density || "comfortable");
+    setVal("weekStart", SET.week_start || "monday");
+    setVal("defaultTab", SET.default_tab || "");
   }
   applyThemeStyleFromSettings(SET);
   applyAccentFromSettings(SET);
   applyNavLayoutFromSettings(SET);
+  applyDensityFromSettings(SET);
   var persistTab = SET ? SET.persist_active_tab !== "0" : true;
   var tabToggleEl = document.getElementById("tabPersistenceToggle");
   if (tabToggleEl) tabToggleEl.checked = persistTab;
+  var sbCollapsedEl = document.getElementById("sidebarCollapsedToggle");
+  if (sbCollapsedEl) sbCollapsedEl.checked = SET ? SET.sidebar_default_collapsed === "1" : false;
+  // Mirror the server default so the pre-paint boot script can honor it on
+  // devices that never toggled the rail themselves.
+  try { if (SET) localStorage.setItem("tylo-sidebar-collapsed-default", SET.sidebar_default_collapsed === "1" ? "1" : "0"); } catch (e) {}
+  // Mirror the landing tab so app.js boot can fall back to it before SET loads.
+  try { if (SET) localStorage.setItem("tylo-default-tab", SET.default_tab || ""); } catch (e) {}
   var statusBox = document.getElementById("backupStatus");
   if (statusBox && SET) {
     statusBox.innerHTML = '<p style="font-size:14px;margin-bottom:8px">Automatic backups: a JSON snapshot (contains all data except uploaded files and app settings) is written to <b>data/backups/</b> every night (newest 14 kept). Use this for fast data recovery. For a complete backup including files, use the .zip export instead.' +
@@ -126,6 +137,37 @@ export async function saveNavLayout(refresh) {
   });
   applyNavLayout(value);
   toast("Navigation layout saved");
+  await refresh();
+}
+
+export async function saveDensity(refresh) {
+  var value = document.getElementById("uiDensity").value;
+  applyDensity(value);
+  await api("POST", "/api/settings", { ui_density: value });
+  toast("Density applied");
+  await refresh();
+}
+
+export async function saveWeekStart(refresh) {
+  var value = document.getElementById("weekStart").value;
+  await api("POST", "/api/settings", { week_start: value });
+  toast("Week start saved");
+  await refresh();
+}
+
+export async function saveDefaultTab(refresh) {
+  var value = document.getElementById("defaultTab").value;
+  try { localStorage.setItem("tylo-default-tab", value); } catch (e) {}
+  await api("POST", "/api/settings", { default_tab: value });
+  toast("Landing tab saved");
+  await refresh();
+}
+
+export async function saveSidebarCollapsedDefault(refresh) {
+  var on = document.getElementById("sidebarCollapsedToggle").checked;
+  try { localStorage.setItem("tylo-sidebar-collapsed-default", on ? "1" : "0"); } catch (e) {}
+  await api("POST", "/api/settings", { sidebar_default_collapsed: on ? "1" : "0" });
+  toast("Saved");
   await refresh();
 }
 

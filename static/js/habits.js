@@ -3,7 +3,7 @@
 import { S, habitSet, setHabitEntry, safeRender, syncSilent } from './state.js';
 import { createChart, getPastMonths, noGridOptions, registerChartRerender } from './charts.js';
 import { toISO, todayStr, parseISO, esc, api, DAYS, MONTHS } from './utils.js';
-import { weekDates } from './utils.js';
+import { weekDates, weekStartsMonday, weekDayLabels } from './utils.js';
 import { askConfirm, askPrompt, showContextMenu } from './utils.js';
 
 // Frequency labels for display
@@ -124,9 +124,11 @@ function weekLabel(dates) {
 
 // ----- Streak calculation -----
 
+// Start of the week containing d, honoring the week-start preference.
+// (weekday/weekend habit semantics below stay calendar-based, not grid-based.)
 function getMonday(d) {
   var day = d.getDay(); // 0=Sun
-  var diff = (day === 0) ? -6 : 1 - day;
+  var diff = weekStartsMonday() ? ((day === 0) ? -6 : 1 - day) : -day;
   var mon = new Date(d);
   mon.setDate(mon.getDate() + diff);
   return mon;
@@ -421,7 +423,8 @@ export function renderHabits() {
 
     var html = '<tr><th style="width:30px"></th><th>Habit</th>';
     // Past weeks show day-of-month so it's clear which days you're ticking off
-    for (var i = 0; i < 7; i++) html += '<th' + (toISO(dates[i]) === today ? ' style="color:var(--accent)"' : '') + '>' + DAYS[i] + (_weekOff !== 0 ? ' ' + dates[i].getDate() : '') + '</th>';
+    var _wdl = weekDayLabels();
+    for (var i = 0; i < 7; i++) html += '<th' + (toISO(dates[i]) === today ? ' style="color:var(--accent)"' : '') + '>' + _wdl[i] + (_weekOff !== 0 ? ' ' + dates[i].getDate() : '') + '</th>';
     html += '<th>Streak</th><th style="width:36px"></th></tr>';
 
     active.forEach(function(h) {

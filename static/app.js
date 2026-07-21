@@ -63,6 +63,7 @@ import {
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
   saveAppThemeStyle as _saveAppThemeStyle, saveNavLayout as _saveNavLayout, saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
+  saveDensity as _saveDensity, saveWeekStart as _saveWeekStart, saveDefaultTab as _saveDefaultTab, saveSidebarCollapsedDefault as _saveSidebarCollapsedDefault,
   toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
   updateCategoryColor as _updateCategoryColor, checkForUpdates,
@@ -246,6 +247,10 @@ window.changePassword = function() { changePassword(R); };
 window.backupNow = function() { _backupNow(R); };
 window.saveAppThemeStyle = function() { _saveAppThemeStyle(R); };
 window.saveNavLayout = function() { _saveNavLayout(R); };
+window.saveDensity = function() { _saveDensity(R); };
+window.saveWeekStart = function() { _saveWeekStart(R); };
+window.saveDefaultTab = function() { _saveDefaultTab(R); };
+window.saveSidebarCollapsedDefault = function() { _saveSidebarCollapsedDefault(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
 window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
@@ -426,8 +431,9 @@ document.getElementById("wDate").value = todayStr();
 })();
 applyTheme();
 
-// Restore active tab
-var savedTab = localStorage.getItem("active_tab");
+// Restore active tab. When the last tab isn't being persisted, fall back to the
+// user's chosen landing tab (mirrored from the server setting).
+var savedTab = localStorage.getItem("active_tab") || localStorage.getItem("tylo-default-tab");
 if (savedTab) {
   var btn = document.querySelector("#tabs button[data-tab='" + savedTab + "']");
   if (btn) {

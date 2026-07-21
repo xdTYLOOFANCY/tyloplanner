@@ -1,4 +1,4 @@
-import { S } from './state.js';
+import { S, SET } from './state.js';
 
 // TyloPlanner — shared utility functions.
 
@@ -9,8 +9,13 @@ export function todayStr() { return toISO(new Date()); }
 export function parseISO(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
 export var DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Week can start Monday (default) or Sunday. weekIdx() gives a date's column
+// (0..6) within the grid; weekDayLabels() gives the header names in grid order.
+export function weekStartsMonday() { return !(SET && SET.week_start === "sunday"); }
+export function weekIdx(d) { return weekStartsMonday() ? (d.getDay() + 6) % 7 : d.getDay(); }
+export function weekDayLabels() { return weekStartsMonday() ? DAYS : [DAYS[6]].concat(DAYS.slice(0, 6)); }
 export function weekDates(off) {
-  var now = new Date(), dow = (now.getDay() + 6) % 7;
+  var now = new Date(), dow = weekIdx(now);
   var mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow + off * 7);
   var out = []; for (var i = 0; i < 7; i++) out.push(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
   return out;
@@ -19,7 +24,7 @@ export function getViewDates(view, off) {
   var now = new Date();
   if (view === 'month') {
     var m = new Date(now.getFullYear(), now.getMonth() + off, 1);
-    var dow = (m.getDay() + 6) % 7;
+    var dow = weekIdx(m);
     var start = new Date(m.getFullYear(), m.getMonth(), m.getDate() - dow);
     var out = [];
     for (var i = 0; i < 42; i++) out.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
