@@ -109,6 +109,9 @@ pick one:
   `APP_URL=https://your.domain.com` in `.env` and rebuild — needed so the
   calendar feed URL and Strava OAuth redirect use the right address. Pick a
   strong account password and enable 2FA.
+- **Public with HTTPS + Zero Trust — Cloudflare Tunnel:** no open ports and an
+  identity check (Google/GitHub or email OTP) enforced at Cloudflare's edge.
+  See the dedicated **[Cloudflare Tunnel setup](cloudflare-tunnel.md)** guide.
 
 ## Ports & firewall
 

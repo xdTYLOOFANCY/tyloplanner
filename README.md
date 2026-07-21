@@ -75,6 +75,7 @@ one-command setup for Ubuntu, plus HTTPS and VPN options.
 | Guide | What's inside |
 |---|---|
 | **[Install guide](docs/install.md)** | One-command Ubuntu install, updating, running without Docker, exposing to the internet safely |
+| **[Cloudflare Tunnel](docs/cloudflare-tunnel.md)** | Public HTTPS with no open ports + Zero Trust login at the edge, with all features intact |
 | **[Configuration](docs/configuration.md)** | Every `.env` option, authentication & 2FA, backups and restore |
 | **[Integrations](docs/integrations.md)** | Calendar import/export/auto-sync, ntfy notifications, Strava sync |
 | **[Development](docs/development.md)** | Architecture, project layout, API reference, adding your own features |
