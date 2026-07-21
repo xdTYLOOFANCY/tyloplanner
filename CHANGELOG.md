@@ -2,6 +2,50 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.43.0 — 2026-07-21
+
+- **The Files tab is redesigned from scratch, Drive-style.** A left rail now
+  holds a **＋ New** menu (new folder, upload files, upload a whole folder,
+  camera), your full **folder tree** (collapsible, drag-onto-able), and the
+  views **My Files, Starred, Recent, Trash, and Storage** — plus a live
+  storage meter. The main pane shows breadcrumbs, folder cards, and files in
+  list or grid view with sortable Name/Date/Size/Type (click again to flip
+  direction).
+- **Selection like a real file manager.** Hover checkboxes, Ctrl/Cmd-click,
+  Shift-click ranges, Select all, and a context-aware action bar (Download /
+  Move / Star / Trash). Every row and card also has a ⋯ menu, so all actions
+  work on touch devices too.
+- **A proper Move dialog.** "Move to…" opens a folder tree picker (with
+  expand/collapse and an inline "New folder" button) instead of the old flat
+  dropdown. Folders themselves can now be moved too — via the dialog or by
+  dragging them onto another folder, a breadcrumb, or the tree.
+- **Trash instead of instant deletion.** Deleting files or folders moves them
+  to Trash; restore puts them back (resurrecting their original folder path).
+  Trash auto-empties after a configurable number of days (default 30) and its
+  contents still count toward your storage until emptied.
+- **Storage limit.** Set a max file-storage size in GB under Storage; uploads
+  are rejected with a clear message once the limit is reached. The rail meter
+  turns orange at 80% and red at 95%.
+- **Storage manager.** The new Storage view shows total usage as a segmented
+  bar (images / video / audio / documents / archives / other / trash), what
+  every part of the app uses (files, trash, notes text, database, backups),
+  your biggest files, folders by size, and maintenance actions (empty trash,
+  clean up orphaned files).
+- **Much better previews.** Besides images, video, audio, and PDF, the
+  preview modal now renders **Word documents (.docx)** — headings, bold/
+  italic, lists, tables, hyperlinks, and embedded images — plus **Excel
+  (.xlsx)**, **CSV/TSV** as tables, **Markdown**, and plain-text/code files.
+  It gained a header with download / open-in-tab buttons and **‹ › arrows**
+  (also arrow keys) to flip through the files in the current folder. Office
+  previews are converted server-side with the Python standard library — no
+  new dependencies — and rendered in a sandboxed frame.
+- **Upload folders, keep their structure.** The New menu's "Upload folder"
+  and OS drag-and-drop of directories recreate the folder hierarchy
+  automatically. Multiple selected items download as a single zip (folder
+  downloads preserve structure).
+- **Video/audio seeking fixed.** File streaming now supports HTTP Range
+  requests, so scrubbing in the video/audio preview works properly.
+
 ## 1.42.2 — 2026-07-21
 
 - **Clearer Workouts trend charts.** The **Distance (km)** and **Training

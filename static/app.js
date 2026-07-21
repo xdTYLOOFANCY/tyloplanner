@@ -47,12 +47,19 @@ import {
   toggleNoteTagFilter, noteTagMenu, editCurrentNoteTags, toggleNoteOutline
 } from './js/notes.js';
 import {
-  renderFiles, uploadFile as _uploadFile, uploadCameraFile as _uploadCameraFile, delFile as _delFile, toggleFilePin, setFileSort, setFileView,
-  navigateToFolder, createFolderPrompt, renameFolderPrompt, changeFolderIconPrompt, deleteFolderConfirm,
-  previewFile, renameFilePrompt, fileContextMenu, folderContextMenu,
-  onFileDragStart, onFileDragEnd, onFolderDragOver, onFolderDragLeave, onFolderDrop,
-  toggleSelectAllFiles, onFileSelectChange, moveSelectedFilesToFolder, deleteSelectedFiles, downloadSelectedFiles,
-  clearFileSelection, handleFileSearchKeydown, fileSearchInput
+  renderFiles, uploadFile, uploadCameraFile, uploadFolderInput, toggleFilePin, setFileSort, setFileView,
+  setFilesView, navigateToFolder, toggleFolderExpand, filesNewMenu, filesContentMenu,
+  createFolderPrompt, renameFolderPrompt, changeFolderIconPrompt, renameFilePrompt,
+  previewFile, previewStep, previewDownload, previewOpenTab,
+  fileContextMenu, folderContextMenu, trashItemMenu,
+  fileClick, folderClick, fileCheck, folderCheck,
+  onItemDragStart, onItemDragEnd, onFolderDragOver, onFolderDragLeave, onFolderDrop, onTrashDrop,
+  toggleSelectAllFiles, clearFileSelection,
+  trashSelected, restoreSelected, deleteForeverSelected, emptyTrashConfirm,
+  downloadSelected, starSelected,
+  openMoveDialog, moveDialogPick, moveDialogToggle, moveDialogNewFolder, confirmMoveDialog,
+  saveStorageLimits, runStorageCleanup,
+  handleFileSearchKeydown, fileSearchInput
 } from './js/files.js';
 import {
   renderSettings, saveNotifySettings as _saveNotifySettings, testNotify,
@@ -192,34 +199,55 @@ window.noteToggleTagFilter = toggleNoteTagFilter;
 window.noteTagMenu = noteTagMenu;
 window.editCurrentNoteTags = editCurrentNoteTags;
 window.toggleNoteOutline = toggleNoteOutline;
-window.uploadFile = function() { _uploadFile(R); };
-window.uploadCameraFile = function() { _uploadCameraFile(R); };
-window.delFile = function(id) { _delFile(id, R); };
+window.uploadFile = uploadFile;
+window.uploadCameraFile = uploadCameraFile;
+window.uploadFolderInput = uploadFolderInput;
 window.navigateToFolder = navigateToFolder;
-window.createFolderPrompt = function() { createFolderPrompt(R); };
-window.renameFolderPrompt = function(id, oldName) { renameFolderPrompt(id, oldName, R); };
-window.changeFolderIconPrompt = function(id, oldIcon) { changeFolderIconPrompt(id, oldIcon, R); };
-window.deleteFolderConfirm = function(id) { deleteFolderConfirm(id, R); };
-window.renameFilePrompt = function(id, oldName) { renameFilePrompt(id, oldName, R); };
+window.setFilesView = setFilesView;
+window.toggleFolderExpand = toggleFolderExpand;
+window.filesNewMenu = filesNewMenu;
+window.filesContentMenu = filesContentMenu;
+window.createFolderPrompt = createFolderPrompt;
+window.renameFolderPrompt = renameFolderPrompt;
+window.changeFolderIconPrompt = changeFolderIconPrompt;
+window.renameFilePrompt = renameFilePrompt;
 window.previewFile = previewFile;
+window.previewStep = previewStep;
+window.previewDownload = previewDownload;
+window.previewOpenTab = previewOpenTab;
 window.fileContextMenu = fileContextMenu;
 window.folderContextMenu = folderContextMenu;
+window.trashItemMenu = trashItemMenu;
+window.fileClick = fileClick;
+window.folderClick = folderClick;
+window.fileCheck = fileCheck;
+window.folderCheck = folderCheck;
+window.trashSelected = trashSelected;
+window.restoreSelected = restoreSelected;
+window.deleteForeverSelected = deleteForeverSelected;
+window.emptyTrashConfirm = emptyTrashConfirm;
+window.downloadSelected = downloadSelected;
+window.starSelected = starSelected;
+window.openMoveDialog = openMoveDialog;
+window.moveDialogPick = moveDialogPick;
+window.moveDialogToggle = moveDialogToggle;
+window.moveDialogNewFolder = moveDialogNewFolder;
+window.confirmMoveDialog = confirmMoveDialog;
+window.saveStorageLimits = saveStorageLimits;
+window.runStorageCleanup = runStorageCleanup;
 window.togglePlannerCalendarsPanel = _togglePlannerCalendarsPanel;
 window.renderPlannerCalendarsPanel = _renderPlannerCalendarsPanel;
 window.togglePlannerTaskTray = togglePlannerTaskTray;
 window.toggleCalendarType = function(id, checked) { _toggleCalendarType(id, checked); };
 window.updateCalendarColor = function(id, color) { _updateCalendarColor(id, color); };
 
-window.onFileDragStart = onFileDragStart;
-window.onFileDragEnd = onFileDragEnd;
+window.onItemDragStart = onItemDragStart;
+window.onItemDragEnd = onItemDragEnd;
 window.onFolderDragOver = onFolderDragOver;
 window.onFolderDragLeave = onFolderDragLeave;
 window.onFolderDrop = onFolderDrop;
+window.onTrashDrop = onTrashDrop;
 window.toggleSelectAllFiles = toggleSelectAllFiles;
-window.onFileSelectChange = onFileSelectChange;
-window.moveSelectedFilesToFolder = moveSelectedFilesToFolder;
-window.deleteSelectedFiles = deleteSelectedFiles;
-window.downloadSelectedFiles = downloadSelectedFiles;
 window.clearFileSelection = clearFileSelection;
 window.refreshApp = R;
 window.importData = function(ev) { importData(ev, R); };
@@ -399,6 +427,7 @@ const MODALS = {
   eventModal: 'event',
   shortcutsModal: 'shortcuts',
   mediaPreviewModal: 'media-preview',
+  fileMoveModal: 'file-move',
   dashboardEventDetailsModal: 'dashboard-event',
   plannerCalendarsModal: 'planner-calendars',
 };
@@ -410,7 +439,10 @@ for (const [id, slug] of Object.entries(MODALS)) {
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
 }
 document.getElementById('mediaPreviewModal')?.addEventListener('close', () => {
-  document.getElementById('mediaPreviewContainer').innerHTML = '';
+  // Clear so audio/video stop playing — but the 'close' event fires async and
+  // can land after the next preview already opened; don't wipe that one.
+  const dlg = document.getElementById('mediaPreviewModal');
+  if (!dlg.open) document.getElementById('mediaPreviewContainer').innerHTML = '';
 });
 document.getElementById('taskModal')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {

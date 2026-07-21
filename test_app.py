@@ -669,6 +669,27 @@ class GuardAuthEnabledTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("github.com/login/oauth/authorize", r.get_json()["url"])
 
+    # ---- /api/files/zip CSRF exemption: it must work as a plain form POST
+    # (native browser download can't set X-Requested-With), but the exemption
+    # must not bypass authentication. ----
+    def test_zip_form_post_without_csrf_header_still_requires_auth(self):
+        r = self.c.post("/api/files/zip", data={"payload": '{"file_ids": ["x"]}'})
+        self.assertEqual(r.status_code, 401)
+
+    def test_zip_form_post_without_csrf_header_works_when_authed(self):
+        with self.c.session_transaction() as sess:
+            sess["auth"] = True
+            sess["session_id"] = "sess_zip"
+        with helpers.db(write=True) as con:
+            con.execute("INSERT INTO user_sessions (id, user_agent, ip_address, active_at) "
+                        "VALUES ('sess_zip', 'test', '127.0.0.1', ?)", (int(time.time()),))
+        data = {"file": (io.BytesIO(b"zipme"), "z.txt")}
+        fid = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data,
+                          headers={"X-Requested-With": "XMLHttpRequest"}).get_json()["id"]
+        r = self.c.post("/api/files/zip", data={"payload": '{"file_ids": ["%s"]}' % fid})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.mimetype, "application/zip")
+
     def test_oauth_init_login_still_works_unauthenticated(self):
         # The login page starts OAuth *login* before a session exists — the link
         # guard must not break that path.
@@ -1242,8 +1263,9 @@ class FolderAndPreviewTests(unittest.TestCase):
         self.assertEqual(r.mimetype, "image/png")
         self.assertNotIn("attachment", r.headers.get("Content-Disposition", ""))
 
-    def test_delete_folder_relocates_contents(self):
-        # Create parent folder A and child folder B
+    def test_delete_folder_removes_contents_permanently(self):
+        # DELETE /api/folders/<id> is the "delete forever" path (used from
+        # Trash): the folder, its subfolders, and their files are all removed.
         fid_a = self.c.post("/api/folders", json={"name": "A", "parent_id": None}).get_json()["id"]
         fid_b = self.c.post("/api/folders", json={"name": "B", "parent_id": fid_a}).get_json()["id"]
 
@@ -1251,23 +1273,16 @@ class FolderAndPreviewTests(unittest.TestCase):
         data = {"file": (io.BytesIO(b"file in B"), "fileB.txt"), "folder_id": fid_b}
         file_id = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data).get_json()["id"]
 
-        # Delete folder B
+        # Delete folder B (permanently)
         r_del = self.c.delete("/api/folders/%s" % fid_b)
         self.assertEqual(r_del.status_code, 200)
 
-        # Check state:
         state = self.c.get("/api/state").get_json()
-        
-        # Folder B should be deleted
-        folders = state["folders"]
-        self.assertEqual(len(folders), 1)
-        self.assertEqual(folders[0]["id"], fid_a)
 
-        # File should now be in Folder A (relocated to B's parent)
-        files = state["files"]
-        self.assertEqual(len(files), 1)
-        self.assertEqual(files[0]["id"], file_id)
-        self.assertEqual(files[0]["folder_id"], fid_a)
+        # Folder B and its file are gone; folder A remains
+        self.assertEqual([f["id"] for f in state["folders"]], [fid_a])
+        self.assertEqual(state["files"], [])
+        self.assertFalse(os.path.exists(os.path.join(helpers.UPLOAD_DIR, file_id)))
 
     def test_batch_move_files(self):
         # Create folder
@@ -2796,6 +2811,166 @@ class SchedulerJobTests(unittest.TestCase):
         with helpers.db() as con:
             ids = [r["id"] for r in con.execute("SELECT id FROM user_sessions")]
         self.assertEqual(ids, ["alive"])
+
+
+class FilesRedesignTests(unittest.TestCase):
+    """Trash, quota, move, zip, storage stats, and server-side previews."""
+
+    def setUp(self):
+        reset_db()
+        helpers.AUTH_ENABLED = False
+        helpers.kv_set("set_storage_quota_gb", "")
+        self.c = appmod.app.test_client()
+
+    def _upload(self, name, content=b"data", folder_id=None):
+        data = {"file": (io.BytesIO(content), name)}
+        if folder_id:
+            data["folder_id"] = folder_id
+        r = self.c.post("/api/files/upload", content_type="multipart/form-data", data=data)
+        self.assertEqual(r.status_code, 200)
+        return r.get_json()["id"]
+
+    def _mkfolder(self, name, parent_id=None):
+        r = self.c.post("/api/folders", json={"name": name, "parent_id": parent_id})
+        self.assertEqual(r.status_code, 200)
+        return r.get_json()["id"]
+
+    def test_quota_blocks_upload_over_limit(self):
+        helpers.kv_set("set_storage_quota_gb", str(10 / 1024 ** 3))  # 10-byte quota
+        self._upload("small.txt", b"12345")
+        r = self.c.post("/api/files/upload", content_type="multipart/form-data",
+                        data={"file": (io.BytesIO(b"123456789"), "big.txt")})
+        self.assertEqual(r.status_code, 413)
+        self.assertIn("Storage limit", r.get_json()["error"])
+        # The rejected file must not linger on disk or in the DB
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertEqual([f["filename"] for f in files], ["small.txt"])
+
+    def test_trash_and_restore_file(self):
+        fid = self._upload("t.txt")
+        r = self.c.post("/api/files/trash", json={"file_ids": [fid]})
+        self.assertEqual(r.status_code, 200)
+        f = self.c.get("/api/state").get_json()["files"][0]
+        self.assertIsNotNone(f["deleted"])
+        self.assertTrue(os.path.exists(os.path.join(helpers.UPLOAD_DIR, fid)))
+        self.c.post("/api/files/restore", json={"file_ids": [fid]})
+        f = self.c.get("/api/state").get_json()["files"][0]
+        self.assertIsNone(f["deleted"])
+
+    def test_trash_folder_recursive_and_restore(self):
+        a = self._mkfolder("A")
+        b = self._mkfolder("B", parent_id=a)
+        fid = self._upload("in-b.txt", folder_id=b)
+        self.c.post("/api/files/trash", json={"folder_ids": [a]})
+        st = self.c.get("/api/state").get_json()
+        self.assertTrue(all(x["deleted"] is not None for x in st["folders"]))
+        self.assertIsNotNone(st["files"][0]["deleted"])
+        self.c.post("/api/files/restore", json={"folder_ids": [a]})
+        st = self.c.get("/api/state").get_json()
+        self.assertTrue(all(x["deleted"] is None for x in st["folders"]))
+        self.assertIsNone(st["files"][0]["deleted"])
+
+    def test_restore_file_resurrects_parent_folder(self):
+        a = self._mkfolder("A")
+        fid = self._upload("f.txt", folder_id=a)
+        self.c.post("/api/files/trash", json={"folder_ids": [a]})
+        self.c.post("/api/files/restore", json={"file_ids": [fid]})
+        st = self.c.get("/api/state").get_json()
+        self.assertIsNone(st["files"][0]["deleted"])
+        self.assertIsNone(st["folders"][0]["deleted"])
+
+    def test_empty_trash_purges_rows_and_disk(self):
+        fid = self._upload("gone.txt")
+        keep = self._upload("keep.txt")
+        self.c.post("/api/files/trash", json={"file_ids": [fid]})
+        r = self.c.post("/api/files/trash/empty")
+        self.assertEqual(r.get_json()["purged"], 1)
+        self.assertFalse(os.path.exists(os.path.join(helpers.UPLOAD_DIR, fid)))
+        files = self.c.get("/api/state").get_json()["files"]
+        self.assertEqual([f["id"] for f in files], [keep])
+
+    def test_permanent_folder_delete_removes_contents(self):
+        a = self._mkfolder("A")
+        fid = self._upload("f.txt", folder_id=a)
+        r = self.c.delete("/api/folders/%s" % a)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(os.path.exists(os.path.join(helpers.UPLOAD_DIR, fid)))
+        st = self.c.get("/api/state").get_json()
+        self.assertEqual(st["files"], [])
+        self.assertEqual(st["folders"], [])
+
+    def test_move_folder_into_own_subtree_rejected(self):
+        a = self._mkfolder("A")
+        b = self._mkfolder("B", parent_id=a)
+        r = self.c.post("/api/files/move", json={"folder_ids": [a], "folder_id": b})
+        self.assertEqual(r.status_code, 400)
+        r = self.c.post("/api/files/move", json={"folder_ids": [b], "folder_id": None})
+        self.assertEqual(r.status_code, 200)
+        st = self.c.get("/api/state").get_json()
+        moved = [f for f in st["folders"] if f["id"] == b][0]
+        self.assertIsNone(moved["parent_id"])
+
+    def test_zip_download_preserves_folder_structure(self):
+        import zipfile as zf
+        a = self._mkfolder("Uni")
+        b = self._mkfolder("Week 1", parent_id=a)
+        self._upload("notes.txt", b"n", folder_id=b)
+        loose = self._upload("loose.txt", b"l")
+        r = self.c.post("/api/files/zip", json={"file_ids": [loose], "folder_ids": [a]})
+        self.assertEqual(r.status_code, 200)
+        z = zf.ZipFile(io.BytesIO(r.data))
+        self.assertEqual(sorted(z.namelist()), ["Uni/Week 1/notes.txt", "loose.txt"])
+
+    def test_storage_stats_fields(self):
+        self._upload("s.txt", b"12345")
+        trashed = self._upload("t.txt", b"1234")
+        self.c.post("/api/files/trash", json={"file_ids": [trashed]})
+        j = self.c.get("/api/storage").get_json()
+        self.assertEqual(j["files_bytes"], 5)
+        self.assertEqual(j["trash_bytes"], 4)
+        for k in ("quota_bytes", "notes_bytes", "db_bytes", "backups_bytes", "uploads_disk_bytes"):
+            self.assertIn(k, j)
+
+    def test_csv_preview_renders_table(self):
+        fid = self._upload("grades.csv", b"course,grade\nMath,8.5\n")
+        r = self.c.get("/api/files/%s/preview" % fid)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(b"<td>Math</td>", r.data)
+        self.assertIn(b"<th>course</th>", r.data)
+
+    def test_docx_preview_renders_text(self):
+        import zipfile as zf
+        buf = io.BytesIO()
+        w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        doc = ('<?xml version="1.0"?><w:document xmlns:w="%s"><w:body>'
+               '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
+               '<w:r><w:t>My Title</w:t></w:r></w:p>'
+               '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>bold text</w:t></w:r></w:p>'
+               '</w:body></w:document>' % w)
+        with zf.ZipFile(buf, "w") as z:
+            z.writestr("word/document.xml", doc)
+        fid = self._upload("essay.docx", buf.getvalue())
+        r = self.c.get("/api/files/%s/preview" % fid)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(b"<h1>My Title</h1>", r.data)
+        self.assertIn(b"<b>bold text</b>", r.data)
+
+    def test_preview_unsupported_type_415(self):
+        fid = self._upload("raw.bin", b"\x00\x01")
+        self.assertEqual(self.c.get("/api/files/%s/preview" % fid).status_code, 415)
+
+    def test_purge_old_trash_respects_retention(self):
+        from blueprints.files import purge_old_trash
+        old = self._upload("old.txt")
+        new = self._upload("new.txt")
+        helpers.kv_set("set_trash_retention_days", "30")
+        self.c.post("/api/files/trash", json={"file_ids": [old, new]})
+        with helpers.db() as con:
+            forty_days_ago = int((time.time() - 40 * 86400) * 1000)
+            con.execute("UPDATE files SET deleted=? WHERE id=?", (forty_days_ago, old))
+        purge_old_trash()
+        ids = [f["id"] for f in self.c.get("/api/state").get_json()["files"]]
+        self.assertEqual(ids, [new])
 
 
 if __name__ == "__main__":

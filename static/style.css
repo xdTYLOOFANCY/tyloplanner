@@ -1556,7 +1556,9 @@ mark.cur{background:#f5a623;color:#1c2230}
 .checkbox-task .hcheck{flex-shrink:0}
 .done{text-decoration:line-through;color:var(--muted)}
 /* files */
-.fileslayout{max-width:700px;margin:0 auto}
+/* Files tab — Drive-style two-pane layout */
+.fileslayout2{display:grid;grid-template-columns:230px 1fr;gap:16px;max-width:1100px;margin:0 auto}
+.fileslayout2>*{min-width:0}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
 h2.pagetitle{font-size:20px;margin-bottom:16px}
 code.url{background:var(--panel2);padding:4px 8px;border-radius:6px;font-size:12px;word-break:break-all}
@@ -4959,4 +4961,117 @@ body[data-nav-layout="sidebar"] .music-player-bar { left: var(--sidebar-w, 0px);
 @media (max-width: 1440px) {
   .nav-tabs { gap: 4px; }
   .nav-tabs button { padding: 6px 9px; font-size: 13px; }
+}
+
+/* ============ Files redesign (Drive-style) ============ */
+
+/* Left rail */
+.files-sidebar{display:flex;flex-direction:column;gap:10px;align-self:start;position:sticky;top:12px}
+.files-new-btn{width:100%;font-weight:700}
+.files-nav{display:flex;flex-direction:column;gap:2px}
+.fnav-row{display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;user-select:none}
+.fnav-row:hover{background:var(--panel2)}
+.fnav-row.active{background:color-mix(in srgb,var(--panel2) 80%,var(--accent));color:var(--text)}
+.fnav-row.disabled{opacity:.45;cursor:not-allowed}
+.fnav-ic{flex:none;width:20px;text-align:center}
+.fnav-name{overflow:hidden;text-overflow:ellipsis}
+.fnav-count{margin-left:auto;font-size:11px;font-weight:700;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:1px 7px;color:var(--muted)}
+.fnav-caret{flex:none;width:14px;font-size:10px;color:var(--muted);transition:transform .15s;text-align:center}
+.fnav-caret.open{transform:rotate(90deg)}
+.fnav-caret.none{pointer-events:none}
+.files-tree{display:flex;flex-direction:column;gap:1px;max-height:40vh;overflow-y:auto}
+.files-tree .fnav-row{font-weight:500;font-size:13px;padding-top:5px;padding-bottom:5px}
+
+/* Storage meter in the rail */
+.files-storage-mini{margin-top:auto;padding:10px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:var(--panel2)}
+.files-storage-mini:hover{border-color:var(--accent)}
+.fsm-bar{height:6px;border-radius:3px;background:var(--panel);overflow:hidden;margin-bottom:6px}
+.fsm-bar span{display:block;height:100%;background:var(--accent);border-radius:3px;min-width:2px}
+.fsm-bar span.warn{background:var(--orange)}
+.fsm-bar span.full{background:var(--red)}
+.fsm-label{font-size:11.5px;color:var(--muted);font-weight:600}
+
+/* Main pane */
+.file-crumbs{display:flex;align-items:center;gap:2px;flex-wrap:wrap;min-width:0;font-size:14px}
+.file-toolbar-right{display:flex;align-items:center;gap:10px;flex:1;justify-content:flex-end;flex-wrap:wrap}
+.file-toolbar-right .file-search-container{flex:0 1 240px;min-width:150px}
+.sort-sep{width:1px;height:16px;background:var(--border);margin:0 2px}
+.files-section-label{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:4px 0 8px}
+.files-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 8px}
+.files-section-head .files-section-label{margin:0}
+.files-select-all{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none}
+
+/* File rows (list view) */
+.file-item{gap:10px}
+.file-row-ic{flex:none;font-size:20px;width:32px;text-align:center}
+.file-row-thumb{flex:none;width:32px;height:32px;border-radius:6px;object-fit:cover;background:var(--panel)}
+.file-row-main{min-width:0}
+.file-name{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-star{color:var(--accent);font-size:12px}
+.file-kebab{flex:none;border:none;background:transparent;color:var(--muted);font-size:16px;font-weight:700;padding:4px 8px;border-radius:6px;cursor:pointer;opacity:0;transition:opacity .15s}
+.file-kebab:hover{background:var(--panel);color:var(--text)}
+.file-item:hover .file-kebab,.file-card:hover .file-kebab,.folder-card:hover .file-kebab{opacity:1}
+.file-card .file-kebab,.folder-card .file-kebab{position:absolute;top:4px;right:4px;z-index:2}
+.folder-card .file-card-check{position:absolute;top:6px;left:6px;z-index:2;background:var(--panel);opacity:0;transition:opacity .2s}
+.folder-card:hover .file-card-check,.folder-card .file-card-check.on{opacity:1}
+.folder-card.selected{border-color:var(--accent);background:color-mix(in srgb,var(--panel2) 90%,var(--accent))}
+
+/* Empty states */
+.files-empty{text-align:center;padding:48px 16px;color:var(--text);font-size:14px;font-weight:600}
+.files-empty .files-empty-ic{font-size:40px;margin-bottom:10px}
+.files-empty .file-link{color:var(--accent);cursor:pointer;text-decoration:underline}
+
+/* Trash */
+.trash-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--muted)}
+
+/* Storage manager */
+.storage-section{margin-bottom:22px}
+.storage-usage-line{font-size:15px;margin-bottom:8px}
+.storage-alert{color:var(--red);font-weight:700}
+.storage-limits{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.storage-limit-group{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.storage-limit-group input{width:88px}
+.storage-bar{display:flex;height:14px;border-radius:7px;background:var(--panel2);overflow:hidden;border:1px solid var(--border)}
+.storage-bar span{display:block;height:100%}
+.storage-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:12px;color:var(--muted)}
+.storage-legend-item{display:inline-flex;align-items:center;gap:5px}
+.storage-legend-item .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.storage-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:8px;font-size:13.5px}
+.storage-row:nth-child(even){background:var(--panel2)}
+.storage-row.total{border-top:1px solid var(--border);margin-top:4px;font-weight:700}
+.storage-row.link{cursor:pointer}
+.storage-row.link:hover{background:color-mix(in srgb,var(--panel2) 85%,var(--accent))}
+.storage-size{flex:none;font-size:13px}
+
+/* Move dialog */
+.file-move-tree{overflow-y:auto;max-height:46vh;border:1px solid var(--border);border-radius:var(--radius);padding:6px;background:var(--panel)}
+
+/* Preview modal */
+.preview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.preview-head-title{min-width:0}
+.preview-head-title h3{font-size:15px;font-weight:700;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preview-head-title .muted{font-size:12px;margin-top:2px}
+.preview-head-actions{display:flex;gap:6px;flex:none}
+.preview-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:5;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:20px;line-height:1;cursor:pointer;opacity:.85}
+.preview-arrow:hover{opacity:1;border-color:var(--accent)}
+.preview-arrow.prev{left:10px}
+.preview-arrow.next{right:10px}
+#mediaPreviewModalContent{position:relative}
+.preview-text{width:100%;height:100%;margin:0;padding:14px;box-sizing:border-box;overflow:auto;background:var(--panel);color:var(--text);border-radius:6px;font-size:12.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;text-align:left}
+.preview-fallback{text-align:center;padding:20px}
+
+/* Mobile: rail collapses to a horizontal strip of views */
+@media (max-width: 760px) {
+  .fileslayout2{grid-template-columns:1fr;gap:10px}
+  .files-sidebar{position:static;flex-direction:row;align-items:center;gap:8px;overflow-x:auto;padding:10px}
+  .files-new-btn{width:auto;flex:none;padding:7px 12px}
+  .files-nav{flex-direction:row;gap:4px;flex:1}
+  .files-nav .fnav-row{flex:none;padding:6px 9px}
+  .files-nav .fnav-row .fnav-name{max-width:70px}
+  #filesTree{display:none}
+  .files-storage-mini{margin-top:0;flex:none;min-width:96px;padding:7px 9px}
+  .file-kebab{opacity:1}
+  .preview-arrow{width:32px;height:32px;min-height:32px} /* beat the global 44px touch min-height */
+  .file-toolbar-right{justify-content:stretch}
+  .file-toolbar-right .file-search-container{flex:1 1 100%}
 }

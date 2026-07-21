@@ -94,12 +94,18 @@ are no dedicated endpoints; the generic CRUD + settings API cover it.
 | `POST /api/backups/<filename>/restore` | Restore database data from an automatic nightly backup. |
 | `GET /api/export/archive?categories=a,b` | Download a `.zip` export of the selected categories (`events,tasks,notes,exams,habits,workouts,study_sessions,shortcuts,files,settings`; omit for all). Contains `data.json` plus `uploads/<id>` blobs when `files` is included. |
 | `POST /api/import/archive?mode=merge\|replace&categories=a,b` | Import an export archive (multipart `file`). `merge` adds missing rows/settings/blobs (existing ids kept); `replace` deletes the selected categories first and restores them from the archive. |
-| `POST /api/files/upload` | Upload a file (multipart `file` field). Supports optional `folder_id` form field. Returns `{id, filename, size}`. |
+| `POST /api/files/upload` | Upload a file (multipart `file` field). Supports optional `folder_id` form field. Returns `{id, filename, size}`. Rejected with **413** once the `storage_quota_gb` limit is reached. |
 | `GET /api/files/<id>/download` | Download a file as an attachment. |
-| `GET /api/files/<id>/view` | View/stream a file inline with correct mimetype (for media previews). |
-| `DELETE /api/files/<id>` | Delete a file (removes DB row and disk file). |
-| `DELETE /api/folders/<id>` | Delete a folder recursively (relocating child files and folders to the parent directory). |
-| `POST /api/files/move` | Batch move multiple files to a folder. Payload: `{file_ids: [...], folder_id: ...}`. |
+| `GET /api/files/<id>/view` | View/stream a file inline with correct mimetype (supports HTTP Range for media seeking). |
+| `GET /api/files/<id>/preview` | Server-rendered HTML preview for `.docx`, `.xlsx`, and `.csv`/`.tsv` (stdlib converters; shown in a sandboxed iframe). **415** for other types. |
+| `POST /api/files/trash` | Soft-delete items. Payload: `{file_ids: [...], folder_ids: [...]}` — folders are trashed recursively. Sets `deleted` (ms epoch) on the rows. |
+| `POST /api/files/restore` | Un-trash items (same payload). Restoring a file resurrects its (trashed) ancestor folders so it lands somewhere visible. |
+| `POST /api/files/trash/empty` | Permanently delete everything in the trash (rows + disk). The scheduler auto-purges entries older than `trash_retention_days` daily. |
+| `DELETE /api/files/<id>` | Permanently delete a file (removes DB row and disk file). Used from Trash ("delete forever"). |
+| `DELETE /api/folders/<id>` | Permanently delete a folder **and all of its contents** recursively. Used from Trash; the soft path is `POST /api/files/trash`. |
+| `POST /api/files/move` | Batch move files and/or folders. Payload: `{file_ids: [...], folder_ids: [...], folder_id: <target or null>}`. Rejects moving a folder into its own subtree. |
+| `POST /api/files/zip` | Download selected items as a zip (folder structure preserved). JSON body or form field `payload` (form POST → native browser download; this endpoint is CSRF-exempt since it mutates nothing). |
+| `GET /api/storage` | Storage stats: quota, live/trash file bytes, notes text size, DB size, backups size, uploads-dir size, and the quota/retention settings. |
 | `POST /api/files/cleanup` | Run manual storage reconciliation and cleanup of orphaned files. |
 | `GET /api/files/<id>/art` | Embedded album art of an audio file (ID3 APIC / FLAC picture / MP4 covr / Vorbis picture); an SVG placeholder when none. |
 | `POST /api/music/scan` | Extract audio metadata (duration, title, artist, album — via mutagen) into the `files` table for audio files that lack it; `{"force": true}` rescans all. Runs automatically on audio upload and lazily from the Music tab. |

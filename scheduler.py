@@ -393,6 +393,10 @@ def scheduler_tick():
             from blueprints.files import run_storage_cleanup
             submit_job(run_storage_cleanup)
             submit_job(purge_expired_sessions)
+    if hhmm >= "04:15" and kv_get("done_trash_purge") != today:
+        kv_set("done_trash_purge", today)
+        from blueprints.files import purge_old_trash
+        submit_job(purge_old_trash)
     try:
         hours = float(setting("cal_sync_hours") or 6)
     except ValueError:

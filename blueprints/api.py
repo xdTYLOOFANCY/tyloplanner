@@ -69,6 +69,7 @@ _FIELD_RULES = {
     "due_date":         ("datetime",),
     "recurrence_until": ("date",),
     "uploaded":         ("int", 0, 9_999_999_999_999),
+    "deleted":          ("int", 0, 9_999_999_999_999),  # files/folders trash timestamp
     "start":            ("time",),
     "end":              ("time",),
     # ---- advanced calendar fields (migration 014) ----

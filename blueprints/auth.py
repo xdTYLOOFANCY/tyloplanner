@@ -105,8 +105,10 @@ def guard():
             return None
         return Response("Invalid or missing key. Get your feed URL from Settings.", 403)
         
-    # Simple anti-CSRF check for mutating API calls
-    if p.startswith("/api/") and request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+    # Simple anti-CSRF check for mutating API calls.
+    # /api/files/zip is exempt: it mutates nothing (POST only carries the id
+    # list) and must work as a plain form POST for native browser downloads.
+    if p.startswith("/api/") and request.method in ["POST", "PUT", "DELETE", "PATCH"] and p != "/api/files/zip":
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             return jsonify({"error": "csrf validation failed"}), 403
             

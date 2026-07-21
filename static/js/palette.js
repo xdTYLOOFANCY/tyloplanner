@@ -145,6 +145,7 @@ function buildIndex() {
     items.push({ label: e.name || '', type: 'exam', hint: e.date || '', run: function() { gotoTab('exams'); } });
   });
   (S.files || []).forEach(function(f) {
+    if (f.deleted) return;
     items.push({ label: f.filename || '', type: 'file', run: function() { gotoTab('files'); previewFile(f.id); } });
   });
   (S.shortcuts || []).forEach(function(s) {

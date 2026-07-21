@@ -481,46 +481,37 @@
   <section id="tab-files" style="position: relative;">
     <!-- Drop Zone Overlay -->
     <div id="fileDropOverlay" class="drop-overlay" style="display:none">
-      <div class="drop-overlay-content">Drop files to upload into <span id="dropFolderName">Root</span></div>
+      <div class="drop-overlay-content">Drop to upload into <span id="dropFolderName">My Files</span></div>
     </div>
 
-    <div class="fileslayout">
-      <div class="card">
-        <!-- Folder navigation header -->
-        <div id="folderHeader"></div>
+    <div class="fileslayout2">
+      <!-- Left rail: New button, views, folder tree, storage meter -->
+      <aside class="card files-sidebar">
+        <button class="btn files-new-btn" onclick="filesNewMenu(event)">＋ New</button>
+        <div id="filesNav" class="files-nav"></div>
+        <div id="filesStorageMini" class="files-storage-mini" onclick="setFilesView('storage')" title="Open storage manager"></div>
+      </aside>
 
-        <!-- Folder directory list -->
-        <div id="folderList"></div>
-
-        <!-- Hidden input triggered by header upload button -->
-        <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFile()">
-
-        <!-- Hidden input for direct phone camera capture -->
-        <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none" onchange="uploadCameraFile()">
-
-        <div id="fileSelectionBar"></div>
-
-        <!-- Clean Toolbar -->
+      <div class="card files-main">
         <div class="file-toolbar">
-          <div class="file-search-container">
-            <span class="search-icon">🔍</span>
-            <input id="fileSearch" placeholder="Search files…" oninput="fileSearchInput()" onkeydown="handleFileSearchKeydown(event)">
-          </div>
-          <div class="file-sort-group">
-            <span class="sort-label">Sort:</span>
-            <button id="fileSort-date" class="btn-sort active" onclick="setFileSort('date')">Date</button>
-            <button id="fileSort-name" class="btn-sort" onclick="setFileSort('name')">Name</button>
-            <button id="fileSort-size" class="btn-sort" onclick="setFileSort('size')">Size</button>
-          </div>
-          <div class="file-sort-group">
-            <button id="fileView-list" class="btn-sort active" onclick="setFileView('list')" title="List view">☰</button>
-            <button id="fileView-grid" class="btn-sort" onclick="setFileView('grid')" title="Grid view">▦</button>
+          <div id="fileCrumbs" class="file-crumbs"></div>
+          <div class="file-toolbar-right">
+            <div class="file-search-container">
+              <span class="search-icon">🔍</span>
+              <input id="fileSearch" placeholder="Search files…" oninput="fileSearchInput()" onkeydown="handleFileSearchKeydown(event)">
+            </div>
+            <div id="fileSortCtl" class="file-sort-group"></div>
           </div>
         </div>
-
-        <div id="fileList"></div>
+        <div id="fileSelectionBar"></div>
+        <div id="filesContent" oncontextmenu="filesContentMenu(event)"></div>
       </div>
     </div>
+
+    <!-- Hidden pickers: files, whole folder, phone camera -->
+    <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFile()">
+    <input type="file" id="folderInput" webkitdirectory style="display:none" onchange="uploadFolderInput()">
+    <input type="file" id="cameraInput" accept="image/*" capture="camera" style="display:none" onchange="uploadCameraFile()">
   </section>
 
   <section id="tab-music">
@@ -1056,15 +1047,38 @@
 
   <dialog id="mediaPreviewModal" class="modal">
     <div id="mediaPreviewModalContent" class="modal-content" style="display: flex; flex-direction: column; box-sizing: border-box;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3 id="mediaPreviewTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">File Preview</h3>
-        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size: 20px; line-height: 1; padding: 4px 8px;">&times;</button>
+      <div class="preview-head">
+        <div class="preview-head-title">
+          <h3 id="mediaPreviewTitle">File Preview</h3>
+          <div id="mediaPreviewMeta" class="muted"></div>
+        </div>
+        <div class="preview-head-actions">
+          <button class="btn ghost small" onclick="previewDownload()" title="Download">⬇</button>
+          <button class="btn ghost small" onclick="previewOpenTab()" title="Open in new tab">↗</button>
+          <button class="btn ghost small" onclick="this.closest('dialog').close()" title="Close" style="font-size: 18px; line-height: 1;">&times;</button>
+        </div>
       </div>
-      <div id="mediaPreviewContainer" style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto; background:#121212; border-radius:4px; min-height:0; padding:10px;">
+      <div id="mediaPreviewContainer" style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto; background:#121212; border-radius:4px; min-height:0; padding:10px; position:relative;">
         <!-- Embedded preview will go here -->
       </div>
-      <div style="margin-top:12px; display:flex; justify-content:flex-end;">
-        <button class="btn ghost" onclick="this.closest('dialog').close()">Close</button>
+      <button id="previewPrevBtn" class="preview-arrow prev" onclick="previewStep(-1)" title="Previous file" aria-label="Previous file">&#8249;</button>
+      <button id="previewNextBtn" class="preview-arrow next" onclick="previewStep(1)" title="Next file" aria-label="Next file">&#8250;</button>
+    </div>
+  </dialog>
+
+  <dialog id="fileMoveModal" class="modal">
+    <div class="modal-content" style="max-width: 440px; width: 92%; display:flex; flex-direction:column; max-height: 80vh;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 id="fileMoveTitle" style="font-size:16px; font-weight:700; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Move to</h3>
+        <button class="btn ghost small" onclick="this.closest('dialog').close()" style="font-size:18px; line-height:1; padding:4px 8px;">&times;</button>
+      </div>
+      <div id="fileMoveTree" class="file-move-tree"></div>
+      <div style="margin-top:12px; display:flex; gap:8px; justify-content:space-between; flex-wrap:wrap;">
+        <button class="btn ghost small" onclick="moveDialogNewFolder()">＋ New folder</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button>
+          <button class="btn" id="fileMoveConfirm" onclick="confirmMoveDialog()">Move</button>
+        </div>
       </div>
     </div>
   </dialog>

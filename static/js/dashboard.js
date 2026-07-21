@@ -367,7 +367,7 @@ function renderUsageWidget(id) {
     [S.events.length, 'events'],
     [S.exams.length, 'exams'],
     [(S.habits || []).length, 'habits'],
-    [(S.files || []).length, 'files'],
+    [(S.files || []).filter(function(f) { return !f.deleted; }).length, 'files'],
     [activeDays.size, 'active days']
   ];
   var html = '<h3>' + esc(title) + '</h3><div class="wstats">';
@@ -494,7 +494,7 @@ function renderRecentFilesWidget(id) {
   var wData = id ? (widgetsData[id] || {}) : {};
   var title = wData.title || "Recent Files";
   var html = '<h3>' + esc(title) + '</h3><div class="card-scroll">';
-  var files = (S.files || []).slice();
+  var files = (S.files || []).filter(function(f) { return !f.deleted; });
   files.sort(function(a, b) {
     return (b.uploaded || 0) - (a.uploaded || 0);
   });

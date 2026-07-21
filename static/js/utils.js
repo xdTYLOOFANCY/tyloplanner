@@ -289,17 +289,21 @@ function optimisticUpdate(method, path, body, id, S, SET) {
         });
       }
     } else if (table === "folders") {
-      var deletedFolder = (S.folders || []).find(function(f) { return f.id === id; });
-      var parentId = deletedFolder ? deletedFolder.parent_id : null;
-      if (S.files) {
-        S.files.forEach(function(f) {
-          if (f.folder_id === id) f.folder_id = parentId;
+      // DELETE /api/folders is a permanent recursive delete (Trash "delete
+      // forever"): drop the whole subtree and its files from the local state.
+      var doomed = new Set([id]);
+      var grew = true;
+      while (grew) {
+        grew = false;
+        (S.folders || []).forEach(function(f) {
+          if (!doomed.has(f.id) && doomed.has(f.parent_id)) { doomed.add(f.id); grew = true; }
         });
       }
+      if (S.files) {
+        S.files = S.files.filter(function(f) { return !doomed.has(f.folder_id); });
+      }
       if (S.folders) {
-        S.folders.forEach(function(f) {
-          if (f.parent_id === id) f.parent_id = parentId;
-        });
+        S.folders = S.folders.filter(function(f) { return f.id === id || !doomed.has(f.id); });
       }
     }
     S[table] = S[table].filter(function(item) { return item.id !== id; });

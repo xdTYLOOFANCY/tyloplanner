@@ -36,7 +36,7 @@ let offlineIds = new Set();
 // ---------- helpers ----------
 function audioFiles() {
   return ((S && S.files) || []).filter(function(f) {
-    return (f.mimetype || '').startsWith('audio/');
+    return (f.mimetype || '').startsWith('audio/') && !f.deleted;
   });
 }
 function trackById(id) {

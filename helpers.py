@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.42.1"
+VERSION = "1.43.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -44,8 +44,8 @@ TABLES = {
     "tasks":    ["name", "done", "created", "completed_at", "due", "category", "order_index", "due_date", "parent_id", "recurrence", "priority", "reminder_offset"],
     "notes":    ["title", "body", "updated", "is_pinned", "folder_id", "body_format", "tags"],
     "note_folders": ["name", "parent_id", "icon", "order_index"],
-    "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id"],
-    "folders":  ["name", "parent_id", "icon"],
+    "files":    ["filename", "size", "mimetype", "uploaded", "is_pinned", "folder_id", "deleted"],
+    "folders":  ["name", "parent_id", "icon", "deleted"],
     "shortcuts":["name", "url", "icon"],
     "study_sessions": ["subject", "date", "duration", "completed", "note"],
     "playlists": ["name", "created", "updated"],
@@ -584,6 +584,8 @@ SETTING_DEFAULTS = {
     "goal_gym_sessions": "",
     "timer_hide": "0",     # no-distraction: hide the running-timer chips from nav
     "timer_push": "0",     # also push timer completion to phone (ntfy/web push)
+    "storage_quota_gb": "",       # max file storage in GB; empty/0 = unlimited
+    "trash_retention_days": "30", # auto-empty trash after N days; empty/0 = keep forever
 }
 
 
