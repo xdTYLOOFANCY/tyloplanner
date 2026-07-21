@@ -2,6 +2,14 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.42.1 — 2026-07-21
+
+- **Easier Google/GitHub OAuth setup.** When you click **Link** for Google or
+  GitHub in Settings → Security, the credential form now shows a direct link
+  to that provider's OAuth-app creation page and the exact callback URL to
+  paste. The GitHub link pre-fills the app name and callback URL, so it's
+  effectively one click before you generate the secret.
+
 ## 1.42.0 — 2026-07-21
 
 - **Four new Appearance preferences.** In Settings → Appearance you can now

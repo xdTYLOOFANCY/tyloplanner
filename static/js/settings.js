@@ -578,12 +578,42 @@ async function unlinkOauth(provider) {
   }
 }
 
+// Deep links to each provider's OAuth-app creation page. GitHub's "new OAuth app"
+// form accepts query params, so we pre-fill the name + callback URL (one-click).
+// Google's console can't be pre-filled, so we just deep-link and show the callback
+// URL to paste under "Authorized redirect URIs".
+function oauthSetupHelp(provider) {
+  const base = (S.app_url || window.location.origin).replace(/\/$/, "");
+  const callback = base + "/api/oauth/callback";
+  let linkUrl, linkLabel, steps;
+  if (provider === "github") {
+    linkUrl = "https://github.com/settings/applications/new" +
+      "?oauth_application[name]=" + encodeURIComponent("TyloPlanner") +
+      "&oauth_application[url]=" + encodeURIComponent(base) +
+      "&oauth_application[callback_url]=" + encodeURIComponent(callback);
+    linkLabel = "Create GitHub OAuth app ↗";
+    steps = 'Opens GitHub with the name and callback URL already filled in. Click <b>Register application</b>, then <b>Generate a new client secret</b>, and paste both below.';
+  } else {
+    linkUrl = "https://console.cloud.google.com/apis/credentials/oauthclient";
+    linkLabel = "Open Google Cloud credentials ↗";
+    steps = 'Choose <b>Web application</b>, add the callback URL below under <b>Authorized redirect URIs</b>, then copy the Client ID and Secret here. (Needs an OAuth consent screen configured once.)';
+  }
+  return `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:12px;font-size:12px;">
+      <a href="${linkUrl}" target="_blank" rel="noopener" class="btn" style="padding:5px 10px;font-size:12px;display:inline-block;margin-bottom:8px;">${linkLabel}</a>
+      <p class="muted" style="margin:0 0 8px;line-height:1.5;">${steps}</p>
+      <label class="muted" style="font-size:11px;display:block;margin-bottom:3px;">Callback / redirect URL</label>
+      <input readonly value="${esc(callback)}" onclick="this.select()" style="width:100%;padding:5px;font-size:12px;border-radius:4px;border:1px solid var(--border);background:var(--panel);color:var(--text);">
+    </div>`;
+}
+
 function linkOauthSetup(provider) {
   oauthEditing = true;
   const container = document.getElementById("oauthSettingsBox");
   container.innerHTML = `
     <div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:8px;">
       <h5 style="margin-bottom:12px;font-size:13px;font-weight:600;">Link ${provider.charAt(0).toUpperCase() + provider.slice(1)}</h5>
+      ${oauthSetupHelp(provider)}
       <div style="margin-bottom:8px;">
         <label class="muted" style="font-size:11px;display:block;margin-bottom:4px;">Client ID</label>
         <input id="linkOauthClientId" style="width:100%;padding:6px;font-size:13px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
