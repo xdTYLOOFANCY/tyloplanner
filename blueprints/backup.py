@@ -8,7 +8,7 @@ import json
 import re
 import zipfile
 
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, current_app
 
 from helpers import (db, uid, q, TABLES, do_backup, BACKUP_DIR, local_now,
                      UPLOAD_DIR, VERSION, kv_set)
@@ -60,8 +60,9 @@ def do_restore_data(data):
 def backup_now():
     try:
         path = do_backup(local_now().strftime("%Y-%m-%d"))
-    except Exception as e:
-        return jsonify({"error": str(e) or "Backup failed"}), 500
+    except Exception:
+        current_app.logger.exception("Backup failed")
+        return jsonify({"error": "Backup failed"}), 500
     return jsonify({"ok": True, "file": os.path.basename(path)})
 
 
@@ -104,8 +105,9 @@ def restore_backup(filename):
     try:
         with open(path, "r") as f:
             data = json.load(f)
-    except Exception as e:
-        return jsonify({"error": "Failed to read backup file: " + str(e)}), 500
+    except Exception:
+        current_app.logger.exception("Failed to read backup file")
+        return jsonify({"error": "Failed to read backup file"}), 500
         
     restored = do_restore_data(data)
     return jsonify({"ok": True, "restored": restored})

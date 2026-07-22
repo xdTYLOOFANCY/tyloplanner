@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 import zoneinfo
 
 import requests
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, current_app
 
-from helpers import db, uid, setting, kv_set, app_tz, local_now, http_get
+from helpers import db, uid, setting, kv_set, app_tz, local_now, http_get_public
 
 bp = Blueprint("calendar", __name__)
 
@@ -153,7 +153,7 @@ def cal_auto_sync():
         if not url.lower().startswith(("http://", "https://")):
             continue
         try:
-            r = http_get(url, timeout=20)
+            r = http_get_public(url, timeout=20)
             r.raise_for_status()
             total += import_ics_text(r.text, source_id=f"ics_{idx}")["added"]
         except Exception as e:
@@ -294,11 +294,12 @@ def ics_import():
                 urls = [u.strip() for u in setting("cal_sync_urls").splitlines() if u.strip()]
                 if url in urls:
                     source_id = f"ics_{urls.index(url)}"
-                r = http_get(url, timeout=20)
+                r = http_get_public(url, timeout=20)
                 r.raise_for_status()
                 text = r.text
             except Exception as e:
-                return jsonify({"error": "fetch failed: %s" % e}), 400
+                current_app.logger.exception("ICS fetch failed")
+                return jsonify({"error": "fetch failed"}), 400
     if not text:
         return jsonify({"error": "provide an .ics file or a url"}), 400
     return jsonify(import_ics_text(text, source_id=source_id))
@@ -310,8 +311,9 @@ def ics_sync_now():
         return jsonify({"error": "no calendar URLs configured (and saved)"}), 400
     try:
         return jsonify({"added": cal_auto_sync()})
-    except Exception as e:
-        return jsonify({"error": str(e) or "Calendar sync failed"}), 500
+    except Exception:
+        current_app.logger.exception("Calendar sync failed")
+        return jsonify({"error": "Calendar sync failed"}), 500
 
 
 @bp.delete("/api/ics")

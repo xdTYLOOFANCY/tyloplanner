@@ -1,7 +1,7 @@
 // TyloPlanner — settings module (notifications, calendar, security, Strava).
 
 import { S, SET, safeRender } from './state.js';
-import { esc, api, toast, debounce } from './utils.js';
+import { esc, escAttr, api, toast, debounce } from './utils.js';
 import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings, applyNavLayout, applyNavLayoutFromSettings, applyDensity, applyDensityFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
 
@@ -93,8 +93,8 @@ export function renderSettings(refresh) {
     catsHtml += '<div class="list-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:10px;">' +
       '<span class="badge" style="background-color:' + esc(cat.color) + '; color:#fff; font-weight:600; padding:4px 8px; border-radius:4px;">' + esc(cat.name) + '</span>' +
       '<div style="flex:1"></div>' +
-      '<input type="color" value="' + esc(cat.color) + '" onchange="updateCategoryColor(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="width:30px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
-      '<button class="btn danger small" onclick="deleteCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\')">Delete</button>' +
+      '<input type="color" value="' + esc(cat.color) + '" onchange="updateCategoryColor(\'' + escAttr(cat.name) + '\', this.value)" style="width:30px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
+      '<button class="btn danger small" onclick="deleteCategory(\'' + escAttr(cat.name) + '\')">Delete</button>' +
       '</div>';
   });
   var settingsCategoriesEl = document.getElementById("settingsCategories");
@@ -136,11 +136,11 @@ export async function saveAppThemeStyle(refresh) {
 
 export async function saveNavLayout(refresh) {
   var value = document.getElementById("navLayout").value;
+  applyNavLayout(value);
+  toast("Navigation layout applied");
   await api("POST", "/api/settings", {
     nav_layout: value
   });
-  applyNavLayout(value);
-  toast("Navigation layout saved");
   await refresh();
 }
 

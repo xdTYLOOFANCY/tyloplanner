@@ -287,10 +287,10 @@
       <div class="formrow">
         <input id="examName" placeholder="Exam or assignment name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
         <input id="examDate" type="date" onkeydown="if(event.key==='Enter')addExam()">
-        <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS (opt.)" style="width:100px" onkeydown="if(event.key==='Enter')addExam()">
+        <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS" style="width:90px" onkeydown="if(event.key==='Enter')addExam()">
         <button class="btn" onclick="addExam()">Add</button>
       </div>
-      <div style="overflow-x:auto"><table class="grades" id="examTable"></table></div>
+      <div id="examTable" class="exam-list"></div>
     </div>
   </section>
 
@@ -606,13 +606,12 @@
       <div style="margin-bottom:16px;">
         <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Navigation layout</label>
         <div style="display:flex;gap:8px;">
-          <select id="navLayout" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
+          <select id="navLayout" onchange="saveNavLayout()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;">
             <option value="topbar">Top bar</option>
             <option value="sidebar">Sidebar</option>
           </select>
-          <button class="btn" onclick="saveNavLayout()">Save layout</button>
         </div>
-        <p class="muted" style="font-size:12px;margin-top:6px">Desktop only — mobile always uses the slide-out drawer.</p>
+        <p class="muted" style="font-size:12px;margin-top:6px">Applies instantly. Desktop only — mobile always uses the slide-out drawer.</p>
       </div>
       <div style="margin-bottom:16px;">
         <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Density</label>

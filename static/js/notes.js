@@ -1,7 +1,7 @@
 // TyloPlanner — notes module (editor, markdown, search, cross-links).
 
 import { S, SET, safeRender } from './state.js';
-import { esc, api, z, mdToHtml, toast, askConfirm, askPrompt, showContextMenu } from './utils.js';
+import { esc, escAttr, api, z, mdToHtml, toast, askConfirm, askPrompt, showContextMenu } from './utils.js';
 
 var currentNote = null, noteTimer = null;
 var noteBodySearch = { q: "", idx: 0 };
@@ -1393,7 +1393,7 @@ function renderNoteList() {
     var tags = allNoteTags();
     if (noteTagFilter && tags.indexOf(noteTagFilter) === -1) noteTagFilter = null;
     tagBarEl.innerHTML = tags.map(function(t) {
-      var a = esc(t.replace(/'/g, "\\'"));
+      var a = escAttr(t);
       return '<button class="exam-tag' + (noteTagFilter === t ? ' active' : '') + '" ' +
         'onclick="noteToggleTagFilter(\'' + a + '\')" ' +
         'oncontextmenu="noteTagMenu(event,\'' + a + '\')">' + esc(t) + '</button>';
@@ -2190,7 +2190,7 @@ function noteToMarkdown(note) {
     var out = [];
     rows.forEach(function(tr, i) {
       var cells = Array.prototype.map.call(tr.children, function(td) {
-        return inline(td).trim().replace(/\|/g, "\\|").replace(/\n/g, " ");
+        return inline(td).trim().replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
       });
       out.push("| " + cells.join(" | ") + " |");
       if (i === 0) out.push("| " + cells.map(function() { return "---"; }).join(" | ") + " |");

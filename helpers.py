@@ -8,9 +8,12 @@ import os
 import json
 import time
 import uuid
+import socket
 import secrets
 import sqlite3
+import ipaddress
 import threading
+from urllib.parse import urlparse
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -29,7 +32,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.47.0"
+VERSION = "1.47.4"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -70,6 +73,27 @@ _http.mount("https://", requests.adapters.HTTPAdapter(max_retries=Retry(
 _http.mount("http://", _http.get_adapter("https://"))
 http_get = _http.get
 http_post = _http.post
+
+
+def http_get_public(url, **kwargs):
+    """http_get, but refuse URLs whose host resolves to a private/loopback/
+    link-local/reserved address. Blocks SSRF via user-supplied feed URLs
+    (ICS calendar subscriptions) reaching internal services or cloud metadata.
+    ponytail: resolves once here, so a DNS-rebind between this check and the
+    request itself could still slip through — acceptable for self-hosted
+    single-user; pin the resolved IP into the transport if this goes multi-tenant."""
+    host = urlparse(url).hostname
+    if not host:
+        raise ValueError("invalid url")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        raise ValueError("could not resolve host")
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise ValueError("url resolves to a non-public address")
+    return http_get(url, **kwargs)
 
 
 def is_write_request():

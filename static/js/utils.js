@@ -41,6 +41,9 @@ export function fmtShort(d) { return DAYS[(d.getDay() + 6) % 7] + " " + d.getDat
 
 // ---------- DOM helpers ----------
 export function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+// HTML-escape, then escape backslash + single-quote for embedding inside a
+// single-quoted JS string in an inline handler attribute, e.g. onclick="fn('...')".
+export function escAttr(s) { return esc(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
 export function toast(msg) {
   var t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
   document.body.appendChild(t); setTimeout(function() { t.remove(); }, 2500);

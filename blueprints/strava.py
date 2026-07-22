@@ -5,7 +5,7 @@ import time
 from urllib.parse import urlencode
 
 import requests
-from flask import Blueprint, request, jsonify, redirect
+from flask import Blueprint, request, jsonify, redirect, current_app
 
 import helpers
 from helpers import (
@@ -156,8 +156,9 @@ def strava_sync():
         return jsonify({"error": "not connected to Strava"}), 400
     try:
         return jsonify(do_strava_sync())
-    except Exception as e:
-        return jsonify({"error": str(e) or "Sync failed"}), 500
+    except Exception:
+        current_app.logger.exception("Strava sync failed")
+        return jsonify({"error": "Sync failed"}), 500
 
 
 @bp.post("/api/strava/disconnect")

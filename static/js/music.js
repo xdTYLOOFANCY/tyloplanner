@@ -979,6 +979,14 @@ async function adoptPlayback(s) {
 
 export function popOutPlayer() {
   if (popoutRef && !popoutRef.closed) { popoutRef.focus(); return; }
+  // Pop-out already open but we lost the handle (main tab was reloaded — the
+  // BroadcastChannel re-announced it, so popoutActive is still true). Re-focus
+  // it WITHOUT a URL: window.open(url, name) would navigate the existing named
+  // tab and reload it, stopping the music. Empty URL just re-grabs + focuses.
+  if (popoutActive) {
+    var existing = window.open('', 'tyloMusicPlayer');
+    if (existing) { popoutRef = existing; existing.focus(); return; }
+  }
   // Open as a normal, full-size browser tab (no width/height features string).
   var w = window.open('/?player=1', 'tyloMusicPlayer');
   if (!w) { toast('Allow pop-ups for this site to open the player'); return; }

@@ -1,7 +1,7 @@
 // TyloPlanner — tasks (to-do) module.
 
 import { S, SET, safeRender, syncSilent } from './state.js';
-import { todayStr, esc, api, debounce } from './utils.js';
+import { todayStr, esc, escAttr, api, debounce } from './utils.js';
 import { getTaskCategories } from './settings.js';
 
 // Priority sort weight + badge styling. Lower rank sorts first.
@@ -380,9 +380,9 @@ export function renderTasks() {
       var catsHtml = "";
       cats.forEach(function(cat) {
         catsHtml += '<div class="list-item" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">' +
-          '<input type="color" value="' + esc(cat.color) + '" onchange="updateModalCategoryColor(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="width:28px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
-          '<input type="text" value="' + esc(cat.name) + '" onchange="renameModalCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\', this.value)" style="flex:1; font-size:13px; padding:2px 6px; border:1px solid var(--border); border-radius:4px; background:var(--panel2); color:var(--text);">' +
-          '<button class="btn danger small" onclick="deleteModalCategory(\'' + esc(cat.name).replace(/'/g, "\\'") + '\')">✕</button>' +
+          '<input type="color" value="' + esc(cat.color) + '" onchange="updateModalCategoryColor(\'' + escAttr(cat.name) + '\', this.value)" style="width:28px; height:24px; padding:0; border:none; background:none; cursor:pointer;">' +
+          '<input type="text" value="' + esc(cat.name) + '" onchange="renameModalCategory(\'' + escAttr(cat.name) + '\', this.value)" style="flex:1; font-size:13px; padding:2px 6px; border:1px solid var(--border); border-radius:4px; background:var(--panel2); color:var(--text);">' +
+          '<button class="btn danger small" onclick="deleteModalCategory(\'' + escAttr(cat.name) + '\')">✕</button>' +
           '</div>';
       });
       modalListEl.innerHTML = catsHtml || '<div class="muted">No categories configured.</div>';

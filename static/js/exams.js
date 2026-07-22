@@ -1,7 +1,7 @@
 // TyloPlanner — exams & grades module.
 
 import { S, SET, safeRender } from './state.js';
-import { esc, api, daysUntil, todayStr, askConfirm, askPrompt, showContextMenu, guardFocus } from './utils.js';
+import { esc, escAttr, api, daysUntil, todayStr, parseISO, fmtShort, askConfirm, askPrompt, showContextMenu, guardFocus } from './utils.js';
 
 // ---- trackers (studies/programmes; stored as JSON in setting exam_trackers) ----
 
@@ -645,8 +645,8 @@ export function renderExams(refresh) {
       tagBarEl.innerHTML = tags.length
         ? tags.map(function(t) {
             return '<button class="exam-tag' + (tagFilter === t ? ' active' : '') + '" ' +
-              'onclick="examToggleTagFilter(\'' + esc(t.replace(/'/g, "\\'")) + '\')" ' +
-              'oncontextmenu="examTagMenu(event,\'' + esc(t.replace(/'/g, "\\'")) + '\')">' + esc(t) + '</button>';
+              'onclick="examToggleTagFilter(\'' + escAttr(t) + '\')" ' +
+              'oncontextmenu="examTagMenu(event,\'' + escAttr(t) + '\')">' + esc(t) + '</button>';
           }).join('')
         : '';
     }
@@ -663,36 +663,49 @@ export function renderExams(refresh) {
     var analyticsEl = document.getElementById('examAnalytics');
     if (analyticsEl) analyticsEl.innerHTML = mine.length ? renderAnalytics(mine, tracker) : '';
 
-    var html = '<tr><th>Name</th><th>Date</th><th></th><th>Year</th><th>ECTS</th><th>Tags</th><th>Grade</th><th></th></tr>';
+    var html = '<div class="exam-item head">' +
+      '<span class="exam-item-main">Exam / assignment</span>' +
+      '<span class="exam-head-ects">ECTS</span>' +
+      '<span class="exam-head-grade">Grade</span>' +
+      '<span class="exam-head-del"></span>' +
+      '</div>';
+
     list.forEach(function(e) {
       var d = daysUntil(e.date);
       var v = gradeVal(e);
-      var cls = v ? gradeClass(v) : '';
-      var displayVal = v
-        ? (isPassFail(v)
-            ? '<span class="badge ' + (v === 'pass' ? 'green' : 'red') + '">' + v + '</span>'
-            : (cls ? '<span class="badge ' + cls + '">' + esc(v) + '</span>' : esc(v)))
-        : '';
+      var gcls = v ? gradeClass(v) : '';
       var id = esc(e.id);
       var ay = examAY(e);
-      var chips = examTagList(e).map(function(t) { return '<span class="exam-tag mini">' + esc(t) + '</span>'; }).join('');
-      html += '<tr class="exam-tr">' +
-        '<td class="exam-name-cell" onclick="examInlineEdit(this,\'' + id + '\',\'name\',\'' + esc((e.name || '').replace(/'/g,"\\'")) + '\')">' + esc(e.name) + '</td>' +
-        '<td class="muted exam-date-cell" onclick="examInlineEdit(this,\'' + id + '\',\'date\',\'' + esc(e.date) + '\')">' + esc(e.date) + '</td>' +
-        '<td>' + examBadge(d) + '</td>' +
-        '<td class="exam-year-cell' + (e.academic_year ? '' : ' muted') + '" title="Academic year (click to override)" ' +
-          'onclick="examInlineEdit(this,\'' + id + '\',\'academic_year\',\'' + esc(ay) + '\')">' + ayLabel(ay) + '</td>' +
-        '<td class="exam-ects-cell" onclick="examInlineEdit(this,\'' + id + '\',\'ects\',' + (e.ects != null ? e.ects : 'null') + ')">' + (e.ects || '<span class="muted">—</span>') + '</td>' +
-        '<td class="exam-tags-cell" onclick="examEditTags(\'' + id + '\')" title="Edit tags">' + (chips || '<span class="muted">＋</span>') + '</td>' +
-        '<td class="exam-grade-cell">' +
-          '<input type="text" class="grade-input" value="' + esc(v || '') + '" placeholder="—" ' +
-          'onchange="setGradeText(\'' + id + '\',this.value)">' +
-          (displayVal ? '<span class="grade-badge-preview">' + displayVal + '</span>' : '') +
-        '</td>' +
-        '<td><button class="btn danger small exam-del" onclick="delRow(\'exams\',\'' + id + '\')">✕</button></td>' +
-        '</tr>';
+
+      var tags = examTagList(e);
+      var tagsHtml = tags.length
+        ? tags.map(function(t) { return '<span class="exam-chip">' + esc(t) + '</span>'; }).join('')
+        : '<span class="exam-chip add">＋ tag</span>';
+
+      var parts = [];
+      if (e.date) {
+        parts.push('<span class="exam-meta-date" onclick="examInlineEdit(this,\'' + id + '\',\'date\',\'' + esc(e.date) + '\')">' +
+          esc(fmtShort(parseISO(e.date))) + '</span>' + examBadge(d));
+      }
+      parts.push('<span class="exam-meta-year' + (e.academic_year ? '' : ' muted') + '" title="Academic year (click to override)" ' +
+        'onclick="examInlineEdit(this,\'' + id + '\',\'academic_year\',\'' + esc(ay) + '\')">' + (ayLabel(ay) || '—') + '</span>');
+      parts.push('<span class="exam-meta-tags" onclick="examEditTags(\'' + id + '\')" title="Edit tags">' + tagsHtml + '</span>');
+
+      html += '<div class="exam-item">' +
+        '<div class="exam-item-main">' +
+          '<div class="exam-item-name" onclick="examInlineEdit(this,\'' + id + '\',\'name\',\'' + escAttr(e.name || '') + '\')">' + esc(e.name) + '</div>' +
+          '<div class="exam-item-meta">' + parts.join('<span class="sep">·</span>') + '</div>' +
+        '</div>' +
+        '<div class="exam-item-ects' + (e.ects != null ? '' : ' muted') + '" title="ECTS credits (click to edit)" ' +
+          'onclick="examInlineEdit(this,\'' + id + '\',\'ects\',' + (e.ects != null ? e.ects : 'null') + ')">' +
+          (e.ects != null ? e.ects + '<span>EC</span>' : '—') + '</div>' +
+        '<div class="exam-item-grade">' +
+          '<input type="text" class="grade-input' + (gcls ? ' ' + gcls : '') + '" value="' + esc(v || '') + '" placeholder="grade" ' +
+          'onchange="setGradeText(\'' + id + '\',this.value)"></div>' +
+        '<button class="exam-item-del" title="Delete" onclick="delRow(\'exams\',\'' + id + '\')">✕</button>' +
+        '</div>';
     });
-    if (!list.length) html += '<tr><td colspan="8" class="muted">' + (tagFilter ? 'No exams with this tag.' : 'No exams yet.') + '</td></tr>';
+    if (!list.length) html += '<div class="exam-empty muted">' + (tagFilter ? 'No exams with this tag.' : 'No exams yet — add one above.') + '</div>';
 
     document.getElementById('examTable').innerHTML = html;
   });

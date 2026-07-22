@@ -2,6 +2,47 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.47.4 — 2026-07-22
+
+- **Redesigned the Exams & grades list.** The exam table — with its sparse,
+  stretched columns and a floating countdown badge — is replaced by a clean
+  one-row-per-exam list. Each row groups the exam name with a compact meta line
+  (nicely formatted date, countdown badge, academic year, tags), and keeps the
+  ECTS and grade controls aligned in fixed right-hand columns for easy
+  scanning. Grades are colour-coded green/orange/red in place, tags are shown
+  as chips with a dashed "＋ tag" placeholder, and the whole list now reads
+  properly on mobile instead of forcing a horizontal scroll. All inline
+  editing (name, date, year, ECTS, tags, grade) works exactly as before.
+
+## 1.47.3 — 2026-07-22
+
+- **Security hardening (from CodeQL code-scanning alerts).** No user-facing
+  behavior change for normal use:
+  - **SSRF guard on calendar (ICS) subscriptions.** A subscribed/imported
+    calendar URL that resolves to a private, loopback, link-local, or reserved
+    address is now refused before the request is made, so a feed URL can't be
+    used to reach internal services or cloud-metadata endpoints.
+  - **Error responses no longer leak stack traces.** Backup, restore, calendar
+    sync, and Strava sync now return a generic error message and log the detail
+    server-side instead of returning the raw exception text.
+  - **Tighter output escaping.** A new `escAttr()` helper escapes backslashes
+    in addition to quotes when category/tag names are embedded in inline
+    handlers, and Markdown table export escapes backslashes — closing
+    incomplete-sanitization gaps.
+
+## 1.47.2 — 2026-07-22
+
+- **Fixed: Navigation layout in Settings → Appearance now applies instantly**
+  on change, like App Theme Style and Density, instead of needing a separate
+  "Save layout" click.
+
+## 1.47.1 — 2026-07-22
+
+- **Fixed: re-opening the pop-out music player no longer reloads it and stops
+  the music.** After reloading the main app, clicking Music again (or the
+  pop-out button) re-focuses the existing player tab instead of navigating it,
+  so playback keeps going.
+
 ## 1.47.0 — 2026-07-22
 
 - **The Settings tab is reorganized into clearer, better-grouped cards.** The
