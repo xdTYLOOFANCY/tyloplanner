@@ -273,13 +273,98 @@ export async function setGradeText(id, raw, refresh) {
   var n = parseNumeric(v);
   // store numeric in grade column for backward compat, text in grade_text
   var payload = { grade_text: v || null, grade: n };
+
+  // Snapshot this exam's tracker ECTS progress before the write, so we can fire
+  // the goal celebration if *this* grade is the one that crosses the finish line.
+  var before = ectsGoalProgress(id);
+
   await api('PUT', '/api/exams/' + id, payload);
   await refresh();
+
+  var after = ectsGoalProgress(id);
+  if (before && after && after.goal > 0 &&
+      before.earned < after.goal && after.earned >= after.goal) {
+    celebrateEctsGoal(after.earned, after.goal);
+  }
 }
 
 // legacy compat
 export async function setGrade(id, val, refresh) {
   await setGradeText(id, String(val ?? ''), refresh);
+}
+
+// Earned ECTS + goal for the tracker owning a given exam (from live S).
+function ectsGoalProgress(examId) {
+  var tlist = trackers();
+  var exam = S.exams.filter(function(e) { return String(e.id) === String(examId); })[0];
+  if (!exam) return null;
+  var tid = trackerOf(exam, tlist);
+  var tracker = tlist.filter(function(t) { return t.id === tid; })[0];
+  if (!tracker) return null;
+  var mine = S.exams.filter(function(e) { return trackerOf(e, tlist) === tid; });
+  return { earned: calcStats(mine).ectsEarned, goal: parseFloat(tracker.goal) || 0 };
+}
+
+// ---- ECTS goal celebration ----
+// Reaching your ECTS goal can take years, so when the crossing grade lands we go
+// all out: full-screen confetti cannon, shockwave rings and a trophy badge.
+// Pure CSS/DOM, no deps; honours prefers-reduced-motion and self-dismisses.
+export function celebrateEctsGoal(earned, goal) {
+  if (document.getElementById('ectsCelebrate')) return; // never stack two
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var ov = document.createElement('div');
+  ov.id = 'ectsCelebrate';
+  ov.className = 'ects-celebrate' + (reduce ? ' reduce' : '');
+  ov.setAttribute('role', 'alertdialog');
+  ov.setAttribute('aria-label', 'ECTS goal reached: ' + earned + ' of ' + goal + ' credits');
+  ov.innerHTML =
+    '<div class="ec-flash"></div>' +
+    '<div class="ec-rings"><span></span><span></span><span></span></div>' +
+    '<div class="ec-stage">' +
+      '<div class="ec-rays"></div>' +
+      '<div class="ec-badge">' +
+        '<div class="ec-trophy">🏆</div>' +
+        '<div class="ec-title">GOAL REACHED</div>' +
+        '<div class="ec-sub">' + esc(String(earned)) + ' / ' + esc(String(goal)) + ' ECTS</div>' +
+        '<div class="ec-cheer">Congratulations! 🎓</div>' +
+      '</div>' +
+    '</div>';
+
+  // Confetti cannon: each particle gets a randomised trajectory/spin/colour via
+  // CSS custom properties, animated entirely on the GPU (transform + opacity).
+  if (!reduce) {
+    var colors = ['var(--accent)', 'var(--accent2)', 'var(--green)', 'var(--orange)', 'var(--red)', '#ffd54a'];
+    var burst = document.createElement('div');
+    burst.className = 'ec-confetti';
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < 150; i++) {
+      var p = document.createElement('i');
+      var ang = Math.random() * Math.PI * 2;
+      var dist = 160 + Math.random() * 380;
+      p.style.setProperty('--tx', Math.round(Math.cos(ang) * dist) + 'px');
+      p.style.setProperty('--ty', Math.round(Math.sin(ang) * dist - 80) + 'px'); // slight upward bias, then fall
+      p.style.setProperty('--rot', Math.round(Math.random() * 1200 - 600) + 'deg');
+      p.style.setProperty('--dly', (Math.random() * 0.35).toFixed(2) + 's');
+      p.style.setProperty('--dur', (1.5 + Math.random() * 1.6).toFixed(2) + 's');
+      p.style.setProperty('--sz', (6 + Math.round(Math.random() * 9)) + 'px');
+      p.style.background = colors[i % colors.length];
+      if (i % 3 === 0) p.style.borderRadius = '50%';
+      frag.appendChild(p);
+    }
+    burst.appendChild(frag);
+    ov.appendChild(burst);
+  }
+
+  function close() {
+    if (ov._closing) return;
+    ov._closing = true;
+    ov.classList.add('ec-out');
+    setTimeout(function() { ov.remove(); }, 450);
+  }
+  ov.addEventListener('click', close);
+  document.body.appendChild(ov);
+  setTimeout(close, reduce ? 2400 : 5600);
 }
 
 // ---- inline field edit (name / date / ects) ----

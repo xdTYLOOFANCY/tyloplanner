@@ -933,6 +933,93 @@ table.grades th:nth-child(8),table.grades td:nth-child(8){width:5%}
   .da-layout{flex-direction:column}
   .da-bottom-grid{grid-template-columns:1fr}
 }
+
+/* ===== ECTS goal celebration — full-screen fireworks on crossing the goal ===== */
+.ects-celebrate{position:fixed;inset:0;z-index:3000;overflow:hidden;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at center,rgba(0,0,0,.45),rgba(0,0,0,.78));
+  animation:ecFadeIn .3s ease both;-webkit-tap-highlight-color:transparent}
+.ects-celebrate.ec-out{animation:ecFadeOut .45s ease forwards}
+@keyframes ecFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes ecFadeOut{to{opacity:0}}
+
+/* white flash on impact */
+.ec-flash{position:absolute;inset:0;background:#fff;opacity:0;
+  animation:ecFlash .6s ease-out both}
+@keyframes ecFlash{0%{opacity:.85}100%{opacity:0}}
+
+/* expanding shockwave rings from centre */
+.ec-rings{position:absolute;top:50%;left:50%;pointer-events:none}
+.ec-rings span{position:absolute;top:0;left:0;width:80px;height:80px;margin:-40px 0 0 -40px;
+  border:3px solid var(--accent);border-radius:50%;opacity:0;
+  animation:ecRing 1.6s cubic-bezier(.2,.7,.3,1) both}
+.ec-rings span:nth-child(2){border-color:var(--green);animation-delay:.18s}
+.ec-rings span:nth-child(3){border-color:var(--orange);animation-delay:.36s}
+@keyframes ecRing{0%{transform:scale(.2);opacity:.9;border-width:6px}
+  100%{transform:scale(14);opacity:0;border-width:1px}}
+
+/* rotating starburst rays behind the badge */
+.ec-stage{position:relative;display:flex;align-items:center;justify-content:center}
+.ec-rays{position:absolute;width:640px;height:640px;max-width:150vw;max-height:150vw;
+  border-radius:50%;pointer-events:none;opacity:.5;
+  background:repeating-conic-gradient(from 0deg,
+    color-mix(in srgb,var(--accent) 55%,transparent) 0deg 9deg,
+    transparent 9deg 18deg);
+  -webkit-mask:radial-gradient(circle,#000 32%,transparent 62%);
+          mask:radial-gradient(circle,#000 32%,transparent 62%);
+  animation:ecSpin 9s linear infinite,ecRaysIn .6s ease both}
+@keyframes ecSpin{to{transform:rotate(360deg)}}
+@keyframes ecRaysIn{from{opacity:0;transform:scale(.5)}to{opacity:.5}}
+
+/* the trophy badge — springy pop-in */
+.ec-badge{position:relative;text-align:center;padding:30px 40px;border-radius:24px;
+  background:color-mix(in srgb,var(--panel) 82%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));
+  box-shadow:0 0 0 1px rgba(255,255,255,.05),0 20px 60px rgba(0,0,0,.5),
+    0 0 90px color-mix(in srgb,var(--accent) 40%,transparent);
+  backdrop-filter:blur(6px);
+  animation:ecBadgeIn .9s cubic-bezier(.18,1.5,.4,1) both}
+@keyframes ecBadgeIn{0%{opacity:0;transform:scale(.2) rotate(-12deg)}
+  60%{opacity:1}100%{opacity:1;transform:scale(1) rotate(0)}}
+.ec-trophy{font-size:76px;line-height:1;filter:drop-shadow(0 6px 14px rgba(0,0,0,.4));
+  animation:ecTrophy 1.4s ease-in-out .5s infinite}
+@keyframes ecTrophy{0%,100%{transform:translateY(0) rotate(-6deg)}
+  50%{transform:translateY(-10px) rotate(6deg)}}
+.ec-title{margin-top:10px;font-size:32px;font-weight:900;letter-spacing:.04em;
+  background:linear-gradient(90deg,var(--accent),var(--green),var(--orange),var(--accent));
+  background-size:300% 100%;-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;
+  animation:ecShine 3s linear infinite}
+@keyframes ecShine{to{background-position:300% 0}}
+.ec-sub{margin-top:6px;font-size:20px;font-weight:800;color:var(--text)}
+.ec-cheer{margin-top:8px;font-size:13px;color:var(--muted)}
+
+/* confetti cannon — one <i> per particle, positioned from centre */
+.ec-confetti{position:absolute;top:50%;left:50%;pointer-events:none}
+.ec-confetti i{position:absolute;top:0;left:0;width:var(--sz,10px);height:calc(var(--sz,10px) * .6);
+  margin:calc(var(--sz,10px) / -2) 0 0 calc(var(--sz,10px) / -2);opacity:0;
+  animation:ecConfetti var(--dur,2s) cubic-bezier(.15,.6,.3,1) var(--dly,0s) both}
+@keyframes ecConfetti{
+  0%{opacity:0;transform:translate(0,0) rotate(0)}
+  8%{opacity:1}
+  60%{opacity:1}
+  100%{opacity:0;transform:translate(var(--tx,0),calc(var(--ty,0) + 40vh)) rotate(var(--rot,360deg))}}
+
+/* reduced motion: quiet, static toast — no confetti, no spin, no flash */
+.ects-celebrate.reduce{background:rgba(0,0,0,.55);animation:ecFadeIn .2s ease both}
+.ects-celebrate.reduce .ec-flash,
+.ects-celebrate.reduce .ec-rings,
+.ects-celebrate.reduce .ec-rays{display:none}
+.ects-celebrate.reduce .ec-badge{animation:ecFadeIn .2s ease both}
+.ects-celebrate.reduce .ec-trophy{animation:none}
+.ects-celebrate.reduce .ec-title{animation:none;background-position:0 0}
+
+@media(max-width:600px){
+  .ec-badge{padding:24px 26px;margin:0 16px}
+  .ec-trophy{font-size:60px}
+  .ec-title{font-size:26px}
+  .ec-sub{font-size:18px}
+}
 .inline-input{background:var(--card);border:1px solid var(--accent);border-radius:5px;color:var(--text);padding:3px 7px;font-size:13px;outline:none}
 
 /* exam list — aligned columns on desktop, stacked compact rows on mobile.

@@ -2,6 +2,16 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.47.6 — 2026-07-22
+
+- **ECTS goal celebration.** Reaching your ECTS goal can be years of work, so
+  the moment it happens now gets the send-off it deserves: enter the grade that
+  pushes a tracker to or over its ECTS goal and the whole screen erupts — a
+  confetti cannon, expanding shockwave rings, a spinning starburst and a
+  trophy badge reading "GOAL REACHED · X / Y ECTS". It fires only on the
+  *crossing* grade (not on every grade after), tap anywhere to dismiss, and it
+  respects "reduce motion" with a calm static version.
+
 ## 1.47.5 — 2026-07-22
 
 - **Redesigned the Exams & grades list.** The old sparse, stretched grades

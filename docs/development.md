@@ -83,6 +83,14 @@ guesses it from the date with a September cutoff). The tracker list
 setting and the global tag list in `exam_tags`, both JSON strings — there
 are no dedicated endpoints; the generic CRUD + settings API cover it.
 
+When a saved grade pushes a tracker's earned ECTS to or over its `goal`,
+`setGradeText()` fires a one-shot full-screen celebration
+(`celebrateEctsGoal()` in `static/js/exams.js`, styles under `.ects-celebrate`
+in `style.css`): confetti cannon, shockwave rings and a trophy badge. It
+detects the *crossing* only (earned was below the goal before the write, at or
+over it after), so it triggers once — not on every subsequent grade — and it
+honours `prefers-reduced-motion` with a quiet static variant.
+
 | `POST /api/notify/test` | Send a test notification (via ntfy and Web Push). |
 | `GET /api/push/public-key` | Get the VAPID public key for Web Push. |
 | `POST /api/push/subscribe` | Register browser subscription for Web Push. |
