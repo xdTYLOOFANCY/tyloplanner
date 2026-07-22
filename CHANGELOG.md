@@ -2,17 +2,20 @@
 
 All notable changes to TyloPlanner are documented here.
 
-## 1.47.4 — 2026-07-22
+## 1.47.5 — 2026-07-22
 
-- **Redesigned the Exams & grades list.** The exam table — with its sparse,
-  stretched columns and a floating countdown badge — is replaced by a clean
-  one-row-per-exam list. Each row groups the exam name with a compact meta line
-  (nicely formatted date, countdown badge, academic year, tags), and keeps the
-  ECTS and grade controls aligned in fixed right-hand columns for easy
-  scanning. Grades are colour-coded green/orange/red in place, tags are shown
-  as chips with a dashed "＋ tag" placeholder, and the whole list now reads
-  properly on mobile instead of forcing a horizontal scroll. All inline
-  editing (name, date, year, ECTS, tags, grade) works exactly as before.
+- **Redesigned the Exams & grades list.** The old sparse, stretched grades
+  table — with a countdown badge floating in its own empty column — is
+  replaced by a cleaner one-row-per-exam list that adapts to screen size:
+  - **On desktop** it keeps neatly aligned columns (name · date + countdown ·
+    academic year · tags · ECTS · grade) so the list stays easy to scan
+    top-to-bottom.
+  - **On mobile** each exam collapses into a compact card: the name on top,
+    a wrapping meta line (date, countdown, year, tags) below it, and the ECTS
+    and grade controls on the right — no more sideways scrolling.
+  - Grades are colour-coded green/orange/red in place, dates read as
+    "Fri 24 Jul", and tags show as chips with a dashed "＋ tag" placeholder.
+  All inline editing (name, date, year, ECTS, tags, grade) works as before.
 
 ## 1.47.3 — 2026-07-22
 

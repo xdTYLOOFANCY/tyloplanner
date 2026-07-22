@@ -663,11 +663,17 @@ export function renderExams(refresh) {
     var analyticsEl = document.getElementById('examAnalytics');
     if (analyticsEl) analyticsEl.innerHTML = mine.length ? renderAnalytics(mine, tracker) : '';
 
+    // One grid row per exam. On desktop the .ei-meta wrapper is display:contents,
+    // so date/year/tags become real grid columns that line up across every row;
+    // on mobile .ei-meta becomes a wrapping flex line under the name.
     var html = '<div class="exam-item head">' +
-      '<span class="exam-item-main">Exam / assignment</span>' +
-      '<span class="exam-head-ects">ECTS</span>' +
-      '<span class="exam-head-grade">Grade</span>' +
-      '<span class="exam-head-del"></span>' +
+      '<span>Exam / assignment</span>' +
+      '<span>Date</span>' +
+      '<span>Year</span>' +
+      '<span>Tags</span>' +
+      '<span class="ei-h-ects">ECTS</span>' +
+      '<span class="ei-h-grade">Grade</span>' +
+      '<span></span>' +
       '</div>';
 
     list.forEach(function(e) {
@@ -682,27 +688,25 @@ export function renderExams(refresh) {
         ? tags.map(function(t) { return '<span class="exam-chip">' + esc(t) + '</span>'; }).join('')
         : '<span class="exam-chip add">＋ tag</span>';
 
-      var parts = [];
-      if (e.date) {
-        parts.push('<span class="exam-meta-date" onclick="examInlineEdit(this,\'' + id + '\',\'date\',\'' + esc(e.date) + '\')">' +
-          esc(fmtShort(parseISO(e.date))) + '</span>' + examBadge(d));
-      }
-      parts.push('<span class="exam-meta-year' + (e.academic_year ? '' : ' muted') + '" title="Academic year (click to override)" ' +
-        'onclick="examInlineEdit(this,\'' + id + '\',\'academic_year\',\'' + esc(ay) + '\')">' + (ayLabel(ay) || '—') + '</span>');
-      parts.push('<span class="exam-meta-tags" onclick="examEditTags(\'' + id + '\')" title="Edit tags">' + tagsHtml + '</span>');
-
       html += '<div class="exam-item">' +
-        '<div class="exam-item-main">' +
-          '<div class="exam-item-name" onclick="examInlineEdit(this,\'' + id + '\',\'name\',\'' + escAttr(e.name || '') + '\')">' + esc(e.name) + '</div>' +
-          '<div class="exam-item-meta">' + parts.join('<span class="sep">·</span>') + '</div>' +
+        '<div class="ei-name" onclick="examInlineEdit(this,\'' + id + '\',\'name\',\'' + escAttr(e.name || '') + '\')">' + esc(e.name) + '</div>' +
+        '<div class="ei-meta">' +
+          '<div class="ei-date">' +
+            '<span class="ei-date-txt" onclick="examInlineEdit(this,\'' + id + '\',\'date\',\'' + esc(e.date) + '\')">' +
+              (e.date ? esc(fmtShort(parseISO(e.date))) : '—') + '</span>' +
+            (e.date ? examBadge(d) : '') +
+          '</div>' +
+          '<div class="ei-year' + (e.academic_year ? '' : ' muted') + '" title="Academic year (click to override)" ' +
+            'onclick="examInlineEdit(this,\'' + id + '\',\'academic_year\',\'' + esc(ay) + '\')">' + (ayLabel(ay) || '—') + '</div>' +
+          '<div class="ei-tags" onclick="examEditTags(\'' + id + '\')" title="Edit tags">' + tagsHtml + '</div>' +
         '</div>' +
-        '<div class="exam-item-ects' + (e.ects != null ? '' : ' muted') + '" title="ECTS credits (click to edit)" ' +
+        '<div class="ei-ects' + (e.ects != null ? '' : ' muted') + '" title="ECTS credits (click to edit)" ' +
           'onclick="examInlineEdit(this,\'' + id + '\',\'ects\',' + (e.ects != null ? e.ects : 'null') + ')">' +
           (e.ects != null ? e.ects + '<span>EC</span>' : '—') + '</div>' +
-        '<div class="exam-item-grade">' +
+        '<div class="ei-grade">' +
           '<input type="text" class="grade-input' + (gcls ? ' ' + gcls : '') + '" value="' + esc(v || '') + '" placeholder="grade" ' +
           'onchange="setGradeText(\'' + id + '\',this.value)"></div>' +
-        '<button class="exam-item-del" title="Delete" onclick="delRow(\'exams\',\'' + id + '\')">✕</button>' +
+        '<button class="ei-del" title="Delete" onclick="delRow(\'exams\',\'' + id + '\')">✕</button>' +
         '</div>';
     });
     if (!list.length) html += '<div class="exam-empty muted">' + (tagFilter ? 'No exams with this tag.' : 'No exams yet — add one above.') + '</div>';
