@@ -71,6 +71,7 @@ import {
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
   saveAppThemeStyle as _saveAppThemeStyle, saveNavLayout as _saveNavLayout, saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
   saveDensity as _saveDensity, saveWeekStart as _saveWeekStart, saveDefaultTab as _saveDefaultTab, saveSidebarCollapsedDefault as _saveSidebarCollapsedDefault,
+  saveMusicNewTab as _saveMusicNewTab, saveMusicBarTabOnly as _saveMusicBarTabOnly,
   toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
   updateCategoryColor as _updateCategoryColor, checkForUpdates,
@@ -279,6 +280,8 @@ window.saveDensity = function() { _saveDensity(R); };
 window.saveWeekStart = function() { _saveWeekStart(R); };
 window.saveDefaultTab = function() { _saveDefaultTab(R); };
 window.saveSidebarCollapsedDefault = function() { _saveSidebarCollapsedDefault(R); };
+window.saveMusicNewTab = function() { _saveMusicNewTab(R); };
+window.saveMusicBarTabOnly = function() { _saveMusicBarTabOnly(R); };
 window.saveAccentColor = function() { _saveAccentColor(R); };
 window.resetAccentColor = function() { _resetAccentColor(R); };
 window.toggleShowShortcuts = function() { _toggleShowShortcuts(R); };
@@ -384,12 +387,24 @@ tabsNav.addEventListener("click", function(e) {
   
   if (oldTab === newTab) return;
 
+  // "Always open music in a new tab" (desktop only): the Music nav button opens
+  // the pop-out player tab instead of switching to the in-app Music tab.
+  if (newTab === "music" && SET && SET.music_open_new_tab === "1" &&
+      window.innerWidth > 640 && !document.body.classList.contains("player-mode") &&
+      window.popOutPlayer) {
+    window.popOutPlayer();
+    return;
+  }
+
   // Directionless crossfade scoped to <main> (see style.css)
   var switchTab = function() {
     tabsNav.querySelectorAll("button").forEach(function(x) { x.classList.remove("active"); });
     b.classList.add("active");
     document.querySelectorAll("main section").forEach(function(s) { s.classList.remove("active"); });
     document.getElementById("tab-" + newTab).classList.add("active");
+
+    // Player bar may be scoped to the Music tab only (setting) — reflect the switch.
+    if (window.syncPlayerBar) window.syncPlayerBar();
 
     // Render the target tab if it has stale state
     if (tabNeedsRender[newTab]) {

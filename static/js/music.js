@@ -13,6 +13,7 @@
 
 import { S, SET, safeRender, tabNeedsRender } from './state.js';
 import { api, esc, toast, showContextMenu, askPrompt, askConfirm, debounce } from './utils.js';
+import { uploadToMusicFolder } from './files.js';
 
 const MEDIA_CACHE = 'tylo-media-v1';
 
@@ -201,8 +202,7 @@ export function playerClose() {
   audio.pause();
   audio.removeAttribute('src');
   queue = []; qIndex = -1;
-  document.getElementById('musicPlayerBar').style.display = 'none';
-  document.body.classList.remove('has-player');
+  syncPlayerBar();
   updateNowPlayingHighlight();
   renderHero();
   renderQueuePanel();
@@ -254,9 +254,7 @@ function setPlayIcon(playing) {
 }
 
 function updatePlayerBar(f) {
-  var bar = document.getElementById('musicPlayerBar');
-  bar.style.display = 'grid';
-  document.body.classList.add('has-player');
+  syncPlayerBar();
   document.getElementById('playerTitle').textContent = trackTitle(f);
   document.getElementById('playerArtist').textContent = f.audio_artist || '';
   var art = document.getElementById('playerArt');
@@ -751,6 +749,25 @@ async function addToPlaylistDialog(fid) {
   if (window.refreshApp) window.refreshApp();
 }
 
+// The sidebar "+" is multi-purpose: upload audio (into the dedicated Music
+// folder) or create a playlist.
+function musicAddMenu(ev) {
+  showContextMenu(ev, [
+    { label: 'Upload music…', icon: '⤒', onClick: function() {
+        var i = document.getElementById('musicUploadInput');
+        if (i) { i.value = ''; i.click(); }
+      } },
+    { label: 'New playlist…', icon: '＋', onClick: musicNewPlaylist }
+  ]);
+}
+
+async function musicUploadPicked() {
+  var input = document.getElementById('musicUploadInput');
+  var files = input && input.files;
+  if (!files || !files.length) return;
+  await uploadToMusicFolder(files);
+}
+
 async function musicNewPlaylist() {
   var name = await askPrompt('New playlist name', '', { placeholder: 'My playlist' });
   if (!name) return;
@@ -962,8 +979,9 @@ async function adoptPlayback(s) {
 
 export function popOutPlayer() {
   if (popoutRef && !popoutRef.closed) { popoutRef.focus(); return; }
-  var w = window.open('/?player=1', 'tyloMusicPlayer', 'width=480,height=880');
-  if (!w) { toast('Allow pop-ups for this site to open the player window'); return; }
+  // Open as a normal, full-size browser tab (no width/height features string).
+  var w = window.open('/?player=1', 'tyloMusicPlayer');
+  if (!w) { toast('Allow pop-ups for this site to open the player'); return; }
   popoutRef = w;
   pendingHandoff = snapshotPlayback();  // handed over once the pop-out is ready
   onPopoutTookOver();                   // stop + hide the bar here right away
@@ -977,18 +995,35 @@ export function reclaimPlayer() {
 function onPopoutTookOver() {
   popoutActive = true;
   audio.pause();
-  var bar = document.getElementById('musicPlayerBar');
-  if (bar) bar.style.display = 'none';
-  document.body.classList.remove('has-player');
+  syncPlayerBar();
   updatePopoutHint();
 }
 
 function onPopoutClosed() {
   popoutActive = false;
   popoutRef = null;
-  var bar = document.getElementById('musicPlayerBar');
-  if (audio.src && bar) { bar.style.display = 'grid'; document.body.classList.add('has-player'); }
+  syncPlayerBar();
   updatePopoutHint();
+}
+
+function activeTabName() {
+  var b = document.querySelector('#tabs button.active');
+  return b ? b.dataset.tab : '';
+}
+
+// Single source of truth for the bottom player bar's visibility. It shows only
+// when a track is loaded here (not handed to a pop-out) — and, if the user set
+// "only on Music tab", only while the Music tab is active. Audio keeps playing
+// regardless, so hiding the bar just hides the progress UI. Called on playback
+// changes, tab switches (app.js), and the setting toggle (settings.js).
+function syncPlayerBar() {
+  var bar = document.getElementById('musicPlayerBar');
+  if (!bar) return;
+  var loaded = !!audio.src && !popoutActive;
+  var hideOffTab = SET && SET.music_bar_music_tab_only === '1' && !playerMode && activeTabName() !== 'music';
+  var show = loaded && !hideOffTab;
+  bar.style.display = show ? 'grid' : 'none';
+  document.body.classList.toggle('has-player', show);
 }
 
 function updatePopoutHint() {
@@ -1058,6 +1093,9 @@ window.musicSetView = musicSetView;
 window.musicTrackClick = musicTrackClick;
 window.musicTrackMenu = musicTrackMenu;
 window.musicNewPlaylist = musicNewPlaylist;
+window.musicAddMenu = musicAddMenu;
+window.musicUploadPicked = musicUploadPicked;
+window.syncPlayerBar = syncPlayerBar;
 window.musicPlaylistMenu = musicPlaylistMenu;
 window.musicPlayPlaylist = musicPlayPlaylist;
 window.musicHeroPlay = musicHeroPlay;

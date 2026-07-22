@@ -70,6 +70,10 @@ export function renderSettings(refresh) {
   if (tabToggleEl) tabToggleEl.checked = persistTab;
   var sbCollapsedEl = document.getElementById("sidebarCollapsedToggle");
   if (sbCollapsedEl) sbCollapsedEl.checked = SET ? SET.sidebar_default_collapsed === "1" : false;
+  var mNewTabEl = document.getElementById("musicNewTabToggle");
+  if (mNewTabEl) mNewTabEl.checked = SET ? SET.music_open_new_tab === "1" : false;
+  var mBarEl = document.getElementById("musicBarTabOnlyToggle");
+  if (mBarEl) mBarEl.checked = SET ? SET.music_bar_music_tab_only === "1" : false;
   // Mirror the server default so the pre-paint boot script can honor it on
   // devices that never toggled the rail themselves.
   try { if (SET) localStorage.setItem("tylo-sidebar-collapsed-default", SET.sidebar_default_collapsed === "1" ? "1" : "0"); } catch (e) {}
@@ -160,6 +164,23 @@ export async function saveDefaultTab(refresh) {
   try { localStorage.setItem("tylo-default-tab", value); } catch (e) {}
   await api("POST", "/api/settings", { default_tab: value });
   toast("Landing tab saved");
+  await refresh();
+}
+
+export async function saveMusicNewTab(refresh) {
+  var on = document.getElementById("musicNewTabToggle").checked;
+  if (SET) SET.music_open_new_tab = on ? "1" : "0";
+  await api("POST", "/api/settings", { music_open_new_tab: on ? "1" : "0" });
+  toast("Saved");
+  await refresh();
+}
+
+export async function saveMusicBarTabOnly(refresh) {
+  var on = document.getElementById("musicBarTabOnlyToggle").checked;
+  if (SET) SET.music_bar_music_tab_only = on ? "1" : "0";
+  await api("POST", "/api/settings", { music_bar_music_tab_only: on ? "1" : "0" });
+  if (window.syncPlayerBar) window.syncPlayerBar();
+  toast("Saved");
   await refresh();
 }
 

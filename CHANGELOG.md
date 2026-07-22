@@ -2,6 +2,38 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.47.0 — 2026-07-22
+
+- **The Settings tab is reorganized into clearer, better-grouped cards.** The
+  old **Appearance** card had grown into a catch-all mixing looks, behavior,
+  regional options, and music toggles. It's now split by purpose:
+  - **🎨 Appearance** keeps only visual settings — theme style, navigation
+    layout, density, and accent color.
+  - **⚙️ General** (new) collects landing tab, persist-active-tab,
+    start-with-sidebar-collapsed, week-start, and time zone (the standalone
+    **Time zone** card is folded in here).
+  - **🎵 Music player** (new) holds the two music player toggles that used to
+    live under Appearance.
+  - Cards now flow top-to-bottom from personalization → notifications →
+    account/integrations/data/system.
+- No settings were removed or renamed — everything is in a more logical place.
+
+## 1.46.0 — 2026-07-21
+
+- **The music player now pops out into a full browser tab** instead of a small
+  window — more room to browse while your music plays. Playback still hands off
+  cleanly between the main app and the pop-out.
+- **New Appearance settings for music** (Settings → Appearance → Music player):
+  - **Always open the music player in a new tab** — on desktop, the Music button
+    in the sidebar/top bar opens (or focuses) the pop-out player tab instead of
+    switching tabs.
+  - **Only show the player bar on the Music tab** — hides the bottom progress bar
+    everywhere except the Music tab. Your music keeps playing; the bar just
+    stays out of the way.
+- **Upload music straight from the Music tab.** The **+** button is now
+  multi-purpose: **Upload music…** drops audio files into a dedicated **Music**
+  folder in Files (created automatically), or **New playlist…** as before.
+
 ## 1.45.0 — 2026-07-21
 
 - **The Music tab is redesigned around a Spotify-style three-pane layout.** The

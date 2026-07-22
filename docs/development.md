@@ -392,17 +392,30 @@ can't leak upward.
   carry a **local** `data-idx` for the drag handler but bake the **absolute**
   queue index into their `onclick`; keep that split or reorder/jump desync.
   Per-playlist hero colors come from a hash of the playlist id (`hashHue`).
-- **Pop-out music window.** The "Pop out" button in the Music tab (in the
-  library sidebar head) opens the same app at `/?player=1`; the inline boot
-  script adds `body.player-mode`, which strips the chrome down to just the
-  Music tab + player bar (see `.player-mode` in `style.css`), and `app.js`
-  forces the Music tab active.
+- **Pop-out music tab.** The "Pop out" button in the Music tab (in the
+  library sidebar head) opens the same app at `/?player=1` in a **normal full
+  browser tab** (`window.open` with no size features); the inline boot script
+  adds `body.player-mode`, which strips the chrome down to just the Music tab +
+  player bar (see `.player-mode` in `style.css`), and `app.js` forces the Music
+  tab active.
   Because each browser tab owns a separate `<audio>` element, the pop-out
   *takes over* playback rather than mirroring it — a `BroadcastChannel`
   (`tylo-music`, in `music.js`) carries the hand-off: the main window pauses,
   hides its bar, and shows a "playing in the pop-out" hint; "Bring it back
   here" ships the state back and closes the pop-out. Presence is rediscovered
   via a `ping`/`player-open` exchange, so a reloaded main window still yields.
+  Two settings under **Settings → Music player** tune this: `music_open_new_tab` makes the Music nav
+  button open the pop-out tab directly (desktop only — gated on
+  `innerWidth > 640` in the `#tabs` click handler), and
+  `music_bar_music_tab_only` scopes the bottom player bar to the Music tab.
+  Both are just settings keys; bar visibility is centralised in `syncPlayerBar()`
+  (music.js), called on playback changes, tab switches (app.js), and the toggle.
+- **Music upload + the Music folder.** The Music tab's "+" button
+  (`musicAddMenu`) offers **Upload music…** or **New playlist…**. Upload feeds a
+  hidden `#musicUploadInput` into `uploadToMusicFolder()` (files.js), which
+  lazily creates/reuses a top-level **Music** folder (via `ensureFolderPath`)
+  and drops the files there — reusing the same upload-progress machinery as the
+  Files tab.
 - **Verify both widths.** After any UI change, check it at ~375px *and* at
   desktop width before calling it done.
 - **Command palette (`static/js/palette.js`).** `Ctrl`/`Cmd`+`K` search over

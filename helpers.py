@@ -29,7 +29,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.45.0"
+VERSION = "1.47.0"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -578,6 +578,8 @@ SETTING_DEFAULTS = {
     "music_volume": "1.0",
     "music_repeat": "off",
     "music_shuffle": "0",
+    "music_open_new_tab": "0",        # desktop: Music nav opens the pop-out player tab
+    "music_bar_music_tab_only": "0",  # hide the bottom player bar off the Music tab
     "goal_run_km": "",
     "goal_bike_km": "",
     "goal_swim_km": "",

@@ -293,6 +293,16 @@ async function uploadFilesToCurrentFolder(files) {
   if (jobs.length) await uploadJobsWithProgress(jobs);
 }
 
+// Upload audio into a dedicated top-level "Music" folder (created on first use,
+// reused thereafter). Called from the Music tab's upload button.
+export async function uploadToMusicFolder(files) {
+  var list = Array.prototype.slice.call(files);
+  if (!list.length) return;
+  folderPathCache = {};
+  var folderId = await ensureFolderPath(["Music"], null);
+  await uploadJobsWithProgress(list.map(function(f) { return { file: f, folderId: folderId }; }));
+}
+
 export async function uploadFile() {
   var input = document.getElementById("fileInput");
   if (!input.files || !input.files.length) return;
