@@ -19,6 +19,12 @@ var FREQ_OPTIONS = [
   { value: 1, label: '1×/week' },
 ];
 
+// Every consumer of the habit list wants the non-archived ones, sorted.
+export function activeHabits() {
+  return S.habits.filter(function(h) { return !h.archived; })
+    .sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+}
+
 function freqLabel(f) {
   if (f === 7) return '';
   if (f === 8) return 'Mon–Fri';
@@ -338,8 +344,7 @@ export async function dropHabit(e, dropId, refresh) {
 }
 
 async function reorderHabits(dragId, dropId, refresh) {
-  var active = S.habits.filter(function(h) { return !h.archived; });
-  active.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+  var active = activeHabits();
 
   var dragIdx = active.findIndex(function(h) { return h.id === dragId; });
   var dropIdx = active.findIndex(function(h) { return h.id === dropId; });
@@ -413,8 +418,7 @@ registerChartRerender(renderCheckinsChart);
 export function renderHabits() {
   safeRender("habits", function() {
     var dates = weekDates(_weekOff), today = todayStr();
-    var active = S.habits.filter(function(h) { return !h.archived; });
-    active.sort(function(a, b) { return (a.order_index || 0) - (b.order_index || 0); });
+    var active = activeHabits();
 
     var label = document.getElementById("habitWeekLabel");
     if (label) label.textContent = weekLabel(dates);

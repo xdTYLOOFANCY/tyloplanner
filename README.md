@@ -37,7 +37,7 @@ codebase is under 20,000 lines of clean, modular code, making it easy to underst
 - **Exams & grades** — countdowns to every exam, ECTS-weighted grade point average tracking, and task/exam reminders.
 - **Habits** — check off daily habits, track completion streaks, and receive automated evening nudges for incomplete items.
 - **Workouts** — log runs, rides, and gym sessions manually or sync them automatically with **Strava** integration.
-- **Study Timer & Pomodoro Tracker** — Alpine.js circular countdown timer and stopwatch, customizable study/break intervals, active subject tracking, audio chime alerts, state persistence, and logs.
+- **Study Timer & Pomodoro Tracker** — circular countdown timer and stopwatch, customizable study/break intervals, active subject tracking, audio chime alerts, state persistence, and logs.
 - **Advanced Task Management** — organize tasks using custom categories with styled color tags, drag-and-drop prioritization, subtask checklists, and datetime-local due date/time fields.
 - **Notes Editor** — a Quill WYSIWYG editor with tables, callouts, images, a `/` slash menu, wiki-style cross-links (`[[Note Title]]`), tags & templates, an outline sidebar, per-note version history, and export to Markdown, Word, HTML or print. Bodies are sanitized server-side and saved with debounced background autosaving.
 - **File Manager** — upload documents/images via a full-screen drag-and-drop upload zone, preview media inline, organize with nested directories and breadcrumb navigation, and manage files in bulk.

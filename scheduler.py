@@ -112,7 +112,8 @@ def send_agenda(today):
 def send_habit_nudge(today):
     """Evening push: habits not yet checked off today."""
     with db() as con:
-        habits = [dict(r) for r in con.execute("SELECT * FROM habits")]
+        habits = [dict(r) for r in con.execute(
+            "SELECT * FROM habits WHERE COALESCE(archived,0)=0")]
         done = {r["habit_id"] for r in con.execute(
             'SELECT habit_id FROM habit_log WHERE "date"=?', (today,))}
     open_ = [h["name"] for h in habits if h["id"] not in done]

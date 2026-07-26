@@ -4,7 +4,7 @@
 "use strict";
 
 import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
-import { todayStr, esc, fmtShort, delRow as _delRow } from './js/utils.js';
+import { todayStr, esc, fmtShort, delRow as _delRow, applyMinuteWheels } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings, applyNavLayoutFromSettings } from './js/theme.js';
 import { exportData, importData, exportArchive, importArchive } from './js/backup.js';
@@ -105,6 +105,10 @@ function renderTab(tab) {
   if (tabNeedsRender[tab] !== undefined) {
     tabNeedsRender[tab] = false;
   }
+
+  // Wheel any duration field this render just created. No-op on desktop and
+  // for already-converted inputs, so it's free on every repeat render.
+  applyMinuteWheels();
 }
 
 // ---- renderAll used by refresh() ----

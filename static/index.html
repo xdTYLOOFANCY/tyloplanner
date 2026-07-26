@@ -210,7 +210,7 @@
         <input id="ssSubject" list="subjectList" placeholder="Subject (e.g. Anatomy)" style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')addStudySession()">
         <datalist id="subjectList"></datalist>
         <input id="ssDate" type="date" onkeydown="if(event.key==='Enter')addStudySession()">
-        <input id="ssDur" type="number" min="0" step="0.5" placeholder="Minutes" style="width:100px" onkeydown="if(event.key==='Enter')addStudySession()">
+        <input id="ssDur" type="number" inputmode="numeric" data-minutes min="0" step="0.5" placeholder="Minutes" style="width:100px" onkeydown="if(event.key==='Enter')addStudySession()">
         <input id="ssNote" placeholder="What was studied? (optional)" style="flex:2;min-width:160px" onkeydown="if(event.key==='Enter')addStudySession()">
         <button class="btn" onclick="addStudySession()">Log</button>
       </div>
@@ -287,7 +287,7 @@
       <div class="formrow">
         <input id="examName" placeholder="Exam or assignment name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
         <input id="examDate" type="date" onkeydown="if(event.key==='Enter')addExam()">
-        <input id="examEcts" type="number" step="0.5" min="0" placeholder="ECTS" style="width:90px" onkeydown="if(event.key==='Enter')addExam()">
+        <input id="examEcts" type="number" inputmode="decimal" step="0.5" min="0" placeholder="ECTS" style="width:90px" onkeydown="if(event.key==='Enter')addExam()">
         <button class="btn" onclick="addExam()">Add</button>
       </div>
       <div id="examTable" class="exam-list"></div>
@@ -337,8 +337,8 @@
           <option value="gym">🏋️ Gym</option>
         </select>
         <input id="wDate" type="date" onkeydown="if(event.key==='Enter')addWorkout()">
-        <input id="wDur" type="number" min="0" placeholder="Minutes" style="width:90px" onkeydown="if(event.key==='Enter')addWorkout()">
-        <input id="wDist" type="number" min="0" step="0.1" placeholder="km (optional)" style="width:110px" onkeydown="if(event.key==='Enter')addWorkout()">
+        <input id="wDur" type="number" inputmode="numeric" data-minutes min="0" placeholder="Minutes" style="width:90px" onkeydown="if(event.key==='Enter')addWorkout()">
+        <input id="wDist" type="number" inputmode="decimal" min="0" step="0.1" placeholder="km (optional)" style="width:110px" onkeydown="if(event.key==='Enter')addWorkout()">
         <input id="wNote" placeholder="Notes (optional)" style="flex:1;min-width:140px" onkeydown="if(event.key==='Enter')addWorkout()">
         <button class="btn" onclick="addWorkout()">Log</button>
         <button class="btn ghost" id="stravaSyncBtn" onclick="stravaSync()" style="display:none">⟳ Sync Strava</button>
@@ -990,7 +990,7 @@
         <div id="evModalRecOptions" style="display:none; flex-direction:column; gap:10px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--panel2);">
           <div style="display:flex; align-items:center; gap:8px; font-size:14px;">
             <span>Every</span>
-            <input id="evModalRecInterval" type="number" min="1" max="999" value="1" style="width:64px; padding:6px 8px; font-size:14px;">
+            <input id="evModalRecInterval" type="number" inputmode="numeric" min="1" max="999" value="1" style="width:64px; padding:6px 8px; font-size:14px;">
             <span id="evModalRecUnit">days</span>
           </div>
           <div id="evModalRecDaysGroup" style="display:none; flex-direction:column; gap:4px;">
@@ -1015,7 +1015,7 @@
             <input id="evModalRecUntil" type="date" style="display:none; padding:8px; font-size:14px; width:100%;">
             <div id="evModalRecCountGroup" style="display:none; align-items:center; gap:8px; font-size:14px;">
               <span>After</span>
-              <input id="evModalRecCount" type="number" min="1" max="10000" value="10" style="width:72px; padding:6px 8px; font-size:14px;">
+              <input id="evModalRecCount" type="number" inputmode="numeric" min="1" max="10000" value="10" style="width:72px; padding:6px 8px; font-size:14px;">
               <span>occurrences</span>
             </div>
           </div>
@@ -1044,7 +1044,7 @@
               </select>
               
               <div id="evModalRemCustomGroup" style="display:none; gap:4px; align-items:center;">
-                <input type="number" id="evModalRemCustomVal" placeholder="min" min="0" style="width:65px; padding:4px; font-size:12px;">
+                <input type="number" inputmode="numeric" data-minutes id="evModalRemCustomVal" placeholder="min" min="0" style="width:65px; padding:4px; font-size:12px;">
                 <button type="button" id="evModalRemCustomAdd" class="btn small" style="padding:4px 8px; font-size:12px;">Add</button>
               </div>
               
@@ -1271,7 +1271,7 @@
         <p style="font-size:13px;margin:14px 0 6px"><b>Auto-sync URLs</b> — one per line (e.g. your university timetable or a Google Calendar secret address):</p>
         <textarea id="calSyncUrls" rows="3" style="width:100%" placeholder="https://…/timetable.ics&#10;https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
         <div class="formrow" style="margin-top:8px;align-items:center">
-          <label class="muted">Sync every</label> <input id="calSyncHours" type="number" min="1" style="width:70px"> <label class="muted">hours</label>
+          <label class="muted">Sync every</label> <input id="calSyncHours" type="number" inputmode="numeric" min="1" style="width:70px"> <label class="muted">hours</label>
           <button class="btn small" onclick="saveCalSync()">Save</button>
           <button class="btn ghost small" onclick="calSyncNow()">Sync now</button>
         </div>

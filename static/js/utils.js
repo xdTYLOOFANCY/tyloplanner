@@ -444,6 +444,49 @@ export async function delRow(table, id, refresh) {
   }
 }
 
+// ---------- mobile duration wheels ----------
+// On phones, a duration field marked `data-minutes` becomes two native picker
+// wheels (hours + minutes) instead of a keyboard. The original <input> stays in
+// the DOM, hidden, with its .value proxied to the selects — so every existing
+// reader (`wDur.value`) and reset (`wDur.value = ""`) keeps working untouched.
+// ponytail: one value accessor beats patching all 8 read/reset sites.
+function wheelOpts(n, unit) {
+  var s = "";
+  for (var i = 0; i < n; i++) s += '<option value="' + i + '">' + i + unit + "</option>";
+  return s;
+}
+
+export function applyMinuteWheels() {
+  if (!window.matchMedia || !window.matchMedia("(max-width: 640px)").matches) return;
+  document.querySelectorAll("input[data-minutes]:not([data-wheeled])").forEach(function(inp) {
+    inp.setAttribute("data-wheeled", "1");
+    var wrap = document.createElement("span");
+    wrap.className = "minwheel";
+    wrap.innerHTML = '<select aria-label="Hours">' + wheelOpts(13, "h") + "</select>" +
+      '<select aria-label="Minutes">' + wheelOpts(60, "m") + "</select>";
+    var h = wrap.children[0], m = wrap.children[1];
+
+    function set(v) {
+      var t = Math.max(0, Math.min(779, Math.round(parseFloat(v) || 0)));
+      h.value = Math.floor(t / 60); m.value = t % 60;
+    }
+    set(inp.value);
+    Object.defineProperty(inp, "value", {
+      configurable: true,
+      get: function() { return String(+h.value * 60 + +m.value); },
+      set: set
+    });
+
+    h.onchange = m.onchange = function(ev) {
+      ev.stopPropagation();
+      inp.dispatchEvent(new Event("input", { bubbles: true }));
+      inp.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    inp.style.display = "none";
+    inp.insertAdjacentElement("afterend", wrap);
+  });
+}
+
 /**
  * Checks if the user is currently focused on a text input, textarea, select, or contenteditable element.
  * Useful for guarding global keyboard shortcuts.

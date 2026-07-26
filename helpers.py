@@ -32,7 +32,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.47.6"
+VERSION = "1.48.3"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -591,6 +591,7 @@ SETTING_DEFAULTS = {
     "dashboard_style": "glass",
     "dashboard_desktop_layout": "",
     "dashboard_mobile_layout": "",
+    "dashboard_mobile_custom": "0",  # 1 = mobile order is user-owned, 0 = mirrors desktop
     "dashboard_widgets_data": "{}",
     "app_timezone": "",
     "calendar_hidden_types": "[]",

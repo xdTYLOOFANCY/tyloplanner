@@ -578,7 +578,7 @@ section.active{display:block}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
 .cards .card{margin-bottom:0}
 .card h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:16px;font-weight:600}
-.card-scroll{max-height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track)}
+.card-scroll{max-height:260px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) var(--scrollbar-track)}
 .btn{background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s}
 .btn:hover{background:var(--border)}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
@@ -1020,7 +1020,7 @@ table.grades th:nth-child(8),table.grades td:nth-child(8){width:5%}
   .ec-title{font-size:26px}
   .ec-sub{font-size:18px}
 }
-.inline-input{background:var(--card);border:1px solid var(--accent);border-radius:5px;color:var(--text);padding:3px 7px;font-size:13px;outline:none}
+.inline-input{background:var(--card);border:1px solid var(--accent);border-radius:5px;color:var(--text);padding:3px 7px;font-size:13px;outline:none;width:64px}
 
 /* exam list — aligned columns on desktop, stacked compact rows on mobile.
    Desktop: .exam-item is a 7-track grid; .ei-meta is display:contents so its
@@ -1769,6 +1769,26 @@ dialog.modal::backdrop {
     border-radius: 10px;
   }
 
+  /* The 16px/10px bump above makes the desktop-sized inline inputs too narrow
+     to show their own placeholder ("e.g. 7.5" clipped to "e.g. 7."). */
+  .inline-input {
+    width: 92px;
+  }
+
+  /* ...and it stretches checkboxes into 13x44 slivers. Where the checkbox sits
+     inside its label, keep the box square and move the 44px tap target onto the
+     label. Bare checkboxes keep the 44px min-height — they have no label to
+     stand in for them. */
+  label input[type="checkbox"], label input[type="radio"] {
+    min-height: 0;
+    width: 18px;
+    height: 18px;
+  }
+
+  label:has(input[type="checkbox"]), label:has(input[type="radio"]) {
+    min-height: 44px;
+  }
+
   .btn {
     padding: 10px 16px;
     font-size: 14px;
@@ -2375,35 +2395,98 @@ body.dark .drop-overlay {
   min-height: 0;
 }
 
-/* Mobile: single-column auto-height cards — no clipping, natural content height */
+/* Editing the phone stack from a wide screen: constrain to a phone-ish column
+   so what you arrange is what you get. */
+.dashboard-mobile-preview {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+}
+
+/* Mobile reorder buttons — touch devices never fire HTML5 drag events, so the
+   drag handle alone would leave a phone unable to reorder anything. */
+.dashboard-grid[data-customizing="true"] .card .card-move-btns {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 12;
+  display: flex;
+  gap: 4px;
+}
+
+.dashboard-grid[data-customizing="true"] .card .card-move-btns button {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.dashboard-grid[data-customizing="true"] .card .card-move-btns button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* A widget hidden on the device you're currently arranging (only ever visible
+   while customizing — outside edit mode it isn't rendered at all). */
+.dashboard-grid .card.widget-hidden-here {
+  opacity: 0.45;
+  border-style: dashed !important;
+}
+
+.widget-hidden-tag {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Single-column auto-height cards — no clipping, natural content height.
+   Keyed on the stacked-list class, not the viewport, so the desktop-side
+   "Mobile" preview in the customizer sizes cards exactly like a phone does. */
+/* Cards get natural height; card-scroll has a comfortable max */
+.dashboard-mobile-list .card .card-scroll {
+  max-height: 280px !important;
+  overflow-y: auto;
+}
+
+/* Greeting / clock widget looks better taller */
+.dashboard-mobile-list .card:has(.greeting-time) {
+  min-height: 160px;
+}
+
+/* Study timer needs room for the circle */
+.dashboard-mobile-list .card:has(.study-timer-widget) {
+  min-height: 200px;
+}
+
+/* Quick-add benefits from more height */
+.dashboard-mobile-list .card:has(.quick-add-form) {
+  min-height: 220px;
+}
+
+/* Notepad: flex-grow doesn't resolve in auto-height mobile cards, which left
+   the textarea at 44px inside a 220px card (big empty gap). Give the textarea
+   a real writing area and let the card hug it. */
+.dashboard-mobile-list .card:has(.note-textarea) { min-height: 0; }
+.dashboard-mobile-list .note-textarea { min-height: 150px !important; }
+
+/* While customizing, the ▲▼/⚙️ overlay row would sit on top of the widget
+   title — give it its own strip. */
+.dashboard-mobile-list[data-customizing="true"] .card {
+  padding-top: 34px;
+}
+
 @media (max-width: 640px) {
-  /* Cards get natural height; card-scroll has a comfortable max */
-  .dashboard-grid .card .card-scroll {
-    max-height: 280px !important;
-    overflow-y: auto;
-  }
-
-  /* Greeting / clock widget looks better taller */
-  .dashboard-grid .card:has(.greeting-time) {
-    min-height: 160px;
-  }
-
-  /* Study timer needs room for the circle */
-  .dashboard-grid .card:has(.study-timer-widget) {
-    min-height: 200px;
-  }
-
-  /* Quick-add benefits from more height */
-  .dashboard-grid .card:has(.quick-add-form) {
-    min-height: 220px;
-  }
-
-  /* Notepad: flex-grow doesn't resolve in auto-height mobile cards, which left
-     the textarea at 44px inside a 220px card (big empty gap). Give the textarea
-     a real writing area and let the card hug it. */
-  .dashboard-grid .card:has(.note-textarea) { min-height: 0; }
-  .dashboard-grid .note-textarea { min-height: 150px !important; }
-
   /* Dashboard header row */
   .dash-header {
     flex-wrap: wrap;
@@ -2989,6 +3072,12 @@ body.dark .drop-overlay {
   flex-shrink: 0;
 }
 
+.customizer-drawer .drawer-btn-row .btn.ghost.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
 .customizer-drawer .drawer-btn-row {
   display: flex;
   gap: 8px;
@@ -3318,11 +3407,17 @@ body.dark .drop-overlay {
   padding: 4px;
 }
 @media (max-width: 600px) {
+  /* Stacked: the controls column must stretch to the card, not shrink-to-fit
+     its widest row — that max-content width overflowed a 375px screen and
+     gave the whole dashboard a horizontal scrollbar. */
   .study-timer-widget {
     flex-direction: column;
     justify-content: center;
+    align-items: stretch;
     text-align: center;
   }
+  .study-timer-widget .timer-circle-container { align-self: center; }
+  .timer-controls-container { width: 100%; min-width: 0; }
 }
 .timer-circle-container {
   position: relative;
@@ -3364,9 +3459,62 @@ body.dark .drop-overlay {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 150px;
 }
+.st-hide { display: none !important; }
+.timer-controls-container input,
+.timer-controls-container select {
+  font-size: 11px;
+  height: 26px;
+  padding: 3px 6px;
+  min-width: 0;
+}
+.st-modes {
+  display: flex;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+.st-modes .btn {
+  flex: 1;
+  border: none;
+  padding: 4px 0;
+  font-size: 11px;
+  border-radius: 4px;
+}
+.st-subject-active {
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-durations { display: flex; gap: 4px; }
+.st-durations select { flex: 1; }
+.st-buttons { display: flex; gap: 4px; }
+.st-buttons .btn { flex: 1; padding: 4px 8px; font-size: 11px; }
+/* The themed .danger button is borderless; give the reset ✕ an outline so it
+   reads as a button next to Start/Log. */
+.st-buttons .btn.danger { flex: 0 0 34px; border: 1px solid var(--border); }
+.st-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel2);
+  border-radius: 8px;
+  padding: 8px;
+}
+.st-dialog-title { font-size: 11px; font-weight: 600; text-align: left; }
+.st-dialog-row { display: flex; gap: 4px; align-items: center; }
+.st-dialog-row input[type="text"] { flex: 1.5; }
+.st-dialog-row input[data-minutes] { flex: 1; }
+.st-dialog-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.st-dialog-actions .btn { padding: 2px 8px; font-size: 10px; }
 
 
 
@@ -3489,6 +3637,7 @@ body.dark .drop-overlay {
   .event.absolute { font-size: 12px; padding: 5px 8px; }
   .event.absolute .event-title { font-size: 12.5px !important; }
   .day-col-header { padding: 11px 8px; font-size: 13px; }
+  /* Deliberately under the 44px touch minimum — the day header is dense. */
   .day-col-header .btn { min-height: 30px; padding: 2px 10px; }
 
   /* Month calendar: reduce min cell height */
@@ -3545,10 +3694,14 @@ body.dark .drop-overlay {
   .stat-card-val { font-size: 26px; }
   .stat-card-label { margin-top: 8px; }
 
-  /* File toolbar: stack on mobile */
+  /* File toolbar: stack on mobile. The base rule's flex-wrap:wrap has to go
+     with it — a wrapping column sizes its flex line to the widest item's
+     max-content width instead of the container, so the search box and
+     breadcrumbs stretched past the card and off the screen edge. */
   .file-toolbar {
     flex-direction: column;
     align-items: stretch;
+    flex-wrap: nowrap;
   }
 
   .file-search-container {
@@ -3660,6 +3813,17 @@ body.dark .drop-overlay {
     min-height: 44px;
   }
 
+  .dashboard-grid[data-customizing="true"] .card .card-move-btns button {
+    min-width: 34px;
+    min-height: 34px;
+    font-size: 13px;
+  }
+
+  /* Touch-sized buttons need a taller strip than the 34px desktop one */
+  .dashboard-mobile-list[data-customizing="true"] .card {
+    padding-top: 48px;
+  }
+
   /* Greeting widget text sizes */
   .greeting-time {
     font-size: 40px !important;
@@ -3682,6 +3846,13 @@ body.dark .drop-overlay {
   button, .btn, .nav-tabs button, .list-item {
     transition: transform 0.1s ease, opacity 0.1s ease !important;
     min-height: 44px;
+  }
+
+  /* Icon-only buttons (✕, ⋮, ‹, ›, tree chevrons) only ever got a min-height,
+     so they stayed 11–30px wide — too narrow to hit. Width is the other half
+     of the touch target. */
+  button, .btn {
+    min-width: 44px;
   }
   
   button:active, .btn:active, .nav-tabs button:active, .menu-grid button:active {
@@ -5301,6 +5472,12 @@ body[data-nav-layout="sidebar"] .music-player-bar { left: var(--sidebar-w, 0px);
 .folder-card .file-card-check{position:absolute;top:6px;left:6px;z-index:2;background:var(--panel);opacity:0;transition:opacity .2s}
 .folder-card:hover .file-card-check,.folder-card .file-card-check.on{opacity:1}
 .folder-card.selected{border-color:var(--accent);background:color-mix(in srgb,var(--panel2) 90%,var(--accent))}
+/* No hover on touch: the file-card equivalent is unhidden further up, but this
+   rule is declared later in the cascade, so folders need their own override or
+   folder multi-select is unreachable on mobile. */
+@media (max-width: 700px){
+  .folder-card .file-card-check{opacity:1}
+}
 
 /* Empty states */
 .files-empty{text-align:center;padding:48px 16px;color:var(--text);font-size:14px;font-weight:600}
@@ -5357,7 +5534,16 @@ body[data-nav-layout="sidebar"] .music-player-bar { left: var(--sidebar-w, 0px);
   #filesTree{display:none}
   .files-storage-mini{margin-top:0;flex:none;min-width:96px;padding:7px 9px}
   .file-kebab{opacity:1}
-  .preview-arrow{width:32px;height:32px;min-height:32px} /* beat the global 44px touch min-height */
+  .preview-arrow{width:32px;height:32px;min-height:32px;min-width:32px} /* beat the global 44px touch min-height/min-width — it's a circle */
   .file-toolbar-right{justify-content:stretch}
   .file-toolbar-right .file-search-container{flex:1 1 100%}
 }
+
+/* Mobile duration wheels — two native selects replacing a minutes number
+   input (see applyMinuteWheels in js/utils.js). Rules live at the end of the
+   file so they beat the `.formrow select{width:100%}` mobile rule above. */
+.minwheel{display:flex;gap:6px;align-items:center;flex:1;min-width:0}
+.minwheel select{width:auto;flex:1;min-width:0;text-align:center;text-align-last:center}
+/* The wheel is wider than the number box it replaces — let the reminder row
+   wrap instead of pushing Cancel off a phone screen. */
+#evModalRemSelectorGroup{flex-wrap:wrap}

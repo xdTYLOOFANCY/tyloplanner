@@ -3,7 +3,7 @@
 import { S, habitSet, SET, PRESETS, safeRender } from './state.js';
 import { todayStr, fmtShort, esc, daysUntil, api, z, MONTHS, mdToHtml, askConfirm, askPrompt, showContextMenu } from './utils.js';
 import { examBadge } from './exams.js';
-import { streak } from './habits.js';
+import { streak, activeHabits } from './habits.js';
 import { weekTotals } from './workouts.js';
 import { getTaskCategories } from './settings.js';
 import { renderStudyTimerWidget } from './study_timer.js';
@@ -17,6 +17,11 @@ let saveTimeout = null;
 let greetingInterval = null;
 let gridInstance = null;
 let lastIsMobileRender = null;
+// Mobile order is a mirror of the desktop reading order until the user moves a
+// card on the phone layout; from then on it is theirs and desktop edits don't
+// touch it. `editTarget` lets a wide screen edit the mobile stack anyway.
+let mobileCustom = false;
+let editTarget = 'desktop';
 
 // Single source of truth for widget types: name (customizer label), render
 // function, and whether it's a togglable singleton (vs. an "add another
@@ -40,14 +45,13 @@ const WIDGET_REGISTRY = {
 };
 
 function saveWidgetsData() {
+  // Mirror into SET right away: renderDashboard() re-reads widgetsData from
+  // SET, so waiting for the debounced POST would make every edit (title,
+  // colour, per-device visibility) snap back for a second.
+  if (SET) SET.dashboard_widgets_data = JSON.stringify(widgetsData);
   if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(async function() {
-    await api("POST", "/api/settings", {
-      dashboard_widgets_data: JSON.stringify(widgetsData)
-    });
-    if (SET) {
-      SET.dashboard_widgets_data = JSON.stringify(widgetsData);
-    }
+  saveTimeout = setTimeout(function() {
+    api("POST", "/api/settings", { dashboard_widgets_data: JSON.stringify(widgetsData) });
   }, 1000);
 }
 
@@ -62,7 +66,8 @@ function layoutPayload() {
     })),
     dashboard_mobile_layout: JSON.stringify(currentLayout.map(function(item) {
       return { id: item.id, type: item.type, x: item.mx, y: item.my, w: item.mw, h: item.mh };
-    }))
+    })),
+    dashboard_mobile_custom: mobileCustom ? "1" : "0"
   };
 }
 
@@ -72,6 +77,7 @@ async function persistLayout() {
   if (SET) {
     SET.dashboard_desktop_layout = payload.dashboard_desktop_layout;
     SET.dashboard_mobile_layout = payload.dashboard_mobile_layout;
+    SET.dashboard_mobile_custom = payload.dashboard_mobile_custom;
   }
 }
 
@@ -90,8 +96,17 @@ function flushLayoutSave() {
 
 
 
+// Mirror mode: mobile stacks in desktop reading order (top row first, then
+// left to right). Widths/heights are irrelevant on mobile — cards are always
+// full-width, auto-height.
+function mirrorMobileOrder() {
+  currentLayout.slice()
+    .sort(function(a, b) { return (a.y - b.y) || (a.x - b.x); })
+    .forEach(function(item, i) { item.my = i + 1; item.mx = 1; item.mw = 6; item.mh = item.h; });
+}
+
 function initLayoutAndStyle() {
-  
+
   let desktop = [];
   let mobile = [];
   try {
@@ -128,6 +143,9 @@ function initLayoutAndStyle() {
       };
     });
   }
+
+  mobileCustom = !!(SET && SET.dashboard_mobile_custom === "1");
+  if (!mobileCustom) mirrorMobileOrder();
   // ponytail: no compaction on load — widgets stay exactly where the user put them
 }
 
@@ -317,7 +335,8 @@ function renderHabitsWidget(id) {
   var title = wData.title || "Habits today";
   var today = todayStr();
   var html = '<h3>' + esc(title) + '</h3><div class="card-scroll">';
-  if (S.habits.length) S.habits.forEach(function(h) {
+  var habits = activeHabits();
+  if (habits.length) habits.forEach(function(h) {
     var on = !!habitSet[h.id + "|" + today];
     html += '<div class="list-item"><span class="hcheck' + (on ? ' on' : '') + '" data-habit-id="' + h.id + '" data-habit-date="' + today + '" onclick="toggleHabit(\'' + h.id + '\',\'' + today + '\')">' + (on ? '\u2713' : '') + '</span><div class="grow">' + esc(h.name) + '</div><span class="badge ' + (streak(h.id) > 0 ? 'green' : 'gray') + '" data-habit-streak="' + h.id + '">' + streak(h.id) + '\uD83D\uDD25</span></div>'; });
   else html += '<div class="muted">No habits yet.</div>';
@@ -471,8 +490,8 @@ function renderQuickAddWidget(id) {
     '      <input class="qa-workout-date" type="date" value="' + today + '" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    </div>' +
     '    <div style="display:flex; gap:6px;">' +
-    '      <input class="qa-workout-dur" type="number" placeholder="Min" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
-    '      <input class="qa-workout-dist" type="number" step="0.1" placeholder="km (opt)" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
+    '      <input class="qa-workout-dur" type="number" inputmode="numeric" data-minutes placeholder="Min" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
+    '      <input class="qa-workout-dist" type="number" inputmode="decimal" step="0.1" placeholder="km (opt)" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    </div>' +
     '  </div>' +
 
@@ -481,7 +500,7 @@ function renderQuickAddWidget(id) {
     '    <input class="qa-exam-name" placeholder="Exam/Deadline Name" style="padding:6px; font-size:13px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    <div style="display:flex; gap:6px;">' +
     '      <input class="qa-exam-date" type="date" value="' + today + '" style="padding:6px; font-size:13px; flex:1.5; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
-    '      <input class="qa-exam-ects" type="number" step="0.5" placeholder="ECTS" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
+    '      <input class="qa-exam-ects" type="number" inputmode="decimal" step="0.5" placeholder="ECTS" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    </div>' +
     '  </div>' +
 
@@ -852,6 +871,13 @@ window.openWidgetSettings = function(event, id) {
                   '        <input type="color" id="wsColorPicker" value="' + (borderColor.startsWith('#') && borderColor.length === 7 ? borderColor : '#4f8cff') + '" style="width: 34px; height: 32px; border: none; border-radius: 4px; background: none; cursor: pointer; padding: 0;">' +
                   '        <input type="text" id="wsBorderColor" value="' + esc(borderColor) + '" placeholder="e.g. #ff0000 or empty" style="flex: 1; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text);">' +
                   '      </div>' +
+                  '    </div>' +
+                  '    <div>' +
+                  '      <label style="display: block; font-size: 12px; margin-bottom: 4px; color: var(--muted);">Show on</label>' +
+                  '      <div style="display: flex; gap: 14px; font-size: 13px;">' +
+                  '        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" id="wsShowDesktop"' + (wData.hide_desktop ? '' : ' checked') + '> 🖥️ Desktop</label>' +
+                  '        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" id="wsShowMobile"' + (wData.hide_mobile ? '' : ' checked') + '> 📱 Mobile</label>' +
+                  '      </div>' +
                   '    </div>';
 
   if (item.type === 'quick_notes') {
@@ -978,6 +1004,9 @@ window.saveWidgetSettings = function(id) {
   var colorVal = document.getElementById('wsBorderColor').value.trim();
   widgetsData[id].border_color = colorVal || null;
 
+  widgetsData[id].hide_desktop = document.getElementById('wsShowDesktop').checked ? null : true;
+  widgetsData[id].hide_mobile = document.getElementById('wsShowMobile').checked ? null : true;
+
   if (item.type === 'quick_notes') {
     widgetsData[id].font = document.getElementById('wsFont').value;
   } else if (item.type === 'analytics') {
@@ -1019,18 +1048,45 @@ function getCardHTML(type, id) {
 function renderCustomizerPanelHTML() {
   var showShortcuts = SET ? SET.show_shortcuts !== "0" : true;
   var showShortcutsMobile = SET ? SET.show_shortcuts_mobile === "1" : false;
-  var isMobileView = window.innerWidth <= 640;
+  var narrow = window.innerWidth <= 640;
+  var isMobileView = narrow || editTarget === 'mobile';
 
   var html = '';
   html += '<div class="drawer-head">';
   html += '  <div>';
   html += '    <div class="drawer-title">Customize dashboard</div>';
   html += '    <div class="drawer-hint">' + (isMobileView
-    ? 'Drag the handle on a card to reorder. Changes save automatically.'
+    ? 'Use ▲▼ (or drag the handle) to reorder. Changes save automatically.'
     : 'Drag cards by their handle, resize from the corner. Changes save automatically.') + '</div>';
   html += '  </div>';
   html += '  <button class="btn small drawer-done" onclick="toggleEditMode()">Done</button>';
   html += '</div>';
+
+  // --- Which layout am I editing? (only offered on a wide screen — a phone ---
+  // --- can't sensibly drag the 12-column desktop grid) ---
+  if (!narrow) {
+    html += '<div class="drawer-section">';
+    html += '<h4>Layout</h4>';
+    html += '<div class="drawer-btn-row">';
+    html += '<button class="btn ghost small' + (editTarget === 'desktop' ? ' active' : '') + '" onclick="setEditTarget(\'desktop\')">🖥️ Desktop</button>';
+    html += '<button class="btn ghost small' + (editTarget === 'mobile' ? ' active' : '') + '" onclick="setEditTarget(\'mobile\')">📱 Mobile</button>';
+    html += '</div>';
+    html += '<div class="drawer-hint" style="margin-top:8px;">' + (editTarget === 'mobile'
+      ? (mobileCustom
+          ? 'Mobile has its own order. Reordering here never touches your desktop grid.'
+          : 'Mobile currently mirrors your desktop order. Move a card to give it its own order.')
+      : 'Desktop is a free grid. Mobile stacks the same cards in one column.') + '</div>';
+    if (editTarget === 'mobile' && mobileCustom) {
+      html += '<button class="btn ghost small" style="margin-top:8px;" onclick="resetMobileOrder()">Match desktop order again</button>';
+    }
+    html += '</div>';
+  } else if (mobileCustom) {
+    html += '<div class="drawer-section">';
+    html += '<h4>Mobile order</h4>';
+    html += '<div class="drawer-hint">This phone layout has its own order, separate from desktop.</div>';
+    html += '<button class="btn ghost small" style="margin-top:8px;" onclick="resetMobileOrder()">Match desktop order again</button>';
+    html += '</div>';
+  }
 
   // --- Widgets: one row per type. Singletons get an on/off toggle; ---
   // --- multi-instance types (Notepad, Mini Chart, ...) get "+ Add". ---
@@ -1050,7 +1106,7 @@ function renderCustomizerPanelHTML() {
     html += '</div>';
   });
   html += '</div>';
-  html += '<div class="drawer-hint" style="margin-top:8px;">Tip: click the \u2699\ufe0f on a card to rename, recolor or remove it.</div>';
+  html += '<div class="drawer-hint" style="margin-top:8px;">Tip: click the \u2699\ufe0f on a card to rename, recolor, hide it on one device, or remove it.</div>';
   html += '</div>';
 
   // --- Presets ---
@@ -1146,26 +1202,37 @@ function startClockUpdates() {
   }, 10000);
 }
 
-function buildCardBodyHTML(item) {
+function buildCardBodyHTML(item, mobileView) {
+  var wData = widgetsData[item.id] || {};
+  // Per-device visibility. Hidden cards still render while customizing (dimmed)
+  // so the gear stays reachable to bring them back.
+  var hidden = mobileView ? !!wData.hide_mobile : !!wData.hide_desktop;
+  if (hidden && !isEditMode) return null;
   var cardContent = getCardHTML(item.type || item.id, item.id);
   if (!cardContent) return null;
-  var wData = widgetsData[item.id] || {};
   var borderColor = wData.border_color;
   var borderStyle = borderColor ? "border-color: " + borderColor + " !important;" : "";
   var gear = isEditMode
     ? '<button class="card-settings-btn" onclick="openWidgetSettings(event, \'' + item.id + '\')" style="position: absolute; top: 6px; right: 6px; z-index: 12; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; cursor: pointer; color: var(--text); font-size: 11px;">⚙️</button>'
     : '';
   var dragHandle = isEditMode ? '<div class="card-drag-handle"></div>' : '';
-  return { borderStyle: borderStyle, gear: gear, dragHandle: dragHandle, cardContent: cardContent };
+  var hiddenTag = hidden
+    ? '<div class="widget-hidden-tag">Hidden on ' + (mobileView ? 'mobile' : 'desktop') + '</div>'
+    : '';
+  return {
+    borderStyle: borderStyle, gear: gear, dragHandle: dragHandle,
+    cardContent: hiddenTag + cardContent,
+    hiddenClass: hidden ? ' widget-hidden-here' : ''
+  };
 }
 
 function renderGridStackHTML() {
   var html = "";
   currentLayout.forEach(function(item) {
-    var body = buildCardBodyHTML(item);
+    var body = buildCardBodyHTML(item, false);
     if (!body) return;
     html += '<div class="grid-stack-item" gs-id="' + item.id + '" gs-x="' + (item.x - 1) + '" gs-y="' + (item.y - 1) + '" gs-w="' + item.w + '" gs-h="' + item.h + '">';
-    html += '  <div class="grid-stack-item-content card" data-id="' + item.id + '" style="' + body.borderStyle + '">';
+    html += '  <div class="grid-stack-item-content card' + body.hiddenClass + '" data-id="' + item.id + '" style="' + body.borderStyle + '">';
     html += body.dragHandle + body.gear + body.cardContent;
     html += '  </div>';
     html += '</div>';
@@ -1199,6 +1266,7 @@ function initGridStack(container) {
         layoutItem.h = gsItem.h;
       }
     });
+    if (!mobileCustom) mirrorMobileOrder();
     scheduleLayoutSave();
   });
 }
@@ -1208,8 +1276,8 @@ function initGridStack(container) {
 function renderMobileListHTML() {
   var sorted = currentLayout.slice().sort(function(a, b) { return a.my - b.my; });
   var html = "";
-  sorted.forEach(function(item) {
-    var body = buildCardBodyHTML(item);
+  sorted.forEach(function(item, i) {
+    var body = buildCardBodyHTML(item, true);
     if (!body) return;
     // Only the handle is a drag source (draggable) so buttons/inputs/textareas
     // inside the widget content keep working normally; the whole card is a
@@ -1220,12 +1288,39 @@ function renderMobileListHTML() {
     var dragHandle = isEditMode
       ? '<div class="card-drag-handle" draggable="true" ondragstart="dragWidgetStart(event,\'' + item.id + '\')" ondragend="dragWidgetEnd(event)"></div>'
       : '';
-    html += '<div class="card" data-id="' + item.id + '" style="' + body.borderStyle + '"' + dropAttrs + '>';
-    html += dragHandle + body.gear + body.cardContent;
+    // HTML5 drag-and-drop never fires on touch, so a phone needs buttons to
+    // reorder — the handle above only works with a mouse.
+    var moveBtns = isEditMode
+      ? '<div class="card-move-btns">' +
+        '<button type="button" onclick="moveWidgetMobile(event,\'' + item.id + '\',-1)"' + (i === 0 ? ' disabled' : '') + ' aria-label="Move up">▲</button>' +
+        '<button type="button" onclick="moveWidgetMobile(event,\'' + item.id + '\',1)"' + (i === sorted.length - 1 ? ' disabled' : '') + ' aria-label="Move down">▼</button>' +
+        '</div>'
+      : '';
+    html += '<div class="card' + body.hiddenClass + '" data-id="' + item.id + '" style="' + body.borderStyle + '"' + dropAttrs + '>';
+    html += dragHandle + moveBtns + body.gear + body.cardContent;
     html += '</div>';
   });
   return html;
 }
+
+// Every mobile reorder makes the mobile order user-owned: from here on it no
+// longer follows the desktop grid.
+function applyMobileOrder(sorted) {
+  sorted.forEach(function(item, i) { item.my = i + 1; });
+  mobileCustom = true;
+  scheduleLayoutSave();
+  renderDashboard(true);
+}
+
+window.moveWidgetMobile = function(e, id, delta) {
+  if (e) e.stopPropagation();
+  var sorted = currentLayout.slice().sort(function(a, b) { return a.my - b.my; });
+  var from = sorted.findIndex(function(x) { return x.id === id; });
+  var to = from + delta;
+  if (from === -1 || to < 0 || to >= sorted.length) return;
+  sorted.splice(to, 0, sorted.splice(from, 1)[0]);
+  applyMobileOrder(sorted);
+};
 
 var mobileDragId = null;
 
@@ -1250,9 +1345,7 @@ window.dropWidget = function(e, dropId) {
   if (dragIdx === -1 || dropIdx === -1) return;
   var moved = sorted.splice(dragIdx, 1)[0];
   sorted.splice(dropIdx, 0, moved);
-  sorted.forEach(function(item, i) { item.my = i + 1; });
-  scheduleLayoutSave();
-  renderDashboard(true);
+  applyMobileOrder(sorted);
 };
 
 window.dragWidgetEnd = function(e) {
@@ -1309,30 +1402,27 @@ export function renderDashboard(force) {
     }
 
     var container = document.getElementById("dashCards");
-    var isMobileRender = window.innerWidth <= 640;
-    lastIsMobileRender = isMobileRender;
+    var narrow = window.innerWidth <= 640;
+    // A wide screen can render the mobile stack on purpose (customizer set to
+    // "Mobile") — but the resize watcher below only cares about the viewport.
+    var previewMobile = !narrow && isEditMode && editTarget === 'mobile';
+    var isMobileRender = narrow || previewMobile;
+    lastIsMobileRender = narrow;
 
     if (gridInstance) {
       try { gridInstance.destroy(false); } catch (e) {}
       gridInstance = null;
     }
+    // Gridstack leaves an inline height on the container; left behind it
+    // squashes the stacked mobile list into the old grid's height.
+    if (container) container.style.removeProperty('height');
 
     if (container) {
-      if (window.Alpine && typeof window.Alpine.destroyTree === 'function') {
-        container.querySelectorAll('[x-data]').forEach(function(el) {
-          try {
-            window.Alpine.destroyTree(el);
-          } catch (e) {
-            console.warn("Failed to destroy Alpine tree for element:", el, e);
-          }
-        });
-      }
-
       container.setAttribute("data-customizing", isEditMode ? "true" : "false");
 
       if (isMobileRender) {
         // Mobile: no free-form grid — full-width stacked cards, reordered by drag handle only.
-        container.className = "dashboard-grid dashboard-mobile-list";
+        container.className = "dashboard-grid dashboard-mobile-list" + (previewMobile ? " dashboard-mobile-preview" : "");
         container.innerHTML = renderMobileListHTML();
       } else {
         // Desktop/tablet: Gridstack-powered free-form grid (drag + resize + collision).
@@ -1460,14 +1550,28 @@ export function toggleEditMode() {
     }
   }
   if (!isEditMode) {
+    editTarget = 'desktop';
     flushLayoutSave();
   }
   renderDashboard(true);
 }
 
+window.setEditTarget = function(target) {
+  editTarget = target;
+  renderDashboard(true);
+};
+
+window.resetMobileOrder = function() {
+  mobileCustom = false;
+  mirrorMobileOrder();
+  scheduleLayoutSave();
+  renderDashboard(true);
+};
+
 export function applyPreset(name) {
   if (PRESETS[name]) {
     currentLayout = JSON.parse(JSON.stringify(PRESETS[name]));
+    if (!mobileCustom) mirrorMobileOrder();
     scheduleLayoutSave();
     renderDashboard(true);
   }

@@ -29,7 +29,7 @@ export function renderSettings(refresh) {
       '<li>Set <b>Authorization Callback Domain</b> to: <code class="url">' + esc(host) + '</code></li>' +
       '<li>Copy the <b>Client ID</b> and <b>Client Secret</b> below and save:</li></ol>' +
       '<div class="formrow">' +
-      '<input id="stravaCid" placeholder="Client ID" style="width:130px" onkeydown="if(event.keyCode===13)stravaSaveConfig()">' +
+      '<input id="stravaCid" inputmode="numeric" placeholder="Client ID" style="width:130px" onkeydown="if(event.keyCode===13)stravaSaveConfig()">' +
       '<input id="stravaSecret" type="password" placeholder="Client Secret" style="flex:1;min-width:200px" onkeydown="if(event.keyCode===13)stravaSaveConfig()">' +
       '<button class="btn" onclick="stravaSaveConfig()">Save keys</button>' +
       (stravaEditing ? '<button class="btn ghost" onclick="stravaEditing=false;renderSettings()">Cancel</button>' : '') +
@@ -447,12 +447,12 @@ function renderSecurity() {
   if (S.auth.has_password) {
     if (SET.totp_enabled) {
       html += '<p style="font-size:14px;margin-bottom:10px">\u2705 Two-factor authentication is <b>on</b>. Disable by entering a current code:</p>' +
-        '<div class="formrow"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaDisable()">' +
+        '<div class="formrow"><input id="tfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaDisable()">' +
         '<button class="btn danger" onclick="tfaDisable()">Disable 2FA</button></div>';
     } else if (tfaPending) {
       html += '<p style="font-size:14px;margin-bottom:10px">Scan this QR code with Google Authenticator / Aegis / 1Password, then enter the 6-digit code to confirm:</p>' +
         '<img src="/api/2fa/qr?t=' + Date.now() + '" alt="2FA QR" style="width:180px;border-radius:10px;background:#fff;padding:8px">' +
-        '<div class="formrow" style="margin-top:10px"><input id="tfaCode" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaConfirm()">' +
+        '<div class="formrow" style="margin-top:10px"><input id="tfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" style="width:110px;text-align:center" onkeydown="if(event.keyCode===13)tfaConfirm()">' +
         '<button class="btn" onclick="tfaConfirm()">Confirm &amp; enable</button>' +
         '<button class="btn ghost" onclick="tfaPending=false;renderSecurity()">Cancel</button></div>';
     } else {
@@ -471,7 +471,7 @@ function renderSecurity() {
       (SET.totp_enabled ?
       '  <div style="display:flex;flex-direction:column;gap:4px;">' +
       '    <label class="muted" style="font-size:12px;">2FA Verification Code</label>' +
-      '    <input id="changePwTfa" type="text" placeholder="123456" maxlength="6" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);text-align:center;letter-spacing:2px;">' +
+      '    <input id="changePwTfa" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);text-align:center;letter-spacing:2px;">' +
       '  </div>' : '') +
       '  <div style="display:flex;flex-direction:column;gap:4px;">' +
       '    <label class="muted" style="font-size:12px;">New Password</label>' +

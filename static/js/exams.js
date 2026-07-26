@@ -374,8 +374,8 @@ function startInlineEdit(el, id, field, currentVal, refresh) {
   input.type = field === 'date' ? 'date' : (field === 'ects' || field === 'academic_year' ? 'number' : 'text');
   input.className = 'inline-input';
   input.value = currentVal != null ? currentVal : '';
-  if (field === 'ects') { input.step = '0.5'; input.min = '0'; input.style.width = '58px'; }
-  else if (field === 'academic_year') { input.step = '1'; input.min = '2000'; input.placeholder = 'start yr'; input.style.width = '72px'; }
+  if (field === 'ects') { input.step = '0.5'; input.min = '0'; input.inputMode = 'decimal'; input.style.width = '72px'; }
+  else if (field === 'academic_year') { input.step = '1'; input.min = '2000'; input.inputMode = 'numeric'; input.placeholder = 'start yr'; input.style.width = '72px'; }
   else if (field === 'date') input.style.width = '130px';
   else input.style.width = '180px';
 
@@ -458,8 +458,8 @@ function needText(r) {
 function gradeGoalHtml(exams, tracker) {
   var target = parseFloat(tracker.target) || 0;
   var r = neededAvg(target, exams);
-  var out = 'Target avg <input type="number" class="inline-input" id="gradeTargetInput" value="' +
-    (target || '') + '" min="1" max="10" step="0.1" placeholder="e.g. 7.5" style="width:58px" ' +
+  var out = 'Target avg <input type="number" inputmode="decimal" class="inline-input" id="gradeTargetInput" value="' +
+    (target || '') + '" min="1" max="10" step="0.1" placeholder="e.g. 7.5" ' +
     'onchange="saveGradeTarget(this.value)">';
   if (target > 0) {
     out += r.remainingEcts > 0
@@ -486,7 +486,7 @@ export function whatIfDialog() {
     return '<label class="tagpick-row" style="gap:8px">' +
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.name) + '</span>' +
       '<span class="muted" style="font-size:12px;flex-shrink:0">' + esc(e.date || '') + ' · ' + e.ects + ' EC</span>' +
-      '<input type="number" min="1" max="10" step="0.1" placeholder="—" data-whatif="' + esc(e.id) + '" ' +
+      '<input type="number" inputmode="decimal" min="1" max="10" step="0.1" placeholder="—" data-whatif="' + esc(e.id) + '" ' +
         'style="width:64px;padding:4px 6px;flex-shrink:0">' +
       '</label>';
   }).join('');
@@ -663,8 +663,8 @@ function renderAnalytics(exams, tracker) {
   var goal = parseFloat(tracker.goal) || 0;
   var st = calcStats(exams);
   var today = todayStr();
-  var goalInput = '<input type="number" class="inline-input" id="ectsGoalInput" value="' +
-    (goal || '') + '" min="0" step="1" placeholder="set goal" style="width:62px" onchange="saveEctsGoal(this.value)">';
+  var goalInput = '<input type="number" inputmode="decimal" class="inline-input" id="ectsGoalInput" value="' +
+    (goal || '') + '" min="0" step="1" placeholder="set goal" onchange="saveEctsGoal(this.value)">';
 
   if (goal > 0) {
     var topStats = '';

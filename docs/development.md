@@ -186,6 +186,20 @@ can't leak upward.
   globals via `window.quickAddGo()`. A `#globalFab` still provides per-tab
   add actions ≤640px. Elements that should only appear on one side use the
   `.header-desktop-only` / `.mobile-only` helper classes.
+- **Touch targets are 44×44 by default.** The `@media (max-width: 640px)` PWA
+  block sets `min-height` *and* `min-width: 44px` on every `button`/`.btn`, so
+  icon-only controls (`✕`, `⋮`, tree chevrons) can't collapse to slivers. Two
+  opt-outs exist for dense chrome and both say so in a comment
+  (`.day-col-header .btn`, `.preview-arrow`). Checkboxes are exempt from the
+  height rule when they sit inside a `<label>` — the label carries the 44px
+  target instead, so the box itself stays square.
+- **Mind the cascade when overriding for mobile.** Media queries add no
+  specificity, so a later, more specific desktop rule silently beats an earlier
+  mobile override. This has bitten hover-reveal controls (`.folder-card
+  .file-card-check` stayed invisible on touch even though `.file-card`'s
+  equivalent was fixed) and flex sizing. Put the mobile override *after* the
+  rule it's fighting, and verify the computed value in the browser rather than
+  assuming the media query won.
 - **Touch devices can't drag-resize planner events** — `.resize-handle` is
   hidden under `@media (pointer: coarse)` (capability-gated, not width-gated,
   so desktop-sized tablets are covered); events are resized via the edit
@@ -380,6 +394,21 @@ can't leak upward.
 - **Touch & iOS.** Aim for ≥44px tap targets (there's a blanket rule in the
   mobile block). Inputs that can receive focus should be ≥16px font to avoid
   iOS auto-zoom. Respect the safe area with `env(safe-area-inset-bottom)`.
+- **Numeric keyboards.** `<input type="number">` alone still opens the full
+  QWERTY-with-numbers keyboard on iOS. Every numeric field therefore also
+  carries `inputmode="decimal"` (km, ECTS, grade targets, storage GB) or
+  `inputmode="numeric"` (whole minutes, counts, day/hour spans, 2FA codes) to
+  get the real keypad. Add it to any new numeric input.
+- **Duration fields (`applyMinuteWheels` in `utils.js`).** Mark a minutes input
+  `data-minutes` and on phones (`max-width: 640px`) it is replaced by two
+  native `<select>` wheels (hours + minutes, capped at 12h59m); desktop keeps
+  the typed box. The original input stays in the DOM hidden with its `.value`
+  proxied to the selects via `Object.defineProperty`, so existing readers
+  (`wDur.value`) and resets (`wDur.value = ""`) need no changes — always read
+  and write through the input, never the selects. The getter returns whole
+  minutes as a string ("0" when empty, so a 0-minute reminder still registers).
+  `renderAll()` re-runs the sweep, which is how re-rendered fields (dashboard
+  quick-add) get wheeled; it's a no-op for already-converted inputs.
   The persistent music player bar is fixed to `bottom: 0`, so its mobile block
   (`@media (max-width: 640px)`) sizes its own enlarged controls (46px buttons,
   58px play, 6px seek) and adds `padding-bottom: env(safe-area-inset-bottom)` so

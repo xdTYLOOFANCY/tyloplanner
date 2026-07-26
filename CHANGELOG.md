@@ -2,6 +2,101 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.48.3 — 2026-07-26
+
+- **Buttons you can actually hit on a phone.** Small icon buttons had been
+  given a tap target that was tall enough but never wide enough, so they ended
+  up as narrow slivers — the delete cross on an exam was 11 pixels wide, the
+  habits row menu 19, and the folder arrows in Notes 18. Every icon button is
+  now at least 44 points wide as well as tall, across Exams, Habits, Notes,
+  Tasks, Files, Workouts and the planner.
+- **Fixed: you couldn't select folders on a touch screen.** The checkbox on a
+  folder tile only appeared when a mouse hovered over it, which on a phone is
+  never — so folders could not be multi-selected at all. Files had already been
+  fixed for this; folders had been missed.
+- **Fixed: the grade goal box cut off its own hint**, showing "e.g. 7." instead
+  of "e.g. 7.5" on a phone. The ECTS goal and grade goal boxes are now sized for
+  the larger mobile text.
+- **Tidier checkboxes in Settings**, which the mobile sizing rules had been
+  stretching into 13×44 slivers. They're square again, and the whole row is the
+  tap target.
+- **Fixed: the Files search box ran off the side of the screen**, along with the
+  breadcrumbs and sort buttons above it — the toolbar was sizing itself to its
+  widest contents rather than to the card holding it.
+- **Dashboard widgets stop stealing the page scroll.** Scrolling to the bottom
+  of a widget's list no longer carries on into the page behind it.
+
+## 1.48.2 — 2026-07-25
+
+- **The Study Timer widget works again.** It had been shipping as a picture of
+  a timer: the clock sat at 00:00, Pomodoro and Stopwatch did nothing, and the
+  "Log Study Session" box was stuck on screen permanently. The widget was
+  written for a UI framework the app doesn't actually load, so none of it ever
+  ran. It's rebuilt in plain JavaScript, and everything it always promised now
+  does what it says:
+  - **Pomodoro or Stopwatch**, with your pick of study (15/25/45/50/60m) and
+    break (3/5/10/15m) lengths, and a subject that autocompletes from the
+    subjects you've logged before.
+  - **Start, pause, reset**, and **Log** a session at any point — the log box
+    opens pre-filled with the subject and the minutes you actually sat there.
+  - **A chime when a Pomodoro ends**, the log prompt straight after, and then
+    it rolls into your break automatically.
+  - **It keeps time when you're not looking.** The countdown survives page
+    reloads, tab switches and the dashboard's own background refresh, and it
+    now shows the true elapsed time the moment you pause — a timer paused
+    after a long stretch in a background tab used to freeze on a stale number
+    and log that instead.
+- **Fixed:** on a phone the timer's controls spilled past the edge of their
+  card and gave the whole dashboard a sideways scroll.
+
+## 1.48.1 — 2026-07-25
+
+- **The right keyboard on your phone.** Typing a number used to bring up the
+  full letter keyboard, so entering "7.5 km" meant hunting for digits.
+  - **Number pad for numbers.** Distance, ECTS, grade targets, weekly goals,
+    repeat counts, storage limits and 2FA codes now open the keypad straight
+    away (2FA fields also accept the code autofill from your keyboard).
+  - **A scroll wheel for durations.** Minutes fields — workout length, study
+    session length, the study timer's manual log, and a custom event reminder
+    — become two spinning pickers for hours and minutes instead of a text box.
+    No more typing "90" and wondering if it meant an hour and a half.
+  - **Desktop is untouched.** The wheels only appear on phones; on a computer
+    you still type the number, which is faster with a keyboard.
+
+## 1.48.0 — 2026-07-24
+
+- **Your phone can have its own dashboard.** Widgets stack in one column on a
+  phone, so the arrangement that reads well on a wide screen often doesn't
+  read well there. Now it doesn't have to:
+  - **Mobile mirrors desktop by default** — the stack follows your desktop
+    grid top-to-bottom, left-to-right, and keeps following it whenever you
+    rearrange the grid. Nothing to set up.
+  - **Move one card on the phone layout and it becomes yours.** From then on
+    the mobile order is independent and desktop edits leave it alone.
+    "Match desktop order again" in the customizer puts it back.
+  - **Arrange the phone layout from your desktop.** The customizer has a
+    Desktop / Mobile switch; picking Mobile shows the real stacked layout in a
+    phone-width column you can reorder right there.
+  - **Different widgets per device.** Each widget's ⚙️ settings now has a
+    "Show on" row — untick Desktop or Mobile to keep a widget on just one of
+    them. Hidden widgets stay visible (dimmed, labelled) while you're
+    customizing so you can always bring them back.
+- **Reordering widgets works on a phone at all.** The drag handle relied on
+  HTML5 drag-and-drop, which never fires on a touchscreen — mobile cards now
+  have ▲▼ buttons while customizing.
+- **Fixed:** switching between the desktop grid and the phone stack without
+  reloading squashed every card into the old grid's height, spilling widget
+  content over the cards below it.
+- **Fixed:** renaming or recolouring a widget only showed up a few seconds
+  later, when the next background sync happened to re-render the dashboard.
+
+## 1.47.7 — 2026-07-24
+
+- **Archived habits stay archived.** The "Habits today" dashboard widget and
+  the evening habit-nudge push notification both listed *all* habits, including
+  the ones you had archived. They now show only your active habits, like the
+  Habits tab always did.
+
 ## 1.47.6 — 2026-07-22
 
 - **ECTS goal celebration.** Reaching your ECTS goal can be years of work, so

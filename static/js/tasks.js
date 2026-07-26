@@ -184,7 +184,6 @@ async function reorderTasks(dragId, dropId, refresh) {
 }
 
 // --- Categories Modal ---
-// (Modals now use Alpine.js)
 
 export async function addModalCategory(refresh) {
   var input = document.getElementById("modalCategoryInput");

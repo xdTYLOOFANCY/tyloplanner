@@ -214,10 +214,6 @@ export async function refresh(renderAll) {
     }
   }
 
-  if (window.Alpine) {
-    Alpine.store('state', S);
-  }
-  
   try {
     SET = await api("GET", "/api/settings");
     await offMod.setCache("settings", SET);
