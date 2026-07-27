@@ -4,6 +4,7 @@ import { S, SET, safeRender } from './state.js';
 import { esc, escAttr, api, toast, debounce } from './utils.js';
 import { applyAccent, applyAccentFromSettings, applyThemeStyle, applyThemeStyleFromSettings, applyNavLayout, applyNavLayoutFromSettings, applyDensity, applyDensityFromSettings } from './theme.js';
 import { renderBackupList } from './backup.js';
+import { FONTS, applyFonts, applyFontsFromSettings } from './fonts.js';
 
 
 var stravaEditing = false;
@@ -14,6 +15,20 @@ var oauthEditing = false;
 function setVal(id, v) {
   var el = document.getElementById(id);
   if (el && document.activeElement !== el) el.value = v == null ? "" : v;
+}
+
+// The two font dropdowns are filled from the shared FONTS table, each option
+// previewing its own face. Options never change, so fill once.
+function fillFontSelect(id) {
+  var el = document.getElementById(id);
+  if (!el || el.options.length) return;
+  FONTS.forEach(function(f) {
+    var o = document.createElement("option");
+    o.value = f.id;
+    o.textContent = f.id ? f.label : f.label + " (Inter)";
+    o.style.fontFamily = f.stack;
+    el.appendChild(o);
+  });
 }
 
 export function renderSettings(refresh) {
@@ -58,6 +73,10 @@ export function renderSettings(refresh) {
       getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4f8cff");
     setVal("navLayout", SET.nav_layout || "topbar");
     setVal("uiDensity", SET.ui_density || "comfortable");
+    fillFontSelect("appFont");
+    fillFontSelect("notesFont");
+    setVal("appFont", SET.app_font || "");
+    setVal("notesFont", SET.notes_font || "");
     setVal("weekStart", SET.week_start || "monday");
     setVal("defaultTab", SET.default_tab || "");
   }
@@ -65,6 +84,7 @@ export function renderSettings(refresh) {
   applyAccentFromSettings(SET);
   applyNavLayoutFromSettings(SET);
   applyDensityFromSettings(SET);
+  applyFontsFromSettings(SET);
   var persistTab = SET ? SET.persist_active_tab !== "0" : true;
   var tabToggleEl = document.getElementById("tabPersistenceToggle");
   if (tabToggleEl) tabToggleEl.checked = persistTab;
@@ -149,6 +169,18 @@ export async function saveDensity(refresh) {
   applyDensity(value);
   await api("POST", "/api/settings", { ui_density: value });
   toast("Density applied");
+  await refresh();
+}
+
+export async function saveFonts(refresh) {
+  var app = document.getElementById("appFont").value;
+  var notes = document.getElementById("notesFont").value;
+  // Mirror into SET first: the live-sync poll can land between the POST and the
+  // refresh and would otherwise re-apply the old fonts for a beat.
+  if (SET) { SET.app_font = app; SET.notes_font = notes; }
+  applyFonts(app, notes);
+  await api("POST", "/api/settings", { app_font: app, notes_font: notes });
+  toast("Font applied");
   await refresh();
 }
 

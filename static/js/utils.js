@@ -444,6 +444,25 @@ export async function delRow(table, id, refresh) {
   }
 }
 
+// ---------- decimal separator normalisation ----------
+// A comma-locale keypad (iOS in NL/DE/FR, and European numpads) offers "," and
+// no ".". `type="number"` throws the *whole* value away when it sees one, so
+// "38,88" reads back as "" and a 38.88 km run was saved as 0. Decimal fields
+// are therefore `type="text" inputmode="decimal"` and normalised here as they
+// are typed — comma to dot, junk dropped, only the first dot kept.
+// ponytail: one delegated listener beats patching all 12 parseFloat readers.
+document.addEventListener("input", function (ev) {
+  var el = ev.target;
+  if (!el.matches || !el.matches('input[inputmode="decimal"]')) return;
+  var clean = el.value.replace(/,/g, ".").replace(/[^0-9.]/g, "");
+  var dot = clean.indexOf(".");
+  if (dot > -1) clean = clean.slice(0, dot + 1) + clean.slice(dot + 1).replace(/\./g, "");
+  if (clean === el.value) return;
+  var caret = el.selectionStart - (el.value.length - clean.length);
+  el.value = clean;
+  try { el.setSelectionRange(caret, caret); } catch (e) {}
+});
+
 // ---------- mobile duration wheels ----------
 // On phones, a duration field marked `data-minutes` becomes two native picker
 // wheels (hours + minutes) instead of a keyboard. The original <input> stays in

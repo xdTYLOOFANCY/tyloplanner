@@ -35,6 +35,13 @@
   if (sc === "1") document.body.classList.add("sidebar-collapsed");
   var dens = localStorage.getItem("tylo-density");
   if (dens && dens !== "comfortable") document.documentElement.setAttribute("data-density", dens);
+  /* Cached default fonts, same reason — otherwise every load repaints in Inter
+     first. Values are font stacks written by fonts.js; re-validated here so a
+     tampered localStorage can't smuggle anything into the style attribute. */
+  [["tylo-app-font", "--app-font"], ["tylo-note-font", "--note-font"]].forEach(function(p){
+    var v = localStorage.getItem(p[0]);
+    if (v && /^[-\w '",. ]+$/.test(v)) document.documentElement.style.setProperty(p[1], v);
+  });
   /* Same for dark/light and the theme style (both per-device), so users on a
      non-default theme never see the stock blue theme flash in. */
   document.documentElement.setAttribute("data-theme", localStorage.getItem("tylo-theme") === "light" ? "light" : "dark");
@@ -246,7 +253,7 @@
 
   <section id="tab-planner">
     <div class="weeknav">
-      <span class="label" id="weekLabel" title="Jump to date" onclick="var g=document.getElementById('plannerGoToDate'); if(g&&g.showPicker){try{g.showPicker()}catch(e){}}"></span>
+      <span class="label" id="weekLabel" title="Change view or jump to date" onclick="onWeekLabelClick(event)"></span>
       <div class="weeknav-controls">
       <select id="plannerView" class="btn ghost" onchange="changePlannerView(this.value)">
         <option value="1">Day</option>
@@ -260,6 +267,9 @@
         <button class="btn ghost" onclick="moveWeek(0)">Today</button>
         <button class="btn ghost icon" onclick="moveWeek(1)" aria-label="Next">&#8250;</button>
         <input type="date" id="plannerGoToDate" class="goto-date" onchange="goToDate(this.value)" aria-label="Go to date" title="Jump to date">
+        <!-- Phone-only overflow: holds the actions that have no room in a
+             one-row toolbar (tasks tray, calendars, event search). -->
+        <button class="btn ghost icon mobile-only" onclick="openPlannerMoreMenu(event)" aria-label="More planner options" aria-haspopup="true">&#8943;</button>
       </div>
       <div class="weeknav-actions">
         <button class="btn ghost header-desktop-only" onclick="window.dispatchEvent(new CustomEvent('open-shortcuts-modal'))">⌨️ Shortcuts</button>
@@ -287,7 +297,7 @@
       <div class="formrow">
         <input id="examName" placeholder="Exam or assignment name" style="flex:1;min-width:180px" onkeydown="if(event.key==='Enter')addExam()">
         <input id="examDate" type="date" onkeydown="if(event.key==='Enter')addExam()">
-        <input id="examEcts" type="number" inputmode="decimal" step="0.5" min="0" placeholder="ECTS" style="width:90px" onkeydown="if(event.key==='Enter')addExam()">
+        <input id="examEcts" type="text" inputmode="decimal" placeholder="ECTS" style="width:90px" onkeydown="if(event.key==='Enter')addExam()">
         <button class="btn" onclick="addExam()">Add</button>
       </div>
       <div id="examTable" class="exam-list"></div>
@@ -338,7 +348,7 @@
         </select>
         <input id="wDate" type="date" onkeydown="if(event.key==='Enter')addWorkout()">
         <input id="wDur" type="number" inputmode="numeric" data-minutes min="0" placeholder="Minutes" style="width:90px" onkeydown="if(event.key==='Enter')addWorkout()">
-        <input id="wDist" type="number" inputmode="decimal" min="0" step="0.1" placeholder="km (optional)" style="width:110px" onkeydown="if(event.key==='Enter')addWorkout()">
+        <input id="wDist" type="text" inputmode="decimal" placeholder="km (optional)" style="width:110px" onkeydown="if(event.key==='Enter')addWorkout()">
         <input id="wNote" placeholder="Notes (optional)" style="flex:1;min-width:140px" onkeydown="if(event.key==='Enter')addWorkout()">
         <button class="btn" onclick="addWorkout()">Log</button>
         <button class="btn ghost" id="stravaSyncBtn" onclick="stravaSync()" style="display:none">⟳ Sync Strava</button>
@@ -621,6 +631,16 @@
           <option value="spacious">Spacious</option>
         </select>
         <p class="muted" style="font-size:12px;margin-top:6px">Scales the whole interface. Applies instantly and is saved per device.</p>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">App font</label>
+        <select id="appFont" onchange="saveFonts()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;"></select>
+        <p class="muted" style="font-size:12px;margin-top:6px">Interface font for the whole app. Default is Inter.</p>
+      </div>
+      <div style="margin-bottom:16px;">
+        <label class="muted" style="font-size:14px;display:block;margin-bottom:6px">Notes font</label>
+        <select id="notesFont" onchange="saveFonts()" style="padding:6px;font-size:14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);color:var(--text);flex:1;max-width:200px;"></select>
+        <p class="muted" style="font-size:12px;margin-top:6px">Default font for note text. Follows the app font unless you pick one; the toolbar's font picker still overrides it per selection.</p>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
       <p style="font-size:14px;margin-bottom:10px">Customize the theme accent color:</p>

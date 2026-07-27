@@ -7,6 +7,7 @@ import { refresh, SET, startLiveSync, tabNeedsRender } from './js/state.js';
 import { todayStr, esc, fmtShort, delRow as _delRow, applyMinuteWheels } from './js/utils.js';
 import { updateOfflineBanner, syncQueue } from './js/offline.js';
 import { applyTheme, toggleTheme, applyAccentFromSettings, applyThemeStyleFromSettings, applyNavLayoutFromSettings } from './js/theme.js';
+import { injectFontCss, applyFontsFromSettings } from './js/fonts.js';
 import { exportData, importData, exportArchive, importArchive } from './js/backup.js';
 import { 
   renderDashboard, 
@@ -21,7 +22,7 @@ import {
   showDashboardEventDetails
 } from './js/dashboard.js';
 import { renderAnalytics, populateSubjectList, addStudySession as _addStudySession } from './js/analytics.js';
-import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor, togglePlannerTaskTray } from './js/planner.js';
+import { moveWeek, renderPlanner, openAdd, editEvent, saveEventModal as _saveEventModal, delEventModal as _delEventModal, setPlannerRefresh, changePlannerView, saveShortcuts, resetShortcutsToDefault, searchEvents, hideSearchSoon, navigateToAndEditEvent, goToDate, showEventPopover, showDayPopover, closeEventPopover, duplicateEvent, deleteEventById, updateAllDayVisibility, toggleEvModalAllDay, setEventColor, handleQuickAddKeydown, quickAddOpen, handlePlannerSearchKeydown, togglePlannerCalendarsPanel as _togglePlannerCalendarsPanel, renderPlannerCalendarsPanel as _renderPlannerCalendarsPanel, toggleCalendarType as _toggleCalendarType, updateCalendarColor as _updateCalendarColor, togglePlannerTaskTray, onWeekLabelClick, openPlannerMoreMenu } from './js/planner.js';
 import { addExam as _addExam, setGrade as _setGrade, setGradeText as _setGradeText, renderExams, examInlineEditFn, saveEctsGoal as _saveEctsGoal, saveGradeTarget as _saveGradeTarget, whatIfDialog as _examWhatIf, addTracker as _examAddTracker, selectTracker as _examSelectTracker, trackerMenu as _examTrackerMenu, editExamTags as _examEditTags, toggleTagFilter as _examToggleTagFilter, tagMenu as _examTagMenu, celebrateEctsGoal } from './js/exams.js';
 import { addHabit as _addHabit, archiveHabit as _archiveHabit, restoreHabit as _restoreHabit, permanentDeleteHabit as _permanentDeleteHabit, renameHabit as _renameHabit, editHabitFrequency as _editHabitFreq, habitMenu as _habitMenu, toggleHabit as _toggleHabit, toggleHeatmap as _toggleHeatmap, habitWeekNav as _habitWeekNav, dragHabitStart as _dragHabitStart, dragHabitOver as _dragHabitOver, dragHabitEnd as _dragHabitEnd, dropHabit as _dropHabit, renderHabits } from './js/habits.js';
 import { addWorkout as _addWorkout, renderWorkouts, saveWorkoutGoal as _saveWorkoutGoal } from './js/workouts.js';
@@ -70,7 +71,7 @@ import {
   stravaSaveConfig as _stravaSaveConfig, stravaForget as _stravaForget,
   stravaSync as _stravaSync, stravaDisconnect as _stravaDisconnect,
   saveAppThemeStyle as _saveAppThemeStyle, saveNavLayout as _saveNavLayout, saveAccentColor as _saveAccentColor, resetAccentColor as _resetAccentColor,
-  saveDensity as _saveDensity, saveWeekStart as _saveWeekStart, saveDefaultTab as _saveDefaultTab, saveSidebarCollapsedDefault as _saveSidebarCollapsedDefault,
+  saveDensity as _saveDensity, saveFonts as _saveFonts, saveWeekStart as _saveWeekStart, saveDefaultTab as _saveDefaultTab, saveSidebarCollapsedDefault as _saveSidebarCollapsedDefault,
   saveMusicNewTab as _saveMusicNewTab, saveMusicBarTabOnly as _saveMusicBarTabOnly,
   toggleTabPersistence as _toggleTabPersistence,
   addCustomCategory as _addCustomCategory, deleteCategory as _deleteCategory,
@@ -244,6 +245,8 @@ window.runStorageCleanup = runStorageCleanup;
 window.togglePlannerCalendarsPanel = _togglePlannerCalendarsPanel;
 window.renderPlannerCalendarsPanel = _renderPlannerCalendarsPanel;
 window.togglePlannerTaskTray = togglePlannerTaskTray;
+window.onWeekLabelClick = onWeekLabelClick;
+window.openPlannerMoreMenu = openPlannerMoreMenu;
 window.toggleCalendarType = function(id, checked) { _toggleCalendarType(id, checked); };
 window.updateCalendarColor = function(id, color) { _updateCalendarColor(id, color); };
 
@@ -282,6 +285,7 @@ window.backupNow = function() { _backupNow(R); };
 window.saveAppThemeStyle = function() { _saveAppThemeStyle(R); };
 window.saveNavLayout = function() { _saveNavLayout(R); };
 window.saveDensity = function() { _saveDensity(R); };
+window.saveFonts = function() { _saveFonts(R); };
 window.saveWeekStart = function() { _saveWeekStart(R); };
 window.saveDefaultTab = function() { _saveDefaultTab(R); };
 window.saveSidebarCollapsedDefault = function() { _saveSidebarCollapsedDefault(R); };
@@ -570,10 +574,12 @@ window.addEventListener("offline", function() {
   updateOfflineBanner();
 });
 
+injectFontCss();
 refresh(renderAll).then(function() {
   applyThemeStyleFromSettings(SET);
   applyAccentFromSettings(SET);
   applyNavLayoutFromSettings(SET);
+  applyFontsFromSettings(SET);
   setPlannerRefresh(R);
   updateOfflineBanner();
   startLiveSync();

@@ -70,7 +70,7 @@ function statHtml(val, label, goal) {
 function goalInput(key, label) {
   var v = parseFloat(SET[key]) || "";
   return '<label class="muted" style="font-size:12px;display:flex;align-items:center;gap:4px">' + label +
-    '<input type="number" inputmode="decimal" min="0" step="0.5" value="' + v + '" placeholder="0" style="width:64px" ' +
+    '<input type="text" inputmode="decimal" value="' + v + '" placeholder="0" style="width:64px" ' +
     'onchange="saveWorkoutGoal(\'' + key + '\', this.value)"></label>';
 }
 

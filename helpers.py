@@ -32,7 +32,7 @@ AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "")
 AUTH_ENABLED = bool(AUTH_PASSWORD)
 PORT = int(os.environ.get("PORT", "8000"))
-VERSION = "1.48.3"
+VERSION = "1.49.2"
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -585,6 +585,10 @@ SETTING_DEFAULTS = {
     "app_theme_style": "default",
     "nav_layout": "topbar",
     "ui_density": "comfortable",   # compact | comfortable | spacious (CSS zoom)
+    # Default fonts; "" = the built-in stack. Ids come from FONTS in
+    # static/js/fonts.js. notes_font "" means "follow the app font".
+    "app_font": "",
+    "notes_font": "",
     "week_start": "monday",        # monday | sunday
     "default_tab": "",             # tab to open when not persisting the last tab
     "sidebar_default_collapsed": "0",  # default rail state for new devices

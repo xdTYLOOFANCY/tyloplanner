@@ -2,6 +2,73 @@
 
 All notable changes to TyloPlanner are documented here.
 
+## 1.49.2 — 2026-07-27
+
+- **A comma now works as a decimal point.** If your phone keyboard gives you
+  "," instead of "." — as Dutch, German and French keypads do — typing "38,88"
+  into the km box saved a **0 km** run. The value was thrown away before the
+  app ever saw it, with nothing to tell you. Now a comma and a dot mean the
+  same thing everywhere you enter a decimal: distance, ECTS, grades, target
+  average, weekly goals and the storage limit. Type it either way.
+- **Grades keep the comma you typed.** "7,5" stays "7,5" in the list and counts
+  as 7.5 in your average — and "pass"/"fail" still work as before.
+- **Stray characters can't sneak in.** These fields now quietly ignore anything
+  that isn't part of a number, instead of silently saving a zero.
+
+## 1.49.1 — 2026-07-27
+
+- **Add an event straight from the command palette, in plain language.** Typing
+  something like `Lunch tomorrow 1pm @Cafe` into ⌘/Ctrl+K used to end on "No
+  matches" — the only way to create an event was the `event ` prefix, which
+  nothing told you about. Now, when a search finds nothing, the palette offers
+  "Add event: …" and opens the prefilled event editor, exactly like the
+  planner's ✨ quick-add field. The `event …` prefix still works.
+- **Fixed: all-day quick-adds lost their all-day setting.** "Holiday tomorrow"
+  (no time) opened the editor as a timed event with empty start and end times,
+  in both the planner's quick-add field and the palette. It now opens as an
+  all-day event.
+- **Fixed: a quick-add with no title silently did nothing.** Typing just a time
+  or date cleared the box without explanation; it now says what's missing.
+
+## 1.49.0 — 2026-07-26
+
+- **The planner opens on the calendar again on a phone.** The date, view
+  picker, week arrows, Tasks, Calendars, quick add and event search each had
+  their own row, so the calendar itself began below the middle of the screen
+  and every visit started with a scroll. They now share one row, like the
+  Google Calendar app: the date on the left — tap it to switch between day,
+  3 days, 5 days, week and month, or jump to a date — then ‹ Today › and a ⋯
+  button for the task tray, calendars and event search. Quick add and search
+  aren't gone: the ✨ and 🔍 buttons in the app header already do both. The
+  calendar now starts just under the header and fills the rest of the screen
+  with nothing to scroll past. Desktop keeps the full toolbar unchanged.
+- **Fixed: a blank app on your phone if you last had the planner open.** The
+  planner tried to draw itself before the app had loaded any data, which threw
+  an error that stopped the rest of the app from starting — leaving an empty
+  screen until you reloaded.
+- **Habits no longer scroll sideways on a phone.** The week of check boxes did
+  not fit next to the habit name, so ticking off Thursday meant swiping the row
+  across — for every habit. On a phone each habit is now two lines: the name and
+  streak on top, the seven days underneath, lined up under the Mon–Sun labels at
+  the top of the list. Each habit takes a little more height, but the whole week
+  is reachable without scrolling. Desktop is unchanged.
+- **Fixed: the Notes formatting bar was a mess on a phone.** The mobile
+  tap-target rules were stretching Quill's own toolbar out of shape — the icons
+  blew up to fill 44-point squares, the font and heading dropdowns stayed
+  half-height and sat halfway up their rows, the group divider lines cut across
+  the mismatch, and the whole bar sprawled over five ragged rows taking a
+  quarter of the screen. It's now three tidy rows of evenly sized controls,
+  roughly half the height, with nothing overlapping or running off the edge.
+  Desktop is unchanged.
+- **Twelve more fonts in Notes.** The font picker went from three entries to
+  fifteen: System UI, Arial, Helvetica, Verdana, Tahoma, Trebuchet, Georgia,
+  Times, Garamond, Palatino, Monospace, Courier, Comic Sans and Impact, each
+  previewed in its own face. They survive HTML, Word and PDF export.
+- **Pick your default fonts** under Settings → Appearance: an **App font** for
+  the whole interface and a **Notes font** for note text (which follows the app
+  font unless you set it). The toolbar's font picker still overrides the notes
+  default for any selection.
+
 ## 1.48.3 — 2026-07-26
 
 - **Buttons you can actually hit on a phone.** Small icon buttons had been

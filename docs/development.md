@@ -261,9 +261,16 @@ can't leak upward.
   130px)`) and the planner opens scrolled to ~7am (`renderPlanner()` and
   `scrollToCurrentTimeLineIfVisible()`) so most of the day shows at a glance.
   All calendar colors come from theme CSS variables — never hard-code one.
-- **Planner toolbar & modal focus.** The `.weeknav` toolbar wraps (`flex-wrap`)
-  on mobile instead of side-scrolling, and `.planner-search` goes full-width
-  there. Search results call `navigateToAndEditEvent(id, date, false)` — the
+- **Planner toolbar & modal focus.** On mobile (≤640px) the `.weeknav` toolbar
+  collapses to one Google-Calendar-style row: a short title (`isMobileViewport()`
+  branch in `renderPlanner()` — "Wed 26 Jul" / "20 – 26 Jul" / "Jul 2026") that
+  opens the view switcher on tap (`onWeekLabelClick()`), then `‹ Today ›` and a
+  `⋯` overflow (`openPlannerMoreMenu()` — task tray, calendars, event search).
+  Both menus reuse `showContextMenu()`. `#plannerView`, `.weeknav-actions` and
+  the quick-add/search inputs are hidden there (the header's `+` and search
+  buttons already cover both); `.goto-date` stays rendered at zero width so
+  `showPicker()` still has an anchor. Desktop keeps the full two-row toolbar.
+  Search results call `navigateToAndEditEvent(id, date, false)` — the
   third arg is `false`, so it jumps to the event and pulses it (`.event-flash`)
   **without** opening the editor; the dashboard omits the arg to keep opening it.
   The event modal's `<h3>` has `autofocus` so the native `<dialog>.showModal()`
@@ -339,6 +346,17 @@ can't leak upward.
   would bloat the body past the `_MAX_BODY` limit and make saves fail. The
   paste/drop interception lives on the editor container in the capture phase
   (`initQuill()`) so it beats Quill's own base64 clipboard handler.
+- **Fonts.** `static/js/fonts.js` is the single source of truth: `FONTS` (id /
+  label / CSS stack, system fonts only) feeds the Quill font whitelist and
+  toolbar picker, the two default-font settings, and the `.doc`/`.html` export
+  style maps. The matching CSS (`.ql-font-<id>` plus the picker's `::before`
+  labels) is *generated* by `fontCss()` and injected as a `<style>` at boot —
+  don't hand-write those rules, they'd drift from the table. The `app_font` /
+  `notes_font` settings set `--app-font` / `--note-font` inline on `<html>`
+  (cached in `localStorage` for the pre-paint boot script in `index.html`);
+  `body` and `.note-page` read those vars, and `--note-font` falls back to
+  `--app-font`. A theme-style block that hardcodes a body `font-family` outranks
+  `body` and would make the App font setting a no-op — use the var there too.
 - **Notes editor extras.** Markdown block shortcuts (`# `…`###### `, `> `) are
   custom Quill keyboard bindings in `initQuill()`; lists come from Quill 2's
   built-in "list autofill" binding — don't re-add them. Callouts are a block
@@ -399,6 +417,21 @@ can't leak upward.
   carries `inputmode="decimal"` (km, ECTS, grade targets, storage GB) or
   `inputmode="numeric"` (whole minutes, counts, day/hour spans, 2FA codes) to
   get the real keypad. Add it to any new numeric input.
+- **Decimal fields are `type="text"`, never `type="number"`.** A comma-locale
+  keypad (iOS in NL/DE/FR, European numpads) offers "," and no "." — and
+  `type="number"` discards the *entire* value when it sees one, so "38,88"
+  reads back as `""` and a 38.88 km run silently saved as 0. Every field that
+  takes a decimal is therefore `type="text" inputmode="decimal"`, and a single
+  delegated `input` listener in `utils.js` normalises as the user types: comma
+  to dot, non-numeric characters dropped, only the first dot kept, caret
+  preserved. That keeps all ~12 `parseFloat(el.value)` readers working
+  unchanged and replaces the validation `type="number"` used to give. Integer
+  fields (`inputmode="numeric"`) stay `type="number"` — a comma is meaningless
+  there. `#examDays` ("7,3,1") has no `inputmode`, so the listener skips it and
+  its commas survive.
+  The grade box can't be sanitised this way (it also holds "pass"/"fail"), so
+  its comma is handled in `parseNumeric()` in `exams.js` instead — the grade is
+  *stored* as typed ("7,5") and parsed to 7.5 for every calculation.
 - **Duration fields (`applyMinuteWheels` in `utils.js`).** Mark a minutes input
   `data-minutes` and on phones (`max-width: 640px`) it is replaced by two
   native `<select>` wheels (hours + minutes, capped at 12h59m); desktop keeps
@@ -472,6 +505,13 @@ can't leak upward.
   parser and opens a pre-filled modal), and `?` which lists the palette's
   capabilities as `fill` rows that seed the input. Pressing `?` outside any
   input/dialog opens the keyboard cheat-sheet (`showShortcutsHelp`).
+  When a query matches nothing, `search()` falls back to the same `Add event: …`
+  row instead of "No matches", so the palette accepts a bare NL line
+  (`Lunch tomorrow 1pm @Cafe`) exactly like the planner's ✨ quick-add field —
+  the `event ` prefix is a shortcut, not the only way in. `quickAddOpen` is the
+  single entry point for both; it passes `p.allDay` through to `openAdd` (the
+  all-day control is a `.hcheck` span toggled by class, *not* a checkbox) and
+  toasts when the line has no title left after parsing.
 - **Undo toast (`showUndoToast`/`triggerUndo` in `utils.js`).** Shared 6-second
   Undo toast used by planner drag/resize/delete and by the generic `delRow()`,
   which snapshots the row before deleting and re-`POST`s it on undo (a fresh id

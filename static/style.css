@@ -6,6 +6,11 @@
 @font-face { font-family:'Inter'; font-style:normal; font-weight:700; font-display:swap; src:url('fonts/inter-700.woff2') format('woff2'); }
 
 :root{
+  /* Fonts. Both are overridden inline on <html> by the default-font settings
+     (see fonts.js); --note-font falls back to the app font so setting only the
+     app font also moves the notes editor. */
+  --app-font:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --note-font:var(--app-font);
   --bg:#0f1115; --panel:#181b22; --panel2:#1f232c; --border:#2a2f3a;
   --text:#e8eaf0; --muted:#8b93a3; --accent:#4f8cff; --accent2:#7c5cff;
   --accent-rgb:79, 140, 255;
@@ -26,7 +31,7 @@
   --scrollbar-thumb-hover: #4f8cff;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh}
+body{background:var(--bg);color:var(--text);font-family:var(--app-font);min-height:100vh}
 /* Density scale — zoom is the one native property that scales this px-based
    stylesheet uniformly. comfortable = no attribute = 1.0. */
 html[data-density="compact"]{zoom:0.9}
@@ -1400,6 +1405,9 @@ mark.cur{background:#f5a623;color:#1c2230}
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.12);
   padding: 52px 72px 72px;
+  /* Default notes font (setting). The title input and the Quill container both
+     inherit from here, so this one declaration covers the whole page. */
+  font-family: var(--note-font);
 }
 .note-page-title {
   width: 100%;
@@ -1443,9 +1451,10 @@ mark.cur{background:#f5a623;color:#1c2230}
 }
 .ql-snow .ql-picker.ql-expanded .ql-picker-label { border-color: var(--border); color: var(--accent); }
 
-/* Font-family picker options (no extra dependency; built-in whitelist) */
-.ql-font-serif, .ql-editor .ql-font-serif { font-family: Georgia, "Times New Roman", serif; }
-.ql-font-monospace, .ql-editor .ql-font-monospace { font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; }
+/* Font-family picker: the .ql-font-* rules and the picker labels are generated
+   from the FONTS table in js/fonts.js and injected as a <style> at boot. */
+.ql-snow .ql-picker.ql-font { width: 116px; }
+.ql-snow .ql-picker.ql-font .ql-picker-label { overflow: hidden; white-space: nowrap; }
 
 /* Editor content */
 #noteEditorQuill .ql-editor a { color: var(--accent); }
@@ -1483,7 +1492,7 @@ mark.cur{background:#f5a623;color:#1c2230}
 }
 
 @media (max-width: 640px) {
-  /* Full-bleed page on phones; toolbar scrolls horizontally to save height */
+  /* Full-bleed page on phones */
   #noteEditorQuill.ql-container.ql-snow { font-size: 16px; }
   .note-canvas { background: var(--panel); padding: 0; }
   .note-page {
@@ -1492,7 +1501,39 @@ mark.cur{background:#f5a623;color:#1c2230}
     padding: 16px 16px 48px;
   }
   .note-page-title { font-size: 23px; }
-  .note-doctoolbar .ql-toolbar.ql-snow { justify-content: center; }
+
+  /* Quill sizes its toolbar itself (28x24 buttons, 24px-tall pickers), but the
+     global mobile min-height/min-width:44px button rule beat it: the SVGs
+     stretched to fill 44px squares, the pickers stayed 24px tall halfway up
+     each 44px row, the group dividers cut across the mismatch, and the bar grew
+     to five ragged rows (~215px of an 812px screen). Size it explicitly here
+     instead — 32px targets, pickers on the same rhythm, and group spacing tight
+     enough that all 19 buttons land in two rows under the picker row. */
+  .note-doctoolbar { padding: 2px 4px; }
+  .note-doctoolbar .ql-toolbar.ql-snow { gap: 2px; justify-content: center; }
+  .note-doctoolbar .ql-toolbar.ql-snow .ql-formats {
+    border-right: none; margin-right: 2px; padding-right: 0;
+  }
+  .note-doctoolbar .ql-toolbar.ql-snow button {
+    min-height: 0; min-width: 0;
+    width: 32px; height: 32px; padding: 6px;
+  }
+  .note-doctoolbar .ql-toolbar.ql-snow button svg { width: 100%; height: 100%; }
+  .note-doctoolbar .ql-snow .ql-picker { height: 32px; }
+  .note-doctoolbar .ql-snow .ql-picker-label::before { line-height: 30px; }
+  .note-doctoolbar .ql-snow .ql-picker.ql-header { width: 82px; }
+  .note-doctoolbar .ql-snow .ql-picker.ql-font { width: 100px; }
+  .note-doctoolbar .ql-snow .ql-picker.ql-size { width: 74px; }
+  .note-doctoolbar .ql-snow .ql-color-picker,
+  .note-doctoolbar .ql-snow .ql-icon-picker { width: 32px; }
+  /* Text dropdowns (header/font/size) get thumb-sized rows and a cap, since the
+     font list is long. Colour swatch grids keep Quill's own tight layout. */
+  .note-doctoolbar .ql-snow .ql-picker:not(.ql-color-picker) .ql-picker-options {
+    max-height: 60vh; overflow-y: auto;
+  }
+  .note-doctoolbar .ql-snow .ql-picker:not(.ql-color-picker) .ql-picker-item {
+    padding-top: 8px; padding-bottom: 8px;
+  }
 }
 
 /* ---- Version history modal ---- */
@@ -3588,27 +3629,46 @@ body.dark .drop-overlay {
     display: none !important;
   }
 
-  /* Planner toolbar: label on top, then the controls row wraps onto multiple
-     rows instead of forcing a horizontal side-scroll. */
+  /* Planner toolbar: one Google-Calendar-style row — title on the left (tapping
+     it switches view), then ‹ Today › and a ⋯ overflow. The old layout stacked
+     the title, view picker, nav, actions, quick add and search on separate
+     rows, which pushed the calendar itself below the fold on every visit.
+     Quick add and event search are dropped here on purpose: the header's + and
+     search buttons already do both. Desktop keeps the full toolbar. */
   .weeknav {
-    gap: 8px;
-    margin-bottom: 10px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
   }
-  .weeknav .label { white-space: normal; font-size: 15px; margin: 2px 0; }
-  .weeknav-controls { gap: 8px; }
-  .weeknav-nav { flex-shrink: 0; }
-  .weeknav-actions { margin-left: 0; flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; gap: 8px; }
-  #plannerView { flex-shrink: 0; }
-  .weeknav-actions .planner-search { flex: 1 1 100%; max-width: none; }
-  .planner-search input { width: 100%; height: 40px; font-size: 16px; }
-  .planner-search .search-results { width: 100%; left: 0; right: auto; top: 44px; }
-  .weeknav-actions .planner-quickadd { flex: 1 1 100%; width: 100%; max-width: none; height: 40px; font-size: 16px; }
+  .weeknav .label {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-self: center;
+    margin: 0;
+    font-size: 17px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .weeknav .label::after { content: " ▾"; color: var(--muted); font-size: 13px; }
+  .weeknav-controls { flex: 0 0 auto; gap: 2px; flex-wrap: nowrap; }
+  .weeknav-nav { flex-shrink: 0; gap: 2px; }
+  .weeknav .btn { padding: 6px 9px; font-size: 13px; }
+  /* Everything that moved into the two menus */
+  #plannerView, .weeknav-actions { display: none; }
+  /* Kept rendered (zero-width) rather than display:none so showPicker() from
+     the title menu still has an element to anchor to. */
+  .goto-date {
+    width: 0; min-width: 0; padding: 0; border: 0; opacity: 0;
+    pointer-events: none;
+  }
 
   /* Time grid: dynamic height so it fills viewport without inner scroll trap.
      Also enable horizontal scrolling so multi-day views become swipeable
      instead of crushing 7 columns into the screen. */
   .time-grid-wrapper {
-    height: calc(100dvh - 200px);
+    height: calc(100dvh - 168px); /* header + the now single-row toolbar */
     min-height: 320px;
     overflow: auto;
     overscroll-behavior: contain;
@@ -3668,18 +3728,27 @@ body.dark .drop-overlay {
     gap: 10px;
   }
 
-  /* Habits table: scrollable */
-  .tab-habits .card {
-    overflow-x: auto;
+  /* Habits: stack the day checkboxes under the name/streak instead of
+     side-scrolling. Every row is the same 7-column grid, so the day labels in
+     the header line up with the checkboxes in each habit row. */
+  table.habits, table.habits tbody { display: block; }
+  table.habits tr {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-items: center;
+    border-bottom: 1px solid var(--border);
   }
-
-  table.habits {
-    min-width: 480px;
-  }
+  table.habits th, table.habits td { padding: 6px 2px; border-bottom: 0; }
+  table.habits th { font-size: 12px; white-space: nowrap; }  /* "Mon 13" fits one line */
+  /* ponytail: drag handle hidden — HTML5 drag reorder never worked on touch */
+  table.habits tr > :nth-child(1) { display: none; }
+  table.habits tr > :nth-child(2) { grid-area: 1 / 1 / 2 / 6; text-align: left; }  /* name */
+  table.habits tr > :nth-child(10) { grid-area: 1 / 6; }  /* streak */
+  table.habits tr > :nth-child(11) { grid-area: 1 / 7; }  /* ⋮ menu */
+  table.habits tr > td[colspan] { display: block; grid-column: 1 / -1; }  /* empty state */
 
   /* Habits: larger touch targets for checkboxes */
   .hcheck { width: 28px !important; height: 28px !important; border-radius: 8px !important; }
-  table.habits th, table.habits td { padding: 8px 3px; }
 
   /* Analytics: hide chart labels that overflow */
   .chartlabels div {
@@ -3878,6 +3947,13 @@ body.dark .drop-overlay {
 @keyframes tabFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Narrow phones: the planner title shares its row with four 44px buttons, so
+   at ≤360px "20 – 26 Jul" needs a slightly smaller type size to avoid the
+   ellipsis. */
+@media (max-width: 360px) {
+  .weeknav .label { font-size: 15px; }
 }
 
 /* Tablet-only adjustments (641px – 768px) */
@@ -4415,7 +4491,9 @@ main { view-transition-name: main-content; }
 /* body & background */
 [data-theme-style="claude"] body {
   background: var(--bg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* var, not a literal stack — a hardcoded font here outranks `body` and would
+     make the App font setting a no-op on this theme. */
+  font-family: var(--app-font);
   letter-spacing: -0.01em;
 }
 

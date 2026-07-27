@@ -179,6 +179,7 @@ function search(q) {
   var c = calc(forced ? q.slice(1) : q);
   if (forced) return c ? [calcRow(c)] : [{ label: 'Type an expression — e.g. 20% of 250, 5 km in mi', type: 'calc' }];
 
+  var raw = q;
   q = q.toLowerCase();
   var starts = [], incl = [];
   items.forEach(function(i) {
@@ -188,7 +189,12 @@ function search(q) {
     else if (l.indexOf(q) !== -1) incl.push(i);
   });
   var out = starts.concat(incl).slice(0, 12);
-  return c ? [calcRow(c)].concat(out) : out;
+  if (c) return [calcRow(c)].concat(out);
+  // Nothing matched → treat the line as a natural-language event, exactly like
+  // the planner's quick-add field. Without this "Lunch tomorrow 1pm" dead-ends
+  // on "No matches" and the `event ` prefix is the only (undiscoverable) way in.
+  if (!out.length) return [{ label: 'Add event: ' + raw, type: 'event', hint: 'Enter', run: function() { createEvent(raw); } }];
+  return out;
 }
 
 function renderList() {

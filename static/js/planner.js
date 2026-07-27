@@ -1,5 +1,5 @@
 import { S, SET, safeRender } from './state.js';
-import { toISO, todayStr, fmtShort, esc, api, DAYS, MONTHS, weekDayLabels, isInputFocused, debounce, askConfirm, showContextMenu, showUndoToast } from './utils.js';
+import { toISO, todayStr, fmtShort, esc, api, toast, DAYS, MONTHS, weekDayLabels, isInputFocused, debounce, askConfirm, showContextMenu, showUndoToast } from './utils.js';
 import { getViewDates } from './utils.js';
 import { renderDashboard } from './dashboard.js';
 import { priorityRank } from './tasks.js';
@@ -77,6 +77,46 @@ export function changePlannerView(val) {
 export function moveWeek(d) {
   if (d === 0) dateOffset = 0; else dateOffset += d;
   renderPlanner();
+}
+
+function openGoToDatePicker() {
+  var g = document.getElementById('plannerGoToDate');
+  if (g && g.showPicker) { try { g.showPicker(); } catch (e) {} }
+}
+
+// The phone toolbar is one row, so the title doubles as the view switcher the
+// way Google Calendar's does. Desktop keeps its old behaviour (jump to date) —
+// it still shows the view <select> and the date field.
+export function onWeekLabelClick(ev) {
+  if (!isMobileViewport()) { openGoToDatePicker(); return; }
+  var items = [['1', 'Day'], ['3', '3 days'], ['5', '5 days'], ['7', 'Week'], ['month', 'Month']].map(function (v) {
+    return {
+      icon: currentView === v[0] ? '✓' : ' ',
+      label: v[1],
+      onClick: function () {
+        var sel = document.getElementById('plannerView');
+        if (sel) sel.value = v[0];
+        changePlannerView(v[0]);
+      }
+    };
+  });
+  items.push({ sep: true }, { icon: '📅', label: 'Jump to date…', onClick: openGoToDatePicker });
+  showContextMenu(ev, items);
+}
+
+// Phone-only overflow menu (the ⋯ button): the toolbar actions that don't fit.
+export function openPlannerMoreMenu(ev) {
+  showContextMenu(ev, [
+    { icon: '📋', label: taskTrayOpen ? 'Hide task tray' : 'Task tray', onClick: togglePlannerTaskTray },
+    { icon: '⚙️', label: 'Calendars', onClick: function () {
+      renderPlannerCalendarsPanel();
+      window.dispatchEvent(new CustomEvent('open-planner-calendars-modal'));
+    } },
+    { sep: true },
+    { icon: '🔍', label: 'Search events', onClick: function () {
+      if (window.openCommandPalette) window.openCommandPalette();
+    } }
+  ]);
 }
 
 // Parse a "YYYY-MM-DD" string into a local-midnight Date (avoids the UTC-parse
@@ -432,6 +472,11 @@ function isoWeek(d) {
 }
 
 export function renderPlanner() {
+  // Boot: app.js coerces the mobile view before /api/state has landed, so this
+  // can run with no state at all. It used to throw here, which aborted the rest
+  // of app.js's module body — anyone whose last tab was the planner got a blank
+  // app on their phone. The load finishes with a renderAll() anyway.
+  if (!S) return;
   if (isDragCreating) return;
   initPlannerContextMenu();
   safeRender("planner", () => {
@@ -442,6 +487,12 @@ export function renderPlanner() {
   if (currentView === 'month') {
     var mDate = new Date(); mDate.setMonth(mDate.getMonth() + dateOffset);
     title = MONTHS[mDate.getMonth()] + " " + mDate.getFullYear();
+  } else if (isMobileViewport()) {
+    // Phone toolbar is a single row, so the title has to stay short enough to
+    // sit next to the nav buttons: "Wed 26 Jul" / "20 – 26 Jul".
+    title = dates.length > 1
+      ? dates[0].getDate() + " – " + fmtShort(dates[dates.length - 1]).replace(/^\S+\s/, "")
+      : fmtShort(dates[0]);
   } else {
     title = (dateOffset === 0 ? "This " + (currentView === '1' ? "day" : (currentView === '7' ? "week" : currentView + " days")) + " · " : "") + fmtShort(dates[0]) + (dates.length > 1 ? " – " + fmtShort(dates[dates.length - 1]) : "") + " " + dates[0].getFullYear();
     if (currentView === '7') title += " · Week " + isoWeek(dates[0]);
@@ -2221,14 +2272,11 @@ function parseQuickAdd(text) {
 
 export function quickAddOpen(text) {
   var p = parseQuickAdd(text);
-  if (!p.title) return;
-  openAdd(p.date, p.start, p.end);
+  if (!p.title) { toast('Give the event a title — e.g. "Lunch tomorrow 1pm"'); return; }
+  // The all-day control is a .hcheck span, not a checkbox — let openAdd toggle it.
+  openAdd(p.date, p.start, p.end, p.allDay);
   document.getElementById('evModalTitle').value = p.title;
   document.getElementById('evModalLoc').value = p.location || '';
-  if (p.allDay) {
-    document.getElementById('evModalAllDay').checked = true;
-    updateAllDayVisibility();
-  }
   updateDurationFromTimes();
 }
 

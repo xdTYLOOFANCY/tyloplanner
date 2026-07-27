@@ -491,7 +491,7 @@ function renderQuickAddWidget(id) {
     '    </div>' +
     '    <div style="display:flex; gap:6px;">' +
     '      <input class="qa-workout-dur" type="number" inputmode="numeric" data-minutes placeholder="Min" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
-    '      <input class="qa-workout-dist" type="number" inputmode="decimal" step="0.1" placeholder="km (opt)" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
+    '      <input class="qa-workout-dist" type="text" inputmode="decimal" placeholder="km (opt)" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    </div>' +
     '  </div>' +
 
@@ -500,7 +500,7 @@ function renderQuickAddWidget(id) {
     '    <input class="qa-exam-name" placeholder="Exam/Deadline Name" style="padding:6px; font-size:13px; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    <div style="display:flex; gap:6px;">' +
     '      <input class="qa-exam-date" type="date" value="' + today + '" style="padding:6px; font-size:13px; flex:1.5; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
-    '      <input class="qa-exam-ects" type="number" inputmode="decimal" step="0.5" placeholder="ECTS" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
+    '      <input class="qa-exam-ects" type="text" inputmode="decimal" placeholder="ECTS" style="padding:6px; font-size:13px; flex:1; border-radius:4px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">' +
     '    </div>' +
     '  </div>' +
 

@@ -2,6 +2,7 @@
 
 import { S, SET, safeRender } from './state.js';
 import { esc, escAttr, api, z, mdToHtml, toast, askConfirm, askPrompt, showContextMenu } from './utils.js';
+import { FONTS, fontCss } from './fonts.js';
 
 var currentNote = null, noteTimer = null;
 var noteBodySearch = { q: "", idx: 0 };
@@ -137,10 +138,15 @@ var loadedNoteId = null;      // which note is currently loaded into the editor
 var suppressChange = false;   // guard: programmatic loads must not autosave
 var searchMatches = [];       // in-note search hit indices (Quill offsets)
 
+// Font picker options: FONTS ids, with the default entry as `false` (Quill's
+// marker for "no class" — that entry then follows the app's default notes
+// font). See fonts.js; the matching CSS is generated from the same table.
+var QUILL_FONTS = FONTS.map(function(f) { return f.id || false; });
+
 // Google-Docs-style toolbar: paragraph style, font, size, inline formatting,
 // color, sub/superscript, alignment, lists, indent, blocks, links & images.
 var QUILL_TOOLBAR = [
-  [{ header: [1, 2, 3, 4, 5, 6, false] }, { font: [] }, { size: ["small", false, "large", "huge"] }],
+  [{ header: [1, 2, 3, 4, 5, 6, false] }, { font: QUILL_FONTS }, { size: ["small", false, "large", "huge"] }],
   ["bold", "italic", "underline", "strike"],
   [{ color: [] }, { background: [] }],
   [{ script: "sub" }, { script: "super" }],
@@ -189,6 +195,11 @@ function initQuill() {
       whitelist: ["info", "warn", "success"]
     })
   }, true);
+  // Widen the font whitelist past Quill's built-in serif/monospace, or the
+  // extra picker entries are silently dropped when applied.
+  var Font = window.Quill.import("formats/font");
+  Font.whitelist = QUILL_FONTS.filter(Boolean);
+  window.Quill.register(Font, true);
   // quill-table-up: full-featured tables (drag-resize columns/rows, multi-line
   // cells via Enter, merge/split, right-click menu). Replaces Quill's minimal
   // built-in table module. See ensureQuill for lazy loading.
@@ -1872,6 +1883,7 @@ async function exportQuillCss() {
   for (var i = 0; i < files.length; i++) {
     try { var r = await fetch(files[i]); if (r.ok) css += await r.text() + "\n"; } catch (e) { /* skip */ }
   }
+  css += fontCss();   // the extra fonts aren't in Quill's own stylesheet
   _exportCssCache = css;
   return css;
 }
@@ -2083,10 +2095,11 @@ function buildNoteExportHtml(note, renderedHtml, quillCss, opts) {
 var QL_CLASS_STYLE = {
   "ql-align-center": "text-align:center", "ql-align-right": "text-align:right",
   "ql-align-justify": "text-align:justify",
-  "ql-font-serif": "font-family:Georgia,'Times New Roman',serif",
-  "ql-font-monospace": "font-family:Consolas,Menlo,monospace",
   "ql-size-small": "font-size:0.8em", "ql-size-large": "font-size:1.5em", "ql-size-huge": "font-size:2.5em"
 };
+FONTS.forEach(function(f) {
+  if (f.id) QL_CLASS_STYLE["ql-font-" + f.id] = "font-family:" + f.stack;
+});
 // Callouts are class-only in the app; Word has no stylesheet, so bake the box
 // (border/background/padding) into inline styles and prepend the icon as text.
 var QL_CALLOUT_STYLE = {

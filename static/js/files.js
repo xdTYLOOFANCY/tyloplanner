@@ -854,7 +854,7 @@ function storageViewHtml() {
   html += '<div class="storage-section"><div class="files-section-label">Limits</div>' +
     '<div class="storage-limits">' +
     '<span class="storage-limit-group"><label class="muted">Max file storage</label>' +
-    '<input id="storageQuotaInput" type="number" inputmode="decimal" min="0" step="0.5" placeholder="No limit" value="' + esc(quotaVal) + '"> <span class="muted">GB</span></span>' +
+    '<input id="storageQuotaInput" type="text" inputmode="decimal" placeholder="No limit" value="' + esc(quotaVal) + '"> <span class="muted">GB</span></span>' +
     '<span class="storage-limit-group"><label class="muted">Auto-empty trash after</label>' +
     '<input id="trashRetentionInput" type="number" inputmode="numeric" min="0" step="1" placeholder="Never" value="' + esc(retVal) + '"> <span class="muted">days</span></span>' +
     '<button class="btn small" onclick="saveStorageLimits()">Save</button>' +
